@@ -18,9 +18,11 @@
 .PARAMETER StageNames
     Ordered stage names. Defaults to Development, Test, and Production.
 .PARAMETER WorkspaceNames
-    Optional workspace names in stage order. Blank entries leave stages unchanged.
+    Required existing workspace names in stage order.
+.PARAMETER PipelineAdminGroupId
+    Optional Entra security-group object ID to grant pipeline Admin access.
 .PARAMETER DryRun
-    Previews creation and workspace assignments without calling a write API.
+    Previews creation, workspace assignments, and group access without calling a write API.
 .EXAMPLE
     .\scripts\New-FabricDeploymentPipeline.ps1 -DisplayName 'Accelerator ALM' -DryRun
 .NOTES
@@ -43,8 +45,13 @@ param(
     [ValidateCount(2, 10)]
     [string[]]$StageNames = @('Development', 'Test', 'Production'),
 
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $true)]
+    [ValidateCount(2, 10)]
+    [AllowEmptyString()]
     [string[]]$WorkspaceNames,
+
+    [Parameter(Mandatory = $false)]
+    [string]$PipelineAdminGroupId,
 
     [Parameter(Mandatory = $false)]
     [switch]$DryRun
@@ -287,6 +294,95 @@ function Set-FabricProvisioningAssignments {
     }
 }
 
+function Get-FabricPipelineRoleAssignments {
+    <#
+    .SYNOPSIS
+        Lists every role assignment for one deployment pipeline.
+    .OUTPUTS
+        PSCustomObject role assignments.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param([string]$PipelineId, [string]$Token)
+
+    $BaseUri = "$FabricApi/deploymentPipelines/$PipelineId/roleAssignments"
+    $NextUri = $BaseUri
+    $Visited = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    while (-not [string]::IsNullOrWhiteSpace($NextUri)) {
+        $PageUri = [uri]$NextUri
+        if (
+            -not $PageUri.IsAbsoluteUri -or
+            $PageUri.GetLeftPart([UriPartial]::Path) -cne $BaseUri -or
+            $PageUri.UserInfo -or -not $Visited.Add($NextUri)
+        ) {
+            throw 'Fabric returned an invalid or repeated role-assignment page URI'
+        }
+        $Page = Invoke-FabricRequest -Method Get -Uri $NextUri -Token $Token `
+            -SkillName 'deployment-pipelines-authoring-cli'
+        if ($null -eq $Page -or $Page.value -isnot [array]) {
+            throw 'Fabric returned an invalid role-assignment collection'
+        }
+        foreach ($Assignment in @($Page.value)) { $Assignment }
+        $NextUri = [string]$Page.continuationUri
+    }
+}
+
+function Set-FabricPipelineAdminGroup {
+    <#
+    .SYNOPSIS
+        Adds and verifies one Entra security group as deployment pipeline Admin.
+    .OUTPUTS
+        PSCustomObject role-assignment result.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [string]$PipelineId,
+        [string]$GroupId,
+        [string]$Token,
+        [switch]$DryRun
+    )
+
+    $Roles = @(Get-FabricPipelineRoleAssignments -PipelineId $PipelineId -Token $Token)
+    $PrincipalMatches = @($Roles | Where-Object { $_.principal.id -eq $GroupId })
+    $AdminMatches = @($PrincipalMatches | Where-Object {
+        $_.principal.type -eq 'Group' -and $_.role -eq 'Admin'
+    })
+    if ($AdminMatches.Count -gt 1) {
+        throw "More than one Admin role assignment exists for group '$GroupId'"
+    }
+    if ($AdminMatches.Count -eq 1) {
+        return [pscustomobject]@{ GroupId = $GroupId; Status = 'AlreadyAdmin' }
+    }
+    if ($PrincipalMatches.Count -gt 0) {
+        throw "Principal '$GroupId' already has a conflicting pipeline role assignment"
+    }
+    if ($DryRun) {
+        return [pscustomobject]@{ GroupId = $GroupId; Status = 'WouldAddAdmin' }
+    }
+    $Body = @{
+        principal = @{ id = $GroupId; type = 'Group' }
+        role = 'Admin'
+    } | ConvertTo-Json -Depth 4 -Compress
+    try {
+        $null = Invoke-FabricRequest -Method Post `
+            -Uri "$FabricApi/deploymentPipelines/$PipelineId/roleAssignments" `
+            -Token $Token -SkillName 'deployment-pipelines-authoring-cli' -Body $Body
+        $Verified = @(Get-FabricPipelineRoleAssignments -PipelineId $PipelineId -Token $Token |
+            Where-Object {
+                $_.principal.id -eq $GroupId -and
+                $_.principal.type -eq 'Group' -and $_.role -eq 'Admin'
+            })
+        if ($Verified.Count -ne 1) {
+            throw 'Group Admin assignment could not be verified'
+        }
+        return [pscustomobject]@{ GroupId = $GroupId; Status = 'AddedAdmin' }
+    }
+    catch {
+        throw "Admin assignment for group '$GroupId' in pipeline '$PipelineId' failed: $($_.Exception.Message)"
+    }
+}
+
 function Write-FabricProvisioningSummary {
     <#
     .SYNOPSIS
@@ -323,6 +419,17 @@ function Write-FabricProvisioningSummary {
         ).Replace("`r", ' ').Replace("`n", ' ')
         $Rows += "* <code>$Assignment</code>"
     }
+    $Rows += ''
+    $Rows += 'Pipeline Admin group:'
+    if ($null -eq $Result.PipelineAdminGroup) {
+        $Rows += '* None requested'
+    }
+    else {
+        $Group = [Net.WebUtility]::HtmlEncode(
+            "$($Result.PipelineAdminGroup.GroupId) - $($Result.PipelineAdminGroup.Status)"
+        )
+        $Rows += "* <code>$Group</code>"
+    }
     $Rows += 'No workspaces were created, moved, or unassigned. Repository variables were not modified.'
     Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $Rows -Encoding utf8
 }
@@ -339,6 +446,14 @@ if ($MyInvocation.InvocationName -ne '.') {
         ) {
             throw 'DisplayName must be non-empty and have no leading or trailing whitespace'
         }
+        $AdminGroupId = ''
+        if (-not [string]::IsNullOrWhiteSpace($PipelineAdminGroupId)) {
+            if ($PipelineAdminGroupId -cne $PipelineAdminGroupId.Trim()) {
+                throw 'PipelineAdminGroupId must not have surrounding whitespace'
+            }
+            $AdminGroupId = Get-FabricProvisioningId `
+                -Value $PipelineAdminGroupId -Resource 'pipeline Admin group'
+        }
         $Seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($Name in $StageNames) {
             if (
@@ -347,8 +462,19 @@ if ($MyInvocation.InvocationName -ne '.') {
             ) {
                 throw 'Stage names must be distinct, non-empty strings of at most 256 characters without surrounding whitespace'
             }
-            if ($PSBoundParameters.ContainsKey('WorkspaceNames') -and $WorkspaceNames.Count -ne $StageNames.Count) {
-                throw 'WorkspaceNames must contain one entry per stage; use blanks to leave stages unchanged'
+        }
+        if ($WorkspaceNames.Count -ne $StageNames.Count) {
+            throw 'WorkspaceNames must contain exactly one entry per stage'
+        }
+        $SeenWorkspaces = [Collections.Generic.HashSet[string]]::new(
+            [StringComparer]::OrdinalIgnoreCase
+        )
+        foreach ($Name in $WorkspaceNames) {
+            if (
+                [string]::IsNullOrWhiteSpace($Name) -or
+                $Name -cne $Name.Trim() -or -not $SeenWorkspaces.Add($Name)
+            ) {
+                throw 'Workspace names must be distinct, non-empty strings without surrounding whitespace'
             }
         }
         $Token = Get-FabricAccessToken
@@ -366,16 +492,14 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Status = 'Reused'
         }
         $Assignments = @()
-        if (@($WorkspaceNames | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
-            $AssignmentPlan = Get-FabricWorkspaceAssignmentPlan -Names $WorkspaceNames `
-                -Stages $StageNames -Pipelines $Pipelines -PipelineId $PipelineId -Token $Token `
-                -CanReuseByWorkspace ($Status -eq 'WouldCreate')
-            $Assignments = @($AssignmentPlan.Assignments)
-            if ($AssignmentPlan.ReusedByWorkspace) {
-                $PipelineId = $AssignmentPlan.PipelineId
-                $ResolvedDisplayName = $AssignmentPlan.DisplayName
-                $Status = 'Reused'
-            }
+        $AssignmentPlan = Get-FabricWorkspaceAssignmentPlan -Names $WorkspaceNames `
+            -Stages $StageNames -Pipelines $Pipelines -PipelineId $PipelineId -Token $Token `
+            -CanReuseByWorkspace ($Status -eq 'WouldCreate')
+        $Assignments = @($AssignmentPlan.Assignments)
+        if ($AssignmentPlan.ReusedByWorkspace) {
+            $PipelineId = $AssignmentPlan.PipelineId
+            $ResolvedDisplayName = $AssignmentPlan.DisplayName
+            $Status = 'Reused'
         }
         if ($Status -eq 'WouldCreate' -and -not $DryRun) {
             $RequestedStages = @(
@@ -397,6 +521,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             $PipelineId = Get-FabricProvisioningId -Value $Created.id -Resource 'deployment pipeline'
             $Status = 'Created'
         }
+        $AdminGroupResult = $null
         if ($Status -ne 'WouldCreate') {
             $Pipeline = Invoke-FabricRequest -Method Get `
                 -Uri "$FabricApi/deploymentPipelines/$PipelineId" -Token $Token `
@@ -418,9 +543,20 @@ if ($MyInvocation.InvocationName -ne '.') {
                     throw "Stage names or order differ for pipeline '$PipelineId'; no pipeline was replaced or deleted"
                 }
             }
+            if ($AdminGroupId) {
+                $AdminGroupResult = Set-FabricPipelineAdminGroup `
+                    -PipelineId $PipelineId -GroupId $AdminGroupId -Token $Token `
+                    -DryRun:$DryRun
+            }
             if (-not $DryRun -and $Assignments.Count -gt 0) {
                 Set-FabricProvisioningAssignments -Plan $Assignments -Stages $Stages `
                     -PipelineId $PipelineId -Token $Token
+            }
+        }
+        elseif ($AdminGroupId) {
+            $AdminGroupResult = [pscustomobject]@{
+                GroupId = $AdminGroupId
+                Status = 'WouldAddAfterCreate'
             }
         }
         $Result = [pscustomobject]@{
@@ -429,6 +565,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             DisplayName = $ResolvedDisplayName
             StageNames = @($StageNames)
             WorkspaceAssignments = $Assignments
+            PipelineAdminGroup = $AdminGroupResult
             DryRun = $DryRun.IsPresent
         }
         Write-FabricProvisioningSummary -Result $Result

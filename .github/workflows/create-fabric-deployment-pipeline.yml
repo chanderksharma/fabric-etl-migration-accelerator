@@ -14,13 +14,19 @@ on:
         default: Fabric deployment pipeline managed by the accelerator
         type: string
       dev_workspace_name:
-        description: Exact name of an existing workspace for Development (optional)
+        description: Exact name of the existing Development workspace
+        required: true
         type: string
       test_workspace_name:
-        description: Exact name of an existing workspace for Test (optional)
+        description: Exact name of the existing Test workspace
+        required: true
         type: string
       prod_workspace_name:
-        description: Exact name of an existing workspace for Production (optional)
+        description: Exact name of the existing Production workspace
+        required: true
+        type: string
+      pipeline_admin_group_id:
+        description: Entra security-group object ID to add as pipeline Admin (optional)
         type: string
       dry_run:
         description: Preview without creating a pipeline or assigning workspaces
@@ -59,6 +65,7 @@ jobs:
       INPUT_DEV_WORKSPACE_NAME: ${{ inputs.dev_workspace_name }}
       INPUT_TEST_WORKSPACE_NAME: ${{ inputs.test_workspace_name }}
       INPUT_PROD_WORKSPACE_NAME: ${{ inputs.prod_workspace_name }}
+      INPUT_PIPELINE_ADMIN_GROUP_ID: ${{ inputs.pipeline_admin_group_id }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -80,6 +87,7 @@ jobs:
               [string]$env:INPUT_TEST_WORKSPACE_NAME
               [string]$env:INPUT_PROD_WORKSPACE_NAME
             )
+            PipelineAdminGroupId = [string]$env:INPUT_PIPELINE_ADMIN_GROUP_ID
             DryRun = $env:INPUT_DRY_RUN -eq 'true'
           }
           $ResultJson = (& .\scripts\New-FabricDeploymentPipeline.ps1 @Parameters | Out-String).Trim()

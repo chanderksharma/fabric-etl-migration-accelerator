@@ -21,7 +21,12 @@ def _run_provisioning(
     failure: str = "",
     stages: list[str] | None = None,
     workflow_steps: bool = False,
-    workspaces: tuple[str, str, str] = ("", "", ""),
+    workspaces: tuple[str, str, str] = (
+        "Synthetic Dev",
+        "Synthetic Test",
+        "Synthetic Prod",
+    ),
+    admin_group_id: str = "",
 ) -> subprocess.CompletedProcess[str]:
     executable = shutil.which("pwsh")
     if executable is None:
@@ -33,6 +38,7 @@ def _run_provisioning(
         "failure": failure,
         "stage_names": stage_names,
         "workflow_steps": workflow_steps,
+        "admin_group_id": admin_group_id,
     }
     if workflow_steps:
         workflow = (
@@ -45,12 +51,24 @@ $global:Scenario = $env:PROVISIONING_SCENARIO | ConvertFrom-Json
 $global:Calls = @()
 $global:Created = $false
 $global:Assignments = @{}
+$global:GroupAdmins = @{}
 $DevId = '00000000-0000-0000-0000-000000000201'
 $TestId = '00000000-0000-0000-0000-000000000202'
+$ProdId = '00000000-0000-0000-0000-000000000203'
 $DevStageId = '00000000-0000-0000-0000-000000000301'
 $TestStageId = '00000000-0000-0000-0000-000000000302'
+$ProdStageId = '00000000-0000-0000-0000-000000000303'
+$GroupId = '00000000-0000-0000-0000-000000000501'
 if ($global:Scenario.failure -eq 'already') { $global:Assignments[$DevStageId] = $DevId }
 if ($global:Scenario.failure -eq 'occupied') { $global:Assignments[$TestStageId] = $DevId }
+if ($global:Scenario.existing -and $global:Scenario.failure -in @('', 'group-existing')) {
+    $global:Assignments[$DevStageId] = $DevId
+    $global:Assignments[$TestStageId] = $TestId
+    $global:Assignments[$ProdStageId] = $ProdId
+}
+if ($global:Scenario.failure -eq 'group-existing') {
+    $global:GroupAdmins['00000000-0000-0000-0000-000000000101'] = $GroupId
+}
 function global:Import-Module {
     param($Name, [switch]$Force)
     if ([IO.Path]::GetFileName($Name) -ne 'FabricApi.psm1') { throw 'Unexpected module import' }
@@ -64,6 +82,10 @@ function global:Invoke-FabricRequest {
     $Payload = if ($Body) { $Body | ConvertFrom-Json } else { $null }
     $global:Calls += [pscustomobject]@{ Method = $Method; Uri = $Uri; Body = $Payload }
     if ($Method -eq 'Post') {
+        if ($Uri -match '/deploymentPipelines/([^/]+)/roleAssignments$') {
+            $global:GroupAdmins[$Matches[1]] = $Payload.principal.id
+            return
+        }
         if ($Uri -match '/stages/([^/]+)/assignWorkspace$') {
             $global:Assignments[$Matches[1]] = $Payload.workspaceId
             return
@@ -76,10 +98,29 @@ function global:Invoke-FabricRequest {
         return @{ id = '00000000-0000-0000-0000-000000000101' }
     }
     if ($Method -ne 'Get') { throw 'Provisioning attempted an unexpected mutation' }
+    if ($Uri -match '/deploymentPipelines/([^/]+)/roleAssignments$') {
+        $PipelineId = $Matches[1]
+        $Roles = @()
+        if (
+            $global:Scenario.failure -eq 'group-existing' -or
+            $global:GroupAdmins.ContainsKey($PipelineId)
+        ) {
+            $AdminId = if ($global:GroupAdmins.ContainsKey($PipelineId)) {
+                $global:GroupAdmins[$PipelineId]
+            }
+            else { $GroupId }
+            $Roles += @{
+                principal = @{ id = $AdminId; type = 'Group' }
+                role = 'Admin'
+            }
+        }
+        return @{ value = $Roles }
+    }
     if ($Uri.EndsWith('/workspaces?roles=Admin')) {
         return @{ value = @(
             @{ id = $DevId; displayName = 'Synthetic Dev'; type = 'Workspace' }
             @{ id = $TestId; displayName = 'Synthetic Test'; type = 'Workspace' }
+            @{ id = $ProdId; displayName = 'Synthetic Prod'; type = 'Workspace' }
         ) }
     }
     if ($Uri.EndsWith('/deploymentPipelines')) {
@@ -168,7 +209,10 @@ function global:Invoke-FabricRequest {
                     id = $TestStageId; order = 1; displayName = $Middle
                     workspaceId = $global:Assignments[$TestStageId]
                 },
-                @{ order = 2; displayName = 'Production' }
+                @{
+                    id = $ProdStageId; order = 2; displayName = 'Production'
+                    workspaceId = $global:Assignments[$ProdStageId]
+                }
             )
         }
     }
@@ -191,16 +235,14 @@ else {
         DisplayName = 'Synthetic ALM'
         Description = 'Synthetic provisioning fixture'
         StageNames = @($global:Scenario.stage_names)
+        PipelineAdminGroupId = $global:Scenario.admin_group_id
         DryRun = [bool]$global:Scenario.dry_run
     }
-    if ($env:INPUT_DEV_WORKSPACE_NAME -or $env:INPUT_TEST_WORKSPACE_NAME -or
-        $env:INPUT_PROD_WORKSPACE_NAME) {
-        $Parameters.WorkspaceNames = @(
-            [string]$env:INPUT_DEV_WORKSPACE_NAME
-            [string]$env:INPUT_TEST_WORKSPACE_NAME
-            [string]$env:INPUT_PROD_WORKSPACE_NAME
-        )
-    }
+    $Parameters.WorkspaceNames = @(
+        [string]$env:INPUT_DEV_WORKSPACE_NAME
+        [string]$env:INPUT_TEST_WORKSPACE_NAME
+        [string]$env:INPUT_PROD_WORKSPACE_NAME
+    )
     $ResultJson = (& .\scripts\New-FabricDeploymentPipeline.ps1 @Parameters | Out-String)
 }
 $ExitCode = [int]$LASTEXITCODE
@@ -224,6 +266,7 @@ exit $ExitCode
         "INPUT_DEV_WORKSPACE_NAME": workspaces[0],
         "INPUT_TEST_WORKSPACE_NAME": workspaces[1],
         "INPUT_PROD_WORKSPACE_NAME": workspaces[2],
+        "INPUT_PIPELINE_ADMIN_GROUP_ID": admin_group_id,
     }
     return subprocess.run(
         [executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
@@ -236,12 +279,72 @@ exit $ExitCode
     )
 
 
+def test_workflow_adds_and_verifies_optional_admin_group(tmp_path: Path) -> None:
+    group_id = "00000000-0000-0000-0000-000000000501"
+    result = _run_provisioning(tmp_path, workflow_steps=True, admin_group_id=group_id)
+    assert result.returncode == 0, result.stderr
+    output = json.loads(result.stdout)
+    assert output["Result"]["PipelineAdminGroup"] == {
+        "GroupId": group_id,
+        "Status": "AddedAdmin",
+    }
+    role_posts = [
+        call
+        for call in output["Calls"]
+        if call["Method"] == "Post" and call["Uri"].endswith("/roleAssignments")
+    ]
+    assert len(role_posts) == 1
+    assert role_posts[0]["Body"] == {
+        "principal": {"id": group_id, "type": "Group"},
+        "role": "Admin",
+    }
+    assert sum(
+        call["Method"] == "Get" and call["Uri"].endswith("/roleAssignments")
+        for call in output["Calls"]
+    ) == 2
+
+
+def test_new_pipeline_dry_run_previews_group_access_without_writes(tmp_path: Path) -> None:
+    group_id = "00000000-0000-0000-0000-000000000501"
+    result = _run_provisioning(
+        tmp_path, dry_run=True, workflow_steps=True, admin_group_id=group_id
+    )
+    assert result.returncode == 0, result.stderr
+    output = json.loads(result.stdout)
+    assert output["Result"]["PipelineAdminGroup"] == {
+        "GroupId": group_id,
+        "Status": "WouldAddAfterCreate",
+    }
+    assert all(call["Method"] == "Get" for call in output["Calls"])
+
+
+def test_matching_group_admin_is_reused_without_writes(tmp_path: Path) -> None:
+    group_id = "00000000-0000-0000-0000-000000000501"
+    result = _run_provisioning(
+        tmp_path,
+        existing=True,
+        failure="group-existing",
+        admin_group_id=group_id,
+    )
+    assert result.returncode == 0, result.stderr
+    output = json.loads(result.stdout)
+    assert output["Result"]["PipelineAdminGroup"]["Status"] == "AlreadyAdmin"
+    assert all(call["Method"] == "Get" for call in output["Calls"])
+
+
+def test_invalid_admin_group_id_fails_before_api_calls(tmp_path: Path) -> None:
+    result = _run_provisioning(tmp_path, admin_group_id="not-a-guid")
+    assert result.returncode != 0
+    assert "valid pipeline Admin group ID" in result.stderr
+    assert json.loads(result.stdout)["Calls"] == []
+
+
 @pytest.mark.parametrize(
     ("existing", "dry_run", "scenario", "expected_statuses", "expected_writes"),
     [
-        (False, True, "", ["WouldAssign", "WouldAssign"], 0),
-        (False, False, "", ["Assigned", "Assigned"], 3),
-        (True, False, "already", ["AlreadyAssigned", "Assigned"], 1),
+        (False, True, "", ["WouldAssign", "WouldAssign", "WouldAssign"], 0),
+        (False, False, "", ["Assigned", "Assigned", "Assigned"], 4),
+        (True, False, "already", ["AlreadyAssigned", "Assigned", "Assigned"], 2),
     ],
 )
 def test_workflow_attaches_only_requested_empty_stages(
@@ -254,18 +357,23 @@ def test_workflow_attaches_only_requested_empty_stages(
 ) -> None:
     result = _run_provisioning(
         tmp_path, existing=existing, dry_run=dry_run, failure=scenario,
-        workflow_steps=True, workspaces=("Synthetic Dev", "Synthetic Test", ""),
+        workflow_steps=True,
     )
     assert result.returncode == 0, result.stderr
     output = json.loads(result.stdout)
     assignments = output["Result"]["WorkspaceAssignments"]
-    assert [entry["StageName"] for entry in assignments] == ["Development", "Test"]
+    assert [entry["StageName"] for entry in assignments] == [
+        "Development",
+        "Test",
+        "Production",
+    ]
     assert [entry["Status"] for entry in assignments] == expected_statuses
     writes = [call for call in output["Calls"] if call["Method"] != "Get"]
     assert len(writes) == expected_writes
     stage_ids = {
         "Development": "00000000-0000-0000-0000-000000000301",
         "Test": "00000000-0000-0000-0000-000000000302",
+        "Production": "00000000-0000-0000-0000-000000000303",
     }
     for entry, call in zip(
         (entry for entry in assignments if entry["Status"] == "Assigned"),
@@ -286,7 +394,7 @@ def test_workflow_attaches_only_requested_empty_stages(
     [
         (False, "other-pipeline", "Synthetic Test", "will not be moved"),
         (True, "occupied", "Synthetic Test", "will not be replaced"),
-        (False, "", "Synthetic Dev", "more than one stage"),
+        (False, "", "Synthetic Dev", "Workspace names must be distinct"),
         (False, "", "Missing", "with Admin access"),
     ],
 )
@@ -295,7 +403,7 @@ def test_assignment_conflicts_fail_before_creating_or_attaching(
 ) -> None:
     result = _run_provisioning(
         tmp_path, existing=existing, failure=scenario,
-        workspaces=("Synthetic Dev", test_workspace, ""),
+        workspaces=("Synthetic Dev", test_workspace, "Synthetic Prod"),
     )
     assert result.returncode != 0
     assert error in result.stderr
@@ -311,7 +419,7 @@ def test_reuse_by_workspace_returns_existing_pipeline_and_assigns_empty_stage(
         dry_run=False,
         failure="reuse-by-workspace",
         workflow_steps=True,
-        workspaces=("Synthetic Dev", "Synthetic Test", ""),
+        workspaces=("Synthetic Dev", "Synthetic Test", "Synthetic Prod"),
     )
     assert result.returncode == 0, result.stderr
     output = json.loads(result.stdout)
@@ -319,7 +427,11 @@ def test_reuse_by_workspace_returns_existing_pipeline_and_assigns_empty_stage(
     assert output["Result"]["DisplayName"] == "Unrelated"
     assert output["Result"]["PipelineId"] == "00000000-0000-0000-0000-000000000100"
     assignments = output["Result"]["WorkspaceAssignments"]
-    assert [entry["Status"] for entry in assignments] == ["AlreadyAssigned", "Assigned"]
+    assert [entry["Status"] for entry in assignments] == [
+        "AlreadyAssigned",
+        "Assigned",
+        "Assigned",
+    ]
     exported = (tmp_path / "provisioning-output.txt").read_text(encoding="utf-8-sig")
     assert "pipeline_id=00000000-0000-0000-0000-000000000100" in exported
     assert "pipeline_name=Unrelated" in exported
@@ -339,7 +451,7 @@ def test_reuse_by_workspace_rejects_mismatched_or_split_assignments(
         tmp_path,
         existing=False,
         failure=scenario,
-        workspaces=("Synthetic Dev", "Synthetic Test", ""),
+        workspaces=("Synthetic Dev", "Synthetic Test", "Synthetic Prod"),
     )
     assert result.returncode != 0
     assert error in result.stderr
@@ -353,9 +465,10 @@ def test_workflow_creates_pipeline_and_exports_readback_id(tmp_path: Path) -> No
     assert output["Result"]["Status"] == "Created"
     assert output["Result"]["PipelineId"] == PIPELINE_ID
     mutations = [call for call in output["Calls"] if call["Method"] != "Get"]
-    assert len(mutations) == 1
-    assert mutations[0]["Uri"].endswith("/deploymentPipelines")
-    assert mutations[0]["Body"] == {
+    assert len(mutations) == 4
+    creates = [call for call in mutations if call["Uri"].endswith("/deploymentPipelines")]
+    assert len(creates) == 1
+    assert creates[0]["Body"] == {
         "displayName": "Synthetic ALM",
         "description": "Synthetic provisioning fixture",
         "stages": [
@@ -364,6 +477,9 @@ def test_workflow_creates_pipeline_and_exports_readback_id(tmp_path: Path) -> No
             {"displayName": "Production", "isPublic": True},
         ],
     }
+    assert len(
+        [call for call in mutations if call["Uri"].endswith("/assignWorkspace")]
+    ) == 3
     exported = (tmp_path / "provisioning-output.txt").read_text(encoding="utf-8-sig")
     assert f"pipeline_id={PIPELINE_ID}" in exported
     assert any(call["Uri"].endswith("/stages?page=2") for call in output["Calls"])
@@ -379,6 +495,15 @@ def test_workflow_preview_never_creates_or_exports_an_uncreated_id(tmp_path: Pat
     output_file = tmp_path / "provisioning-output.txt"
     if output_file.exists():
         assert "pipeline_id=" not in output_file.read_text(encoding="utf-8-sig")
+
+
+def test_missing_required_workspace_fails_before_api_calls(tmp_path: Path) -> None:
+    result = _run_provisioning(
+        tmp_path, workspaces=("Synthetic Dev", "Synthetic Test", "")
+    )
+    assert result.returncode != 0
+    assert "Workspace names must be distinct, non-empty" in result.stderr
+    assert json.loads(result.stdout)["Calls"] == []
 
 
 @pytest.mark.parametrize("dry_run", [True, False])

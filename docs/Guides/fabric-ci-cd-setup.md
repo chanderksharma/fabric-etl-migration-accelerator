@@ -149,10 +149,14 @@ self-hosted Windows X64 runner.
    connections, and deployment pipelines** for the deployment identity.
 2. Open **Actions > Create Fabric deployment pipeline > Run workflow**.
 3. Enter `pipeline_name` and an optional `pipeline_description`.
-4. To attach existing workspaces, enter their exact Fabric display names in
-   `dev_workspace_name`, `test_workspace_name`, and/or `prod_workspace_name`.
-   Leave a field blank to leave that stage unchanged.
-5. Leave `dry_run` set to `true` and review the proposed pipeline and assignments
+4. Enter the exact display names of the existing Development, Test, and
+   Production workspaces. All three are required; create the workspaces and
+   grant the deployment identity Admin access before running this workflow.
+5. To give a team access to the pipeline, enter its Entra security-group object
+   ID in `pipeline_admin_group_id`. This is the group object ID, not its name,
+   application ID, or email address.
+6. Leave `dry_run` set to `true` and review the proposed pipeline, assignments,
+   and group access
    in the run summary. Rerun with `dry_run: false` to apply them.
 
 The stages default to Development, Test, and Production, using the existing
@@ -169,13 +173,23 @@ visibility, and nonempty
 workspace assignments are preserved. Mismatches fail without deleting or replacing
 anything. A preview of a new name reports `WouldCreate` and has no pipeline ID.
 
-The deployment identity needs Admin on each requested workspace and on a reused
+The deployment identity needs Admin on all three workspaces and on a reused
 pipeline. The workflow rejects ambiguous workspace names, requests to reuse a
 workspace across stages, and conflicts in pipelines visible to the identity.
 Fabric enforces assignment eligibility and rejects conflicts the workflow
 cannot see. A matching existing assignment is skipped. Assignments are made
 one at a time; if a later assignment fails, preview and rerun to resume without
 undoing successful assignments.
+
+The GitHub workflow does not support pipeline-only creation. It creates or
+reuses the deployment pipeline together with all three required workspace
+assignments.
+
+The optional Admin group is added idempotently to newly created or reused
+pipelines. Existing matching access is reported as `AlreadyAdmin`; dry runs
+report `WouldAddAdmin` or `WouldAddAfterCreate`. The service principal must
+already be pipeline Admin to grant access on a reused pipeline. No group
+membership is modified.
 
 The workflow does not create workspaces, move or unassign existing workspaces,
 promote items, or overwrite `FABRIC_DEPLOYMENT_PIPELINE_ID`. Review and configure
