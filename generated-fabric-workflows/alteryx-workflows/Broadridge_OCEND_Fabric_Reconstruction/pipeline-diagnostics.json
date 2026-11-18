@@ -1,0 +1,7 @@
+{
+  "workflow": "alteryx-workflows\\Broadridge_OCEND_Fabric_Reconstruction.yxmd",
+  "state": "blocked",
+  "diagnostics": [
+    "Alteryx pipeline generation is available only for mixed-item bundles"
+  ]
+}
