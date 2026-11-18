@@ -1,10 +1,86 @@
 """Acceptance checks for generated components and deployment contracts."""
 
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).parents[1]
 ARTIFACT_ROOT = ROOT / "generated-fabric-workflows"
+
+
+@pytest.mark.parametrize(
+    ("client_secret", "federated_token", "expected_assertion"),
+    [
+        ("synthetic-client-secret", "", None),
+        ("", "", "synthetic-github-assertion"),
+        ("   ", "", "synthetic-github-assertion"),
+        ("synthetic-client-secret", "synthetic-explicit-assertion", "synthetic-explicit-assertion"),
+    ],
+    ids=["client-secret", "github-oidc", "blank-client-secret", "explicit-federation"],
+)
+def test_fabric_authentication_honors_explicit_credentials(
+    client_secret: str, federated_token: str, expected_assertion: str | None
+) -> None:
+    executable = shutil.which("pwsh")
+    if executable is None:
+        pytest.skip("PowerShell 7 is required to exercise the Fabric authentication module")
+    script = r"""
+$ErrorActionPreference = 'Stop'
+$global:Requests = @()
+function global:Invoke-RestMethod {
+    param($Method, $Uri, $Headers, $ContentType, $Body)
+    $global:Requests += [pscustomobject]@{
+        method = $Method
+        uri = $Uri
+        body = $Body
+    }
+    if ($Method -eq 'Get') {
+        return @{ value = 'synthetic-github-assertion' }
+    }
+    return @{ access_token = 'synthetic-fabric-token' }
+}
+Import-Module (Join-Path $PWD 'scripts\FabricApi.psm1') -Force
+$Token = Get-FabricAccessToken
+@{ token = $Token; requests = @($global:Requests) } | ConvertTo-Json -Depth 8 -Compress
+"""
+    environment = os.environ | {
+        "AZURE_CLIENT_ID": "synthetic-client-id",
+        "AZURE_TENANT_ID": "synthetic-tenant-id",
+        "AZURE_CLIENT_SECRET": client_secret,
+        "AZURE_FEDERATED_TOKEN": federated_token,
+        "AZURE_FEDERATED_TOKEN_FILE": "",
+        "ACTIONS_ID_TOKEN_REQUEST_URL": "https://oidc.example.invalid/token?api-version=2.0",
+        "ACTIONS_ID_TOKEN_REQUEST_TOKEN": "synthetic-runner-token",
+    }
+    result = subprocess.run(
+        [executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    response = json.loads(result.stdout)
+    assert response["token"] == "synthetic-fabric-token"
+    requests = response["requests"]
+    automatic_oidc = not client_secret.strip() and not federated_token
+    assert len(requests) == (2 if automatic_oidc else 1)
+    if automatic_oidc:
+        assert requests[0]["method"] == "Get"
+        assert requests[0]["uri"].endswith("&audience=api://AzureADTokenExchange")
+    assert requests[-1]["method"] == "Post"
+    body = requests[-1]["body"]
+    if expected_assertion is None:
+        assert body["client_secret"] == client_secret
+        assert "client_assertion" not in body
+    else:
+        assert body["client_assertion"] == expected_assertion
+        assert "client_secret" not in body
 
 
 def test_deployment_plan_references_only_native_component_envelopes() -> None:

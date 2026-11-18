@@ -210,11 +210,19 @@ In the GitHub repository:
 
 1. Open **Settings > Environments**.
 2. Create or select the `dev` environment.
-3. Configure Microsoft Entra Workload Identity Federation (OIDC) for the `dev` environment (`api://AzureADTokenExchange`) and add:
+3. Add these environment secrets:
    - `AZURE_CLIENT_ID`
    - `AZURE_TENANT_ID`
    - `AZURE_CLIENT_SECRET` *(optional — only required if OIDC federation is not configured)*
 4. Add required reviewers or deployment branch restrictions where applicable.
+
+For Microsoft Entra Workload Identity Federation (OIDC), configure a federated
+credential with subject `repo:<owner>/<repository>:environment:dev` and audience
+`api://AzureADTokenExchange`, and omit `AZURE_CLIENT_SECRET`.
+
+When `AZURE_CLIENT_SECRET` is configured, the shared authentication helper uses
+it instead of automatically requesting a GitHub OIDC token. Explicit
+`AZURE_FEDERATED_TOKEN` or `AZURE_FEDERATED_TOKEN_FILE` settings retain priority.
 
 The workspace ID is supplied as a workflow input. It is not a secret.
 

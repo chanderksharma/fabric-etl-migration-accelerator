@@ -11,7 +11,7 @@ $script:FabricApiBaseUri = 'https://api.fabric.microsoft.com/v1'
 function Get-FabricAccessToken {
     <#
     .SYNOPSIS
-        Acquires a Fabric token using Microsoft Entra OIDC federation or client secret fallback.
+        Acquires a Fabric token using explicit federation, a client secret, or GitHub OIDC.
     .OUTPUTS
         System.String access token.
     #>
@@ -41,6 +41,7 @@ function Get-FabricAccessToken {
         $FederatedToken = (Get-Content -LiteralPath $env:AZURE_FEDERATED_TOKEN_FILE -Raw).Trim()
     }
     elseif (
+        [string]::IsNullOrWhiteSpace($env:AZURE_CLIENT_SECRET) -and
         -not [string]::IsNullOrWhiteSpace($env:ACTIONS_ID_TOKEN_REQUEST_URL) -and
         -not [string]::IsNullOrWhiteSpace($env:ACTIONS_ID_TOKEN_REQUEST_TOKEN)
     ) {
