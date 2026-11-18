@@ -1,0 +1,12 @@
+Fabric definition output
+========================
+
+Open latest.json to see which assessment run produced the current definitions.
+Each workflow directory contains target-prefixed Notebook and Dataflow files.
+The *-create-item.json files are complete Fabric Create Item request bodies.
+Blocked targets contain *-diagnostics.json and are not deployable definitions.
+
+Submit definitions only to an approved
+development workspace with authorized identity and after reviewing source bindings.
+Generated definitions are unvalidated until source/target semantic parity is accepted.
+For a new Dataflow, use ApplyChangesIfNeeded on the first refresh after definition save.

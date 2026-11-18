@@ -1,0 +1,7 @@
+{
+  "workflow": "basic_repository.xml!Sales/wf_orders",
+  "state": "blocked",
+  "diagnostics": [
+    "A single PowerCenter session deploys directly as Dataflow Gen2; a Fabric Pipeline is not required"
+  ]
+}

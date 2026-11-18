@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Accelerator: Build Web UI",
+      "type": "shell",
+      "command": "npm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/apps/web"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Accelerator: Serve Local UI & API",
+      "type": "shell",
+      "command": "uv run tool serve",
+      "problemMatcher": []
+    },
+    {
+      "label": "Accelerator: Run Python Tests",
+      "type": "shell",
+      "command": "uv run --extra dev pytest --cov-fail-under=80",
+      "problemMatcher": []
+    }
+  ]
+}

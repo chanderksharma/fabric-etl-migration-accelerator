@@ -1,0 +1,76 @@
+# sample_alteryx_workflow Fabric workflow bundle
+
+Source workflow: `alteryx-workflows\sample_alteryx_workflow.yxmd`
+
+Generation status: `compiler_required`
+
+> [!IMPORTANT]
+> Independent semantic validation remains required. Generated definitions
+> can be structurally deployable while source connections, destinations,
+> credentials, schemas, and business parity still require configuration.
+
+## Bundle contents
+
+| File | Purpose |
+| --- | --- |
+| `dataflow-diagnostics.json` | Compiler blockers that require implementation. |
+| `dataflow-manifest.json` | Generated candidate status, bindings, and diagnostics. |
+| `notebook-diagnostics.json` | Compiler blockers that require implementation. |
+| `notebook-manifest.json` | Generated candidate status, bindings, and diagnostics. |
+| `pipeline-diagnostics.json` | Compiler blockers that require implementation. |
+| `pipeline-manifest.json` | Generated candidate status, bindings, and diagnostics. |
+
+## Manual deployment
+
+### Prerequisites
+
+- PowerShell 7 and Azure CLI.
+- A Microsoft Fabric workspace on active capacity.
+- Contributor or higher permission on the target workspace.
+- Permission to create the included Fabric item types.
+- Approved source connections and destination items.
+
+### Authenticate and select the workspace
+
+```powershell
+az login
+$WorkspaceId = "<fabric-workspace-guid>"
+```
+
+### Configure bindings before deployment
+
+Review the decoded definition files before using the request envelopes.
+Dataflow source and destination bindings are intentionally unresolved when
+workspace connection IDs cannot be inferred. Notebook `source_paths` values
+must be completed before execution. If a decoded definition changes, update
+the matching Base64 part in its `*-create-item.json` envelope.
+
+### Create the generated items
+
+Run the following commands from this extracted bundle directory. Create
+items in Dataflow, Notebook, then Data Pipeline order when all are present.
+
+```powershell
+# No deployable create-item envelope is available.
+# Review the diagnostics files and complete the missing implementation.
+```
+
+
+## Post-deployment verification
+
+1. Open each created item in the Fabric workspace.
+2. Configure and test source connections and destination bindings.
+3. Run source previews before the first full execution.
+4. Compare schemas, row counts, null behavior, and business calculations
+   with the Alteryx workflow.
+5. Promote only after independent parity and operational validation.
+
+## Compiler diagnostics
+
+- dataflow: Executable workflow events require redesign
+- dataflow: Macro dependencies require independent redesign
+- dataflow: Only a supported linear or Union/CrossTab graph is native
+- notebook: Executable workflow events require redesign
+- notebook: Macro dependencies require independent redesign
+- notebook: Only a supported linear or Union/CrossTab graph is native
+- pipeline: Alteryx pipeline generation is available only for mixed-item bundles

@@ -1,0 +1,36 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "05_high_spend_by_tier",
+  "queriesMetadata": {
+    "customers": {
+      "loadEnabled": false,
+      "queryId": "ec3addd8-7338-5e91-b909-95f2bd3eed5c",
+      "queryName": "customers"
+    },
+    "left_unmatched": {
+      "loadEnabled": false,
+      "queryId": "488d36f4-5902-5e54-b506-6c791f7ce70d",
+      "queryName": "left_unmatched"
+    },
+    "orders_to_customers": {
+      "loadEnabled": false,
+      "queryId": "3bb14b5b-9baf-57ba-82ce-274a1edce931",
+      "queryName": "orders_to_customers"
+    },
+    "spend_by_tier_8": {
+      "loadEnabled": false,
+      "queryId": "02259bd7-5f6d-5542-bf99-c709d12de33b",
+      "queryName": "spend_by_tier_8"
+    },
+    "units_number": {
+      "loadEnabled": false,
+      "queryId": "255cbb67-faad-547c-8caa-eacb35d8a23a",
+      "queryName": "units_number"
+    }
+  },
+  "queryGroups": []
+}

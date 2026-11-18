@@ -1,0 +1,56 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "09_very_high_batch_reconcile",
+  "queriesMetadata": {
+    "amount_delta": {
+      "loadEnabled": false,
+      "queryId": "c8167d5d-3787-5930-9518-45f0aa89c2c4",
+      "queryName": "amount_delta"
+    },
+    "deltas": {
+      "loadEnabled": false,
+      "queryId": "4115da80-0d77-5664-8b04-2410f54e40eb",
+      "queryName": "deltas"
+    },
+    "exceptions_19": {
+      "loadEnabled": false,
+      "queryId": "fdf7c2eb-123c-5723-accd-c39b5b3ec527",
+      "queryName": "exceptions_19"
+    },
+    "left_only_keys": {
+      "loadEnabled": false,
+      "queryId": "f18d5157-3177-53ae-8842-c6e036cfc4d4",
+      "queryName": "left_only_keys"
+    },
+    "match_key_a": {
+      "loadEnabled": false,
+      "queryId": "e78d812b-df13-578c-bf11-75cebff8bac8",
+      "queryName": "match_key_a"
+    },
+    "match_key_b": {
+      "loadEnabled": false,
+      "queryId": "36193ec2-908f-56a4-aafb-0d6338874391",
+      "queryName": "match_key_b"
+    },
+    "matched": {
+      "loadEnabled": false,
+      "queryId": "782cdce8-3263-52f5-9c50-c0ea83984232",
+      "queryName": "matched"
+    },
+    "reconcile_batches": {
+      "loadEnabled": false,
+      "queryId": "a6baa7a6-b906-5b28-be02-1b72f8ebcca8",
+      "queryName": "reconcile_batches"
+    },
+    "right_only_keys": {
+      "loadEnabled": false,
+      "queryId": "5f5e7258-d640-5cd9-85cb-7b94dba56697",
+      "queryName": "right_only_keys"
+    }
+  },
+  "queryGroups": []
+}

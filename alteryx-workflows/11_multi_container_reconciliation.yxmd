@@ -1,0 +1,1048 @@
+<?xml version='1.0' encoding='utf-8'?>
+<AlteryxDocument yxmdVer="2024.1">
+  <Nodes>
+    <Node ToolID="100">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="40" y="55" width="335" height="915" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>00 Source Files</Caption>
+          <Style TextColor="#243C5A" FillColor="#EEF3FA" BorderColor="#4472A1" Transparency="25" Margin="25" />
+          <Disabled value="False" />
+          <Folded value="False" />
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name />
+          <DefaultAnnotationText>Synthetic stage container grouping for multi-branch Dataflow Gen2 validation.</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="1">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+            <Position x="75" y="110" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File RecordLimit="" FileFormat="25">.\Sources\src_BusinessDate.xlsx|||`Sheet1$`</File>
+              <FormatSpecificOptions>
+                <FirstRowData>False</FirstRowData>
+                <ImportLine>1</ImportLine>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>src_BusinessDate</Name>
+              <DefaultAnnotationText>Synthetic sample: Date reference; no visible downstream link.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+            <MetaInfo connection="Output">
+              <RecordInfo>
+                <Field name="BusinessDate" source="File: src_BusinessDate.xlsx" type="V_WString" />
+              </RecordInfo>
+            </MetaInfo>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+        </Node>
+        <Node ToolID="2">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+            <Position x="75" y="190" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File RecordLimit="" FileFormat="25">.\Sources\src_Settlement_Current.xlsx|||`Sheet1$`</File>
+              <FormatSpecificOptions>
+                <FirstRowData>False</FirstRowData>
+                <ImportLine>1</ImportLine>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>src_Settlement_Current</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+            <MetaInfo connection="Output">
+              <RecordInfo>
+                <Field name="RecordKey" source="File: src_Settlement_Current.xlsx" type="V_WString" />
+                <Field name="EntityID" source="File: src_Settlement_Current.xlsx" type="V_WString" />
+                <Field name="AccountID" source="File: src_Settlement_Current.xlsx" type="V_WString" />
+                <Field name="BusinessDate" source="File: src_Settlement_Current.xlsx" type="V_WString" />
+                <Field name="Amount" source="File: src_Settlement_Current.xlsx" type="Double" />
+                <Field name="Status" source="File: src_Settlement_Current.xlsx" type="V_WString" />
+              </RecordInfo>
+            </MetaInfo>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+        </Node>
+        <Node ToolID="3">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+            <Position x="75" y="270" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File RecordLimit="" FileFormat="25">.\Sources\src_Alpha_Current.xlsx|||`Sheet1$`</File>
+              <FormatSpecificOptions>
+                <FirstRowData>False</FirstRowData>
+                <ImportLine>1</ImportLine>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>src_Alpha_Current</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+            <MetaInfo connection="Output">
+              <RecordInfo>
+                <Field name="RecordKey" source="File: src_Alpha_Current.xlsx" type="V_WString" />
+                <Field name="EntityID" source="File: src_Alpha_Current.xlsx" type="V_WString" />
+                <Field name="AccountID" source="File: src_Alpha_Current.xlsx" type="V_WString" />
+                <Field name="BusinessDate" source="File: src_Alpha_Current.xlsx" type="V_WString" />
+                <Field name="Amount" source="File: src_Alpha_Current.xlsx" type="Double" />
+                <Field name="Status" source="File: src_Alpha_Current.xlsx" type="V_WString" />
+              </RecordInfo>
+            </MetaInfo>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+        </Node>
+        <Node ToolID="4">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+            <Position x="75" y="350" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File RecordLimit="" FileFormat="25">.\Sources\src_Alpha_Previous.xlsx|||`Sheet1$`</File>
+              <FormatSpecificOptions>
+                <FirstRowData>False</FirstRowData>
+                <ImportLine>1</ImportLine>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>src_Alpha_Previous</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+            <MetaInfo connection="Output">
+              <RecordInfo>
+                <Field name="RecordKey" source="File: src_Alpha_Previous.xlsx" type="V_WString" />
+                <Field name="EntityID" source="File: src_Alpha_Previous.xlsx" type="V_WString" />
+                <Field name="AccountID" source="File: src_Alpha_Previous.xlsx" type="V_WString" />
+                <Field name="BusinessDate" source="File: src_Alpha_Previous.xlsx" type="V_WString" />
+                <Field name="Amount" source="File: src_Alpha_Previous.xlsx" type="Double" />
+                <Field name="Status" source="File: src_Alpha_Previous.xlsx" type="V_WString" />
+              </RecordInfo>
+            </MetaInfo>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+        </Node>
+        <Node ToolID="5">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+            <Position x="75" y="430" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File RecordLimit="" FileFormat="25">.\Sources\src_Ref_Details.xlsx|||`Sheet1$`</File>
+              <FormatSpecificOptions>
+                <FirstRowData>False</FirstRowData>
+                <ImportLine>1</ImportLine>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>src_Ref_Details</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+            <MetaInfo connection="Output">
+              <RecordInfo>
+                <Field name="RecordKey" source="File: src_Ref_Details.xlsx" type="V_WString" />
+                <Field name="EntityID" source="File: src_Ref_Details.xlsx" type="V_WString" />
+                <Field name="AccountID" source="File: src_Ref_Details.xlsx" type="V_WString" />
+                <Field name="BusinessDate" source="File: src_Ref_Details.xlsx" type="V_WString" />
+                <Field name="Amount" source="File: src_Ref_Details.xlsx" type="Double" />
+                <Field name="Status" source="File: src_Ref_Details.xlsx" type="V_WString" />
+              </RecordInfo>
+            </MetaInfo>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+        </Node>
+        <Node ToolID="6">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+            <Position x="75" y="510" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File RecordLimit="" FileFormat="25">.\Sources\src_Beta_Current.xlsx|||`Sheet1$`</File>
+              <FormatSpecificOptions>
+                <FirstRowData>False</FirstRowData>
+                <ImportLine>1</ImportLine>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>src_Beta_Current</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+            <MetaInfo connection="Output">
+              <RecordInfo>
+                <Field name="RecordKey" source="File: src_Beta_Current.xlsx" type="V_WString" />
+                <Field name="EntityID" source="File: src_Beta_Current.xlsx" type="V_WString" />
+                <Field name="AccountID" source="File: src_Beta_Current.xlsx" type="V_WString" />
+                <Field name="BusinessDate" source="File: src_Beta_Current.xlsx" type="V_WString" />
+                <Field name="Amount" source="File: src_Beta_Current.xlsx" type="Double" />
+                <Field name="Status" source="File: src_Beta_Current.xlsx" type="V_WString" />
+              </RecordInfo>
+            </MetaInfo>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+        </Node>
+        <Node ToolID="7">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+            <Position x="75" y="590" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File RecordLimit="" FileFormat="25">.\Sources\src_Beta_Previous.xlsx|||`Sheet1$`</File>
+              <FormatSpecificOptions>
+                <FirstRowData>False</FirstRowData>
+                <ImportLine>1</ImportLine>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>src_Beta_Previous</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+            <MetaInfo connection="Output">
+              <RecordInfo>
+                <Field name="RecordKey" source="File: src_Beta_Previous.xlsx" type="V_WString" />
+                <Field name="EntityID" source="File: src_Beta_Previous.xlsx" type="V_WString" />
+                <Field name="AccountID" source="File: src_Beta_Previous.xlsx" type="V_WString" />
+                <Field name="BusinessDate" source="File: src_Beta_Previous.xlsx" type="V_WString" />
+                <Field name="Amount" source="File: src_Beta_Previous.xlsx" type="Double" />
+                <Field name="Status" source="File: src_Beta_Previous.xlsx" type="V_WString" />
+              </RecordInfo>
+            </MetaInfo>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+        </Node>
+        <Node ToolID="8">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+            <Position x="75" y="670" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File RecordLimit="" FileFormat="25">.\Sources\src_ManifestFiles.xlsx|||`Sheet1$`</File>
+              <FormatSpecificOptions>
+                <FirstRowData>False</FirstRowData>
+                <ImportLine>1</ImportLine>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>src_ManifestFiles</Name>
+              <DefaultAnnotationText>Synthetic sample: File-list reference; no visible downstream link.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+            <MetaInfo connection="Output">
+              <RecordInfo>
+                <Field name="FileName" source="File: src_ManifestFiles.xlsx" type="V_WString" />
+                <Field name="FolderPath" source="File: src_ManifestFiles.xlsx" type="V_WString" />
+              </RecordInfo>
+            </MetaInfo>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+        </Node>
+        <Node ToolID="9">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+            <Position x="75" y="750" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File RecordLimit="" FileFormat="25">.\Sources\src_Settlement_Previous.xlsx|||`Sheet1$`</File>
+              <FormatSpecificOptions>
+                <FirstRowData>False</FirstRowData>
+                <ImportLine>1</ImportLine>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>src_Settlement_Previous</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+            <MetaInfo connection="Output">
+              <RecordInfo>
+                <Field name="RecordKey" source="File: src_Settlement_Previous.xlsx" type="V_WString" />
+                <Field name="EntityID" source="File: src_Settlement_Previous.xlsx" type="V_WString" />
+                <Field name="AccountID" source="File: src_Settlement_Previous.xlsx" type="V_WString" />
+                <Field name="BusinessDate" source="File: src_Settlement_Previous.xlsx" type="V_WString" />
+                <Field name="Amount" source="File: src_Settlement_Previous.xlsx" type="Double" />
+                <Field name="Status" source="File: src_Settlement_Previous.xlsx" type="V_WString" />
+              </RecordInfo>
+            </MetaInfo>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+        </Node>
+      </ChildNodes>
+    </Node>
+    <Node ToolID="101">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="420" y="55" width="345" height="780" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>01 Ledger Alpha and Beta</Caption>
+          <Style TextColor="#243C5A" FillColor="#EEF3FA" BorderColor="#4472A1" Transparency="25" Margin="25" />
+          <Disabled value="False" />
+          <Folded value="False" />
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name />
+          <DefaultAnnotationText>Synthetic stage container grouping for multi-branch Dataflow Gen2 validation.</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="10">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+            <Position x="455" y="135" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <FormulaFields>
+                <FormulaField expression="ToNumber([Amount])" field="CalculatedAmount" size="8" type="Double" />
+              </FormulaFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qAlpha_Current_Calculated</Name>
+              <DefaultAnnotationText>Synthetic sample: Approximate Amount calculation.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFormula" />
+        </Node>
+        <Node ToolID="11">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+            <Position x="455" y="215" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <FormulaFields>
+                <FormulaField expression="ToNumber([Amount])" field="CalculatedAmount" size="8" type="Double" />
+              </FormulaFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qAlpha_Previous_Calculated</Name>
+              <DefaultAnnotationText>Synthetic sample: Approximate Amount calculation.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFormula" />
+        </Node>
+        <Node ToolID="12">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="455" y="310" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qAlpha_Beta_Current</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+        <Node ToolID="13">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="455" y="390" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qAlpha_Beta_Previous</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+        <Node ToolID="14">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Union.Union">
+            <Position x="610" y="360" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <ByName_ErrorMode>Warning</ByName_ErrorMode>
+              <ByName_OutputMode>All</ByName_OutputMode>
+              <Mode>ByName</Mode>
+              <SetOutputOrder value="False" />
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qAlpha_Beta_Combined</Name>
+              <DefaultAnnotationText>Synthetic sample: Combine current and previous rows by column name.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxUnion" />
+        </Node>
+        <Node ToolID="15">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Join.Join">
+            <Position x="610" y="505" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <JoinMode>Inner</JoinMode>
+              <JoinInfo connection="Left">
+                <Field field="RecordKey" />
+              </JoinInfo>
+              <JoinInfo connection="Right">
+                <Field field="RecordKey" />
+              </JoinInfo>
+              <SelectConfiguration>
+                <Configuration outputConnection="Join">
+                  <OrderChanged value="False" />
+                  <CommaDecimal value="False" />
+                  <SelectFields>
+                    <SelectField field="Left_RecordKey" selected="True" rename="RecordKey" />
+                    <SelectField field="Right_RecordKey" selected="False" />
+                    <SelectField field="*Unknown" selected="True" />
+                  </SelectFields>
+                </Configuration>
+              </SelectConfiguration>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qAlpha_Beta_Enriched</Name>
+              <DefaultAnnotationText>Synthetic sample: RecordKey join to entity lookup; confirm real key.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxJoin" />
+        </Node>
+        <Node ToolID="16">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Join.Join">
+            <Position x="610" y="620" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <JoinMode>Inner</JoinMode>
+              <JoinInfo connection="Left">
+                <Field field="RecordKey" />
+              </JoinInfo>
+              <JoinInfo connection="Right">
+                <Field field="RecordKey" />
+              </JoinInfo>
+              <SelectConfiguration>
+                <Configuration outputConnection="Join">
+                  <OrderChanged value="False" />
+                  <CommaDecimal value="False" />
+                  <SelectFields>
+                    <SelectField field="Left_RecordKey" selected="True" rename="RecordKey" />
+                    <SelectField field="Right_RecordKey" selected="False" />
+                    <SelectField field="*Unknown" selected="True" />
+                  </SelectFields>
+                </Configuration>
+              </SelectConfiguration>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qAlpha_Beta_Calculated</Name>
+              <DefaultAnnotationText>Synthetic sample: RecordKey join to account lookup; real calculation is unknown.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxJoin" />
+        </Node>
+      </ChildNodes>
+    </Node>
+    <Node ToolID="102">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="420" y="865" width="345" height="220" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>02 Reference Enrichment</Caption>
+          <Style TextColor="#243C5A" FillColor="#EEF3FA" BorderColor="#4472A1" Transparency="25" Margin="25" />
+          <Disabled value="False" />
+          <Folded value="False" />
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name />
+          <DefaultAnnotationText>Synthetic stage container grouping for multi-branch Dataflow Gen2 validation.</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="17">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="455" y="925" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qRef_EntityLookup</Name>
+              <DefaultAnnotationText>Synthetic sample: Entity lookup projection; confirm real columns.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+        <Node ToolID="18">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="610" y="925" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qRef_AccountLookup</Name>
+              <DefaultAnnotationText>Synthetic sample: Account lookup projection; confirm real columns.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+      </ChildNodes>
+    </Node>
+    <Node ToolID="103">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="815" y="55" width="660" height="875" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>03 Settlement Reconciliation</Caption>
+          <Style TextColor="#243C5A" FillColor="#EEF3FA" BorderColor="#4472A1" Transparency="25" Margin="25" />
+          <Disabled value="False" />
+          <Folded value="False" />
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name />
+          <DefaultAnnotationText>Synthetic stage container grouping for multi-branch Dataflow Gen2 validation.</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="19">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="850" y="160" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qSettlement_Current_Ready</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+        <Node ToolID="20">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+            <Position x="985" y="160" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <FormulaFields>
+                <FormulaField expression="ToNumber([Amount])" field="CalculatedAmount" size="8" type="Double" />
+              </FormulaFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qSettlement_Current_Calculated</Name>
+              <DefaultAnnotationText>Synthetic sample: Approximate Amount calculation.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFormula" />
+        </Node>
+        <Node ToolID="21">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Join.Join">
+            <Position x="1120" y="160" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <JoinMode>Inner</JoinMode>
+              <JoinInfo connection="Left">
+                <Field field="RecordKey" />
+              </JoinInfo>
+              <JoinInfo connection="Right">
+                <Field field="RecordKey" />
+              </JoinInfo>
+              <SelectConfiguration>
+                <Configuration outputConnection="Join">
+                  <OrderChanged value="False" />
+                  <CommaDecimal value="False" />
+                  <SelectFields>
+                    <SelectField field="Left_RecordKey" selected="True" rename="RecordKey" />
+                    <SelectField field="Right_RecordKey" selected="False" />
+                    <SelectField field="*Unknown" selected="True" />
+                  </SelectFields>
+                </Configuration>
+              </SelectConfiguration>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qSettlement_Current_Matched</Name>
+              <DefaultAnnotationText>Synthetic sample: Match Alpha current by RecordKey; confirm real key.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxJoin" />
+        </Node>
+        <Node ToolID="22">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="1255" y="160" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qSettlement_Current_Result</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+        <Node ToolID="23">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="850" y="515" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qSettlement_Previous_Ready</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+        <Node ToolID="24">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+            <Position x="985" y="515" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <FormulaFields>
+                <FormulaField expression="ToNumber([Amount])" field="CalculatedAmount" size="8" type="Double" />
+              </FormulaFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qSettlement_Previous_Calculated</Name>
+              <DefaultAnnotationText>Synthetic sample: Approximate Amount calculation.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFormula" />
+        </Node>
+        <Node ToolID="25">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Join.Join">
+            <Position x="1120" y="515" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <JoinMode>Inner</JoinMode>
+              <JoinInfo connection="Left">
+                <Field field="RecordKey" />
+              </JoinInfo>
+              <JoinInfo connection="Right">
+                <Field field="RecordKey" />
+              </JoinInfo>
+              <SelectConfiguration>
+                <Configuration outputConnection="Join">
+                  <OrderChanged value="False" />
+                  <CommaDecimal value="False" />
+                  <SelectFields>
+                    <SelectField field="Left_RecordKey" selected="True" rename="RecordKey" />
+                    <SelectField field="Right_RecordKey" selected="False" />
+                    <SelectField field="*Unknown" selected="True" />
+                  </SelectFields>
+                </Configuration>
+              </SelectConfiguration>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qSettlement_Previous_Matched</Name>
+              <DefaultAnnotationText>Synthetic sample: Match Alpha previous by RecordKey; confirm real key.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxJoin" />
+        </Node>
+        <Node ToolID="26">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="1255" y="515" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qSettlement_Previous_Result</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+        <Node ToolID="27">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Union.Union">
+            <Position x="1260" y="340" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <ByName_ErrorMode>Warning</ByName_ErrorMode>
+              <ByName_OutputMode>All</ByName_OutputMode>
+              <Mode>ByName</Mode>
+              <SetOutputOrder value="False" />
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>qSettlement_Combined</Name>
+              <DefaultAnnotationText>Synthetic sample: Combine current and previous Settlement rows.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxUnion" />
+        </Node>
+      </ChildNodes>
+    </Node>
+    <Node ToolID="104">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="1520" y="250" width="235" height="480" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>04 Final Outputs</Caption>
+          <Style TextColor="#243C5A" FillColor="#EEF3FA" BorderColor="#4472A1" Transparency="25" Margin="25" />
+          <Disabled value="False" />
+          <Folded value="False" />
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name />
+          <DefaultAnnotationText>Synthetic stage container grouping for multi-branch Dataflow Gen2 validation.</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="28">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="1560" y="355" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>out_Settlement</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+        <Node ToolID="29">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="1560" y="545" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>out_Alpha_Beta</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+      </ChildNodes>
+    </Node>
+    <Node ToolID="105">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="1800" y="200" width="315" height="620" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>05 Destinations</Caption>
+          <Style TextColor="#243C5A" FillColor="#EEF3FA" BorderColor="#4472A1" Transparency="25" Margin="25" />
+          <Disabled value="False" />
+          <Folded value="False" />
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name />
+          <DefaultAnnotationText>Synthetic stage container grouping for multi-branch Dataflow Gen2 validation.</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="30">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+            <Position x="1840" y="290" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File FileFormat="0" MaxRecords="">.\Outputs\file_Settlement_Export.csv</File>
+              <FormatSpecificOptions>
+                <LineEndStyle>CRLF</LineEndStyle>
+                <Delimeter>,</Delimeter>
+                <HeaderRow>True</HeaderRow>
+                <CodePage>65001</CodePage>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>file_Settlement_Export</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+        </Node>
+        <Node ToolID="31">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+            <Position x="1840" y="380" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File FileFormat="0" MaxRecords="">.\Outputs\load_Settlement.csv</File>
+              <FormatSpecificOptions>
+                <LineEndStyle>CRLF</LineEndStyle>
+                <Delimeter>,</Delimeter>
+                <HeaderRow>True</HeaderRow>
+                <CodePage>65001</CodePage>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>load_Settlement</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+        </Node>
+        <Node ToolID="32">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+            <Position x="1840" y="550" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File FileFormat="0" MaxRecords="">.\Outputs\file_Alpha_Beta_Export.csv</File>
+              <FormatSpecificOptions>
+                <LineEndStyle>CRLF</LineEndStyle>
+                <Delimeter>,</Delimeter>
+                <HeaderRow>True</HeaderRow>
+                <CodePage>65001</CodePage>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>file_Alpha_Beta_Export</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+        </Node>
+        <Node ToolID="33">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+            <Position x="1840" y="640" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File FileFormat="0" MaxRecords="">.\Outputs\load_Alpha_Beta.csv</File>
+              <FormatSpecificOptions>
+                <LineEndStyle>CRLF</LineEndStyle>
+                <Delimeter>,</Delimeter>
+                <HeaderRow>True</HeaderRow>
+                <CodePage>65001</CodePage>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>load_Alpha_Beta</Name>
+              <DefaultAnnotationText>Synthetic sample: Pass-through/projection.</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+        </Node>
+      </ChildNodes>
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection>
+      <Origin ToolID="2" Connection="Output" />
+      <Destination ToolID="19" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="3" Connection="Output" />
+      <Destination ToolID="10" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="4" Connection="Output" />
+      <Destination ToolID="11" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="5" Connection="Output" />
+      <Destination ToolID="17" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="5" Connection="Output" />
+      <Destination ToolID="18" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="6" Connection="Output" />
+      <Destination ToolID="12" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="7" Connection="Output" />
+      <Destination ToolID="13" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="12" Connection="Output" />
+      <Destination ToolID="14" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="13" Connection="Output" />
+      <Destination ToolID="14" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="14" Connection="Output" />
+      <Destination ToolID="15" Connection="Left" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="17" Connection="Output" />
+      <Destination ToolID="15" Connection="Right" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="15" Connection="Join" />
+      <Destination ToolID="16" Connection="Left" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="18" Connection="Output" />
+      <Destination ToolID="16" Connection="Right" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="16" Connection="Join" />
+      <Destination ToolID="29" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="29" Connection="Output" />
+      <Destination ToolID="32" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="29" Connection="Output" />
+      <Destination ToolID="33" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="9" Connection="Output" />
+      <Destination ToolID="23" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="19" Connection="Output" />
+      <Destination ToolID="20" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="20" Connection="Output" />
+      <Destination ToolID="21" Connection="Left" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="10" Connection="Output" />
+      <Destination ToolID="21" Connection="Right" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="21" Connection="Join" />
+      <Destination ToolID="22" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="23" Connection="Output" />
+      <Destination ToolID="24" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="24" Connection="Output" />
+      <Destination ToolID="25" Connection="Left" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="11" Connection="Output" />
+      <Destination ToolID="25" Connection="Right" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="25" Connection="Join" />
+      <Destination ToolID="26" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="22" Connection="Output" />
+      <Destination ToolID="27" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="26" Connection="Output" />
+      <Destination ToolID="27" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="27" Connection="Output" />
+      <Destination ToolID="28" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="28" Connection="Output" />
+      <Destination ToolID="30" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="28" Connection="Output" />
+      <Destination ToolID="31" Connection="Input" />
+    </Connection>
+  </Connections>
+  <Properties>
+    <MetaInfo>
+      <Name>Multi-Container Financial Reconciliation Sample</Name>
+      <Description>Structural reconstruction of the screenshot: six containers, 33 tools and mock Excel sources. Power Query formulas, join keys, destinations and business logic are not recoverable from an image; they are illustrative placeholders and must be checked against the original M before production.</Description>
+      <Author>Microsoft Scout</Author>
+    </MetaInfo>
+    <Events>
+      <Enabled value="False" />
+    </Events>
+  </Properties>
+</AlteryxDocument>

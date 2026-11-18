@@ -1,0 +1,8 @@
+{
+  "workflow": "alteryx-workflows\\my_alteryx-workflow.yxmd",
+  "state": "blocked",
+  "diagnostics": [
+    "Executable workflow events require redesign",
+    "Only a supported linear or Union/CrossTab graph is native"
+  ]
+}

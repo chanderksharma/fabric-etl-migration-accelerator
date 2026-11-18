@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "config": {
+    "logicalId": "2c526200-2f4b-5b23-bc6d-655b2fca5504",
+    "version": "2.0"
+  },
+  "metadata": {
+    "description": "Generated from Alteryx static analysis. Independent semantic validation remains required.",
+    "displayName": "04_low_parse_sku_dates",
+    "type": "Dataflow"
+  }
+}

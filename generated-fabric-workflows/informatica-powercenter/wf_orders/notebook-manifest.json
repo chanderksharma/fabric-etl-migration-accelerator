@@ -1,0 +1,38 @@
+{
+  "workflow": "basic_repository.xml!Sales/wf_orders",
+  "target": "notebook",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": false,
+  "source_sha256": "4ce22861ce28d30036bdde7c43cfc629b5618737028ba4f98d2bf6dee46046c2",
+  "code_sha256": "76fa6e88554bd82118ea7d53342216a0ac194216b9cb5e2af15b5381a4e3c39c",
+  "compiler_version": "1.4.0",
+  "graph_version": "1.0.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "from pyspark.sql import functions as F\n\nsource_paths = globals().get('source_paths', {})\ntransform_bindings = globals().get('transform_bindings', {})\n\ndef require_transform(name):\n    binding = transform_bindings.get(name)\n    if binding is None:\n        raise ValueError(f\"Configure transform_bindings[{name!r}] before running\")\n    return binding\n\ndef _read_source(location):\n    if location.endswith(\".parquet\") or \"/parquet/\" in location.lower():\n        return spark.read.parquet(location)\n    if \"/\" not in location and \"\\\\\" not in location and not location.endswith(\".csv\"):\n        return spark.read.table(location)\n    return spark.read.option(\"header\", True).option(\"inferSchema\", True).csv(location)\norders_path = source_paths.get('Orders')\nif not orders_path: raise ValueError(\"Configure source_paths['Orders'] before running\")\norders = _read_source(orders_path)\nsq_orders = orders\nflt_valid = sq_orders.filter(F.col(\"Amount\") > F.lit(0))\norderscurated = flt_valid\n\ndisplay(orderscurated)\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "source_paths['Orders']",
+    "independent semantic parity"
+  ],
+  "artifact_path": "informatica-powercenter/wf_orders",
+  "definition_files": [
+    "notebook-content.ipynb",
+    "notebook.platform.json",
+    "notebook-create-item.json"
+  ],
+  "definition_queries": [],
+  "loaded_queries": [
+    "orderscurated"
+  ],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "informatica_powercenter",
+  "source_product": "Informatica PowerCenter",
+  "asset_type": "workflow",
+  "native_id": "wf_orders",
+  "folder": "Sales"
+}

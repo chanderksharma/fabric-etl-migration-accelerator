@@ -1,0 +1,41 @@
+{
+  "workflow": "alteryx-workflows\\04_low_parse_sku_dates.yxmd",
+  "target": "dataflow",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": false,
+  "source_sha256": "763e22a69c32dbc4b898d456a7526a260504cac19427541b6b27318536da0a5a",
+  "code_sha256": "7c20fb60bd46a0a74c29618e4dec34de236ebb839e08a50ab020c0024cacf134",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "section Section1;\n\nshared parsed_orders = let\n    orders = #table({\"CustomerID\", \"Region\", \"Channel\", \"OrderDate\", \"SKU\", \"Amount\", \"Units\"}, {{\"C001\", \"West\", \"Online\", \"2026-01-12\", \"SKU-A-100\", \"1200\", \"4\"}, {\"C002\", \"East\", \"Store\", \"2026-01-18\", \"SKU-B-220\", \"840\", \"2\"}, {\"C001\", \"West\", \"Online\", \"2026-02-03\", \"SKU-A-140\", \"640\", \"1\"}, {\"C003\", \"North\", \"Partner\", \"2026-02-11\", \"SKU-C-010\", \"2100\", \"6\"}, {\"C004\", \"South\", \"Store\", \"2026-03-01\", \"SKU-B-220\", \"430\", \"3\"}, {\"C002\", \"East\", \"Online\", \"2026-03-09\", \"SKU-A-100\", \"990\", \"2\"}, {\"C005\", \"West\", \"Partner\", \"2026-03-21\", \"SKU-C-010\", \"150\", \"1\"}, {\"C003\", \"North\", \"Store\", \"2026-04-02\", \"SKU-A-140\", \"1760\", \"5\"}}),\n    parse_order_date = Table.AddColumn(orders, \"OrderDateParsed\", each Date.FromText(Text.From(Record.Field(_, \"OrderDate\")), [Format = \"yyyy-MM-dd\"]), type date),\n    split_sku_1 = Table.AddColumn(parse_order_date, \"SKUFamily\", each Text.BeforeDelimiter(Text.Upper(Text.From(Record.Field(_, \"SKU\"))), \"-\"), type text),\n    split_sku = Table.AddColumn(split_sku_1, \"SKUNumber\", each Text.AfterDelimiter(Text.Upper(Text.From(Record.Field(_, \"SKU\"))), \"-\"), type text),\n    date_order = Table.Sort(split_sku, {{\"OrderDate\", Order.Ascending}})\nin\n    date_order;\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "destinations['parsed_orders']",
+    "independent semantic parity"
+  ],
+  "artifact_path": "alteryx-workflows/04_low_parse_sku_dates",
+  "definition_files": [
+    "dataflow-mashup.pq",
+    "dataflow-queryMetadata.json",
+    "dataflow.platform.json",
+    "dataflow-create-item.json"
+  ],
+  "definition_queries": [
+    "parsed_orders"
+  ],
+  "loaded_queries": [
+    "parsed_orders"
+  ],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

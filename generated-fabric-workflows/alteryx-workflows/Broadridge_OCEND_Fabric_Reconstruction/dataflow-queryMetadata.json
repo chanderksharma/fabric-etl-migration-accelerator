@@ -1,0 +1,233 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "Broadridge_OCEND_Fabric_Reconstruction",
+  "queriesMetadata": {
+    "SourceBindings": {
+      "loadEnabled": false,
+      "queryId": "5a2c8251-45a5-5849-a458-17ef91f76669",
+      "queryName": "SourceBindings"
+    },
+    "file_broadridge_export": {
+      "loadEnabled": false,
+      "queryGroupId": "0d835f0a-33b0-5e50-bf79-7175b657832c",
+      "queryId": "c02efc01-7c7e-5040-8a49-a05ae2967298",
+      "queryName": "file_broadridge_export"
+    },
+    "file_gr_ocend_export": {
+      "loadEnabled": false,
+      "queryGroupId": "0d835f0a-33b0-5e50-bf79-7175b657832c",
+      "queryId": "bc847e68-9623-56cd-b19e-9d842b5ed770",
+      "queryName": "file_gr_ocend_export"
+    },
+    "load_broadridge": {
+      "loadEnabled": false,
+      "queryGroupId": "0d835f0a-33b0-5e50-bf79-7175b657832c",
+      "queryId": "8717a5d4-0fde-5c64-8265-c5dce26f8922",
+      "queryName": "load_broadridge"
+    },
+    "load_gr_ocend": {
+      "loadEnabled": false,
+      "queryGroupId": "0d835f0a-33b0-5e50-bf79-7175b657832c",
+      "queryId": "2be835d3-e962-51a7-a6e1-a2a5ee52c462",
+      "queryName": "load_gr_ocend"
+    },
+    "out_broadridge": {
+      "loadEnabled": false,
+      "queryGroupId": "3ce163c1-32d8-5b4a-ae36-0583c666102d",
+      "queryId": "b81a24be-7fd2-5d4f-b832-791da88fc9ce",
+      "queryName": "out_broadridge"
+    },
+    "out_gr_ocend": {
+      "loadEnabled": false,
+      "queryGroupId": "3ce163c1-32d8-5b4a-ae36-0583c666102d",
+      "queryId": "f8b09cff-dbd9-5d0e-880f-7f6ed51276c7",
+      "queryName": "out_gr_ocend"
+    },
+    "qbroadridge_combined": {
+      "loadEnabled": false,
+      "queryGroupId": "e58d5810-ef65-57e8-9cfb-d44a9285aa8e",
+      "queryId": "e8eb7a1b-752f-5ecc-a320-722b3583c3f1",
+      "queryName": "qbroadridge_combined"
+    },
+    "qbroadridge_current_calculated": {
+      "loadEnabled": false,
+      "queryGroupId": "e58d5810-ef65-57e8-9cfb-d44a9285aa8e",
+      "queryId": "9e2c281c-a003-5d18-97b7-6a0d23dccaa7",
+      "queryName": "qbroadridge_current_calculated"
+    },
+    "qbroadridge_current_result": {
+      "loadEnabled": false,
+      "queryGroupId": "e58d5810-ef65-57e8-9cfb-d44a9285aa8e",
+      "queryId": "bcb40464-9dab-5cd4-91a3-f7775a9474a6",
+      "queryName": "qbroadridge_current_result"
+    },
+    "qbroadridge_previous_calculated": {
+      "loadEnabled": false,
+      "queryGroupId": "e58d5810-ef65-57e8-9cfb-d44a9285aa8e",
+      "queryId": "a03dd4f3-4c38-56c3-9a61-ba381ac7093e",
+      "queryName": "qbroadridge_previous_calculated"
+    },
+    "qbroadridge_previous_result": {
+      "loadEnabled": false,
+      "queryGroupId": "e58d5810-ef65-57e8-9cfb-d44a9285aa8e",
+      "queryId": "db09215a-8604-5f16-bf30-745e3e01fa82",
+      "queryName": "qbroadridge_previous_result"
+    },
+    "qgr_current_calculated": {
+      "loadEnabled": false,
+      "queryGroupId": "421def18-d574-56e1-bf96-f18c1d94f357",
+      "queryId": "43b8f1ac-be96-5e8b-b02b-4107375d7c9e",
+      "queryName": "qgr_current_calculated"
+    },
+    "qgr_ocend_calculated": {
+      "loadEnabled": false,
+      "queryGroupId": "421def18-d574-56e1-bf96-f18c1d94f357",
+      "queryId": "e9db08c3-070f-5c47-93b1-e6a08d01e611",
+      "queryName": "qgr_ocend_calculated"
+    },
+    "qgr_ocend_combined": {
+      "loadEnabled": false,
+      "queryGroupId": "421def18-d574-56e1-bf96-f18c1d94f357",
+      "queryId": "dca601ba-0b66-5035-b0e4-3a5e27a37e75",
+      "queryName": "qgr_ocend_combined"
+    },
+    "qgr_ocend_current": {
+      "loadEnabled": false,
+      "queryGroupId": "421def18-d574-56e1-bf96-f18c1d94f357",
+      "queryId": "3d0b523f-6b46-59e5-8b79-af3271b69039",
+      "queryName": "qgr_ocend_current"
+    },
+    "qgr_ocend_enriched": {
+      "loadEnabled": false,
+      "queryGroupId": "421def18-d574-56e1-bf96-f18c1d94f357",
+      "queryId": "d89c6eff-0464-50b0-8605-0ca9072912d8",
+      "queryName": "qgr_ocend_enriched"
+    },
+    "qgr_ocend_previous": {
+      "loadEnabled": false,
+      "queryGroupId": "421def18-d574-56e1-bf96-f18c1d94f357",
+      "queryId": "e39e63e6-8ad1-54c7-8533-7e606862b924",
+      "queryName": "qgr_ocend_previous"
+    },
+    "qgr_previous_calculated": {
+      "loadEnabled": false,
+      "queryGroupId": "421def18-d574-56e1-bf96-f18c1d94f357",
+      "queryId": "ab03a14a-bd4d-53d4-9c4e-33e00c34d97f",
+      "queryName": "qgr_previous_calculated"
+    },
+    "qlopr_accountlookup": {
+      "loadEnabled": false,
+      "queryGroupId": "0898ecfb-ff87-58ed-8080-01a882270590",
+      "queryId": "a2bc170c-d8ee-51fa-a11d-90085596bfc6",
+      "queryName": "qlopr_accountlookup"
+    },
+    "qlopr_entitylookup": {
+      "loadEnabled": false,
+      "queryGroupId": "0898ecfb-ff87-58ed-8080-01a882270590",
+      "queryId": "4af79878-bc52-5fcd-9a3d-013302a1cbc5",
+      "queryName": "qlopr_entitylookup"
+    },
+    "src_broadridge_current": {
+      "loadEnabled": false,
+      "queryGroupId": "ff5c222a-485e-55a6-ac14-ff0ec87f96eb",
+      "queryId": "60113979-ee35-5e6f-9f16-deaee68721c8",
+      "queryName": "src_broadridge_current"
+    },
+    "src_broadridge_previous": {
+      "loadEnabled": false,
+      "queryGroupId": "ff5c222a-485e-55a6-ac14-ff0ec87f96eb",
+      "queryId": "e9da1d71-fc7b-5164-804e-f7e1f1e18a47",
+      "queryName": "src_broadridge_previous"
+    },
+    "src_businessdate": {
+      "loadEnabled": false,
+      "queryGroupId": "ff5c222a-485e-55a6-ac14-ff0ec87f96eb",
+      "queryId": "f44e4557-f5da-5d3e-9d23-4a04cff6003c",
+      "queryName": "src_businessdate"
+    },
+    "src_gr_current": {
+      "loadEnabled": false,
+      "queryGroupId": "ff5c222a-485e-55a6-ac14-ff0ec87f96eb",
+      "queryId": "3b348a19-c3c7-5115-a919-2ef97f2ae4e5",
+      "queryName": "src_gr_current"
+    },
+    "src_gr_previous": {
+      "loadEnabled": false,
+      "queryGroupId": "ff5c222a-485e-55a6-ac14-ff0ec87f96eb",
+      "queryId": "3dda01d7-c228-52c9-ad39-7a65cc78bcf7",
+      "queryName": "src_gr_previous"
+    },
+    "src_lopr_details": {
+      "loadEnabled": false,
+      "queryGroupId": "ff5c222a-485e-55a6-ac14-ff0ec87f96eb",
+      "queryId": "e4c277bc-3837-5bfe-844b-36d0173b3aa9",
+      "queryName": "src_lopr_details"
+    },
+    "src_ocend_current": {
+      "loadEnabled": false,
+      "queryGroupId": "ff5c222a-485e-55a6-ac14-ff0ec87f96eb",
+      "queryId": "c3d52611-6c8c-545d-9020-01b28a378c15",
+      "queryName": "src_ocend_current"
+    },
+    "src_ocend_previous": {
+      "loadEnabled": false,
+      "queryGroupId": "ff5c222a-485e-55a6-ac14-ff0ec87f96eb",
+      "queryId": "e02a1f7d-271a-545e-8c4f-f0c7c568ccac",
+      "queryName": "src_ocend_previous"
+    },
+    "src_sharepointfiles": {
+      "loadEnabled": false,
+      "queryGroupId": "ff5c222a-485e-55a6-ac14-ff0ec87f96eb",
+      "queryId": "4afa61f3-f1b1-598b-b4b0-a73d508a0d6a",
+      "queryName": "src_sharepointfiles"
+    }
+  },
+  "queryGroups": [
+    {
+      "description": "Migrated from Alteryx ToolContainer 100",
+      "id": "ff5c222a-485e-55a6-ac14-ff0ec87f96eb",
+      "name": "00 Source Files",
+      "order": 0,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 101",
+      "id": "421def18-d574-56e1-bf96-f18c1d94f357",
+      "name": "01 GR and OCEND",
+      "order": 1,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 102",
+      "id": "0898ecfb-ff87-58ed-8080-01a882270590",
+      "name": "02 LOPR Enrichment",
+      "order": 2,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 103",
+      "id": "e58d5810-ef65-57e8-9cfb-d44a9285aa8e",
+      "name": "03 Broadridge",
+      "order": 3,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 104",
+      "id": "3ce163c1-32d8-5b4a-ae36-0583c666102d",
+      "name": "04 Final Outputs",
+      "order": 4,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 105",
+      "id": "0d835f0a-33b0-5e50-bf79-7175b657832c",
+      "name": "05 Destinations",
+      "order": 5,
+      "parentId": null
+    }
+  ]
+}

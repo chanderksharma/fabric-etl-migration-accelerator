@@ -1,0 +1,74 @@
+name: Promote Fabric ALM
+run-name: Promote Fabric ${{ inputs.target_stage }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_stage:
+        description: Adjacent Fabric Deployment Pipeline target stage
+        required: true
+        default: Test
+        type: choice
+        options:
+          - Test
+          - Production
+      deployment_note:
+        description: Deployment Pipeline audit note
+        required: true
+        default: Promote validated accelerator-generated Fabric items
+        type: string
+      use_preview_deployment_plan:
+        description: Use the configured preview Deployment Plan
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: fabric-alm-${{ inputs.target_stage }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote to ${{ inputs.target_stage }}
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
+    environment:
+      name: ${{ inputs.target_stage == 'Production' && 'prod' || 'test' }}
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      FABRIC_DEPLOYMENT_PIPELINE_ID: ${{ vars.FABRIC_DEPLOYMENT_PIPELINE_ID }}
+      FABRIC_SOURCE_STAGE_NAME: ${{ inputs.target_stage == 'Production' && (vars.FABRIC_TEST_STAGE_NAME || 'Test') || (vars.FABRIC_DEV_STAGE_NAME || 'Development') }}
+      FABRIC_TARGET_STAGE_NAME: ${{ inputs.target_stage == 'Production' && (vars.FABRIC_PROD_STAGE_NAME || 'Production') || (vars.FABRIC_TEST_STAGE_NAME || 'Test') }}
+      FABRIC_VARIABLE_LIBRARY_NAME: ${{ vars.FABRIC_VARIABLE_LIBRARY_NAME }}
+      FABRIC_ACTIVE_VALUE_SET_NAME: ${{ inputs.target_stage == 'Production' && (vars.FABRIC_PROD_VALUE_SET_NAME || 'prod') || (vars.FABRIC_TEST_VALUE_SET_NAME || 'test') }}
+      FABRIC_DEPLOYMENT_PLAN_ID: ${{ vars.FABRIC_DEPLOYMENT_PLAN_ID }}
+      FABRIC_DEPLOYMENT_NOTE: ${{ inputs.deployment_note }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Promote adjacent Fabric stage
+        shell: pwsh
+        run: |
+          $Parameters = @{
+            Operation = 'Promote'
+            DeploymentPipelineId = $env:FABRIC_DEPLOYMENT_PIPELINE_ID
+            SourceStageName = $env:FABRIC_SOURCE_STAGE_NAME
+            TargetStageName = $env:FABRIC_TARGET_STAGE_NAME
+            DeploymentNote = $env:FABRIC_DEPLOYMENT_NOTE
+          }
+          if ($env:FABRIC_VARIABLE_LIBRARY_NAME) {
+            $Parameters.VariableLibraryName = $env:FABRIC_VARIABLE_LIBRARY_NAME
+            $Parameters.ActiveValueSetName = $env:FABRIC_ACTIVE_VALUE_SET_NAME
+          }
+          if ('${{ inputs.use_preview_deployment_plan }}' -eq 'true') {
+            $Parameters.DeploymentPlanId = $env:FABRIC_DEPLOYMENT_PLAN_ID
+            $Parameters.EnablePreviewDeploymentPlan = $true
+          }
+          ./scripts/Invoke-FabricAlm.ps1 @Parameters

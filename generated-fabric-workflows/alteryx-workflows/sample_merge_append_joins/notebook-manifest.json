@@ -1,0 +1,35 @@
+{
+  "workflow": "alteryx-workflows\\sample_merge_append_joins.yxmd",
+  "target": "notebook",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": true,
+  "source_sha256": "db178ff6fbe612c786fe5e12392621334b28b6d7b417e0763c84e64fb46067bd",
+  "code_sha256": "7d7fc40621c04c02a35b62b548344d4bdf965ce25f95a98077aa3ed111b35405",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "from pyspark.sql import Window, functions as F\n\norders = spark.createDataFrame([[\"C001\", \"West\", \"Online\", \"SKU-A-100\", \"1200\", \"4\"], [\"C002\", \"East\", \"Store\", \"SKU-B-220\", \"840\", \"2\"], [\"C001\", \"West\", \"Online\", \"SKU-A-140\", \"640\", \"1\"], [\"C003\", \"North\", \"Partner\", \"SKU-C-010\", \"2100\", \"6\"], [\"C006\", \"South\", \"Store\", \"SKU-B-220\", \"430\", \"3\"], [\"C002\", \"East\", \"Online\", \"SKU-A-100\", \"990\", \"2\"]], [\"CustomerID\", \"Region\", \"Channel\", \"SKU\", \"Amount\", \"Units\"])\nkeep_order_fields = orders\namount_and_units_1 = orders.withColumn(\"AmountNum\", F.col(\"Amount\").cast('double'))\namount_and_units_2 = amount_and_units_1.withColumn(\"UnitsNum\", F.col(\"Units\").cast('double'))\namount_greater_than_zero = amount_and_units_2.filter(F.col(\"Amount\").cast('double') > 0)\nlargest_amount_first = amount_greater_than_zero.orderBy(F.col(\"AmountNum\").desc())\ncustomers = spark.createDataFrame([[\"C001\", \"Acme Retail\", \"Gold\"], [\"C002\", \"Northwind\", \"Silver\"], [\"C003\", \"Contoso\", \"Gold\"], [\"C004\", \"Fabrikam\", \"Bronze\"]], [\"CustomerID\", \"CustomerName\", \"Tier\"])\nkeep_customer_fields = customers.select(*[\"CustomerID\", \"CustomerName\", \"Tier\"])\nmerge_as_new = largest_amount_first.join(keep_customer_fields, (largest_amount_first[\"CustomerID\"] == keep_customer_fields[\"CustomerID\"]), 'inner').drop(keep_customer_fields[\"CustomerID\"])\nrates = spark.createDataFrame([[\"0.08\", \"USD\", \"FY2026\"]], [\"TaxRate\", \"Currency\", \"PriceList\"])\nappend_as_new = merge_as_new.crossJoin(rates)\namount_with_tax = append_as_new.withColumn(\"AmountWithTax\", F.col(\"AmountNum\") * (F.lit(1) + F.col(\"TaxRate\").cast('double')))\n\ndisplay(merge_as_new)\ndisplay(amount_with_tax)\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "independent semantic parity"
+  ],
+  "artifact_path": "alteryx-workflows/sample_merge_append_joins",
+  "definition_files": [
+    "notebook-content.ipynb",
+    "notebook.platform.json",
+    "notebook-create-item.json"
+  ],
+  "definition_queries": [],
+  "loaded_queries": [],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

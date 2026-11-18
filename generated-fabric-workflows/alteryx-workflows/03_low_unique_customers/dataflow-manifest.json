@@ -1,0 +1,41 @@
+{
+  "workflow": "alteryx-workflows\\03_low_unique_customers.yxmd",
+  "target": "dataflow",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": false,
+  "source_sha256": "e592b84ab5174b2263ceaf93e1024d40af96ef37d30108b79c9e8e743b3a6074",
+  "code_sha256": "3841d5a7bab90ff028efcda17ac6d2c2e77c29196705e3f0e8766de80827b6ea",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "section Section1;\n\nshared unique_customers = let\n    orders = #table({\"CustomerID\", \"Region\", \"Channel\", \"OrderDate\", \"SKU\", \"Amount\", \"Units\"}, {{\"C001\", \"West\", \"Online\", \"2026-01-12\", \"SKU-A-100\", \"1200\", \"4\"}, {\"C002\", \"East\", \"Store\", \"2026-01-18\", \"SKU-B-220\", \"840\", \"2\"}, {\"C001\", \"West\", \"Online\", \"2026-02-03\", \"SKU-A-140\", \"640\", \"1\"}, {\"C003\", \"North\", \"Partner\", \"2026-02-11\", \"SKU-C-010\", \"2100\", \"6\"}, {\"C004\", \"South\", \"Store\", \"2026-03-01\", \"SKU-B-220\", \"430\", \"3\"}, {\"C002\", \"East\", \"Online\", \"2026-03-09\", \"SKU-A-100\", \"990\", \"2\"}, {\"C005\", \"West\", \"Partner\", \"2026-03-21\", \"SKU-C-010\", \"150\", \"1\"}, {\"C003\", \"North\", \"Store\", \"2026-04-02\", \"SKU-A-140\", \"1760\", \"5\"}}),\n    numeric_amount = Table.AddColumn(orders, \"AmountNum\", each Number.From(Record.Field(_, \"Amount\"))),\n    one_row_per_customer = Table.Distinct(numeric_amount, {\"CustomerID\"}),\n    assign_recordid = Table.AddIndexColumn(one_row_per_customer, \"RecordID\", 1, 1, Int64.Type)\nin\n    assign_recordid;\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "destinations['unique_customers']",
+    "independent semantic parity"
+  ],
+  "artifact_path": "alteryx-workflows/03_low_unique_customers",
+  "definition_files": [
+    "dataflow-mashup.pq",
+    "dataflow-queryMetadata.json",
+    "dataflow.platform.json",
+    "dataflow-create-item.json"
+  ],
+  "definition_queries": [
+    "unique_customers"
+  ],
+  "loaded_queries": [
+    "unique_customers"
+  ],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

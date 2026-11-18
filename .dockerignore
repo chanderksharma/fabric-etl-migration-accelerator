@@ -1,0 +1,17 @@
+**
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+!src/accelerator/
+!src/accelerator/*.py
+!apps/
+!apps/web/
+!apps/web/package.json
+!apps/web/package-lock.json
+!apps/web/index.html
+!apps/web/*.json
+!apps/web/*.ts
+!apps/web/src/
+!apps/web/src/**

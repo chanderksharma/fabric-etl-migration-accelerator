@@ -1,0 +1,43 @@
+{
+  "workflow": "basic_repository.xml!Sales/wf_orders",
+  "target": "dataflow",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": false,
+  "source_sha256": "4ce22861ce28d30036bdde7c43cfc629b5618737028ba4f98d2bf6dee46046c2",
+  "code_sha256": "ae70eea108ecd25e8f0140febfc3f8912f7b1d0b4304b5147cccc48efa8a73be",
+  "compiler_version": "1.4.0",
+  "graph_version": "1.0.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "section Section1;\n\nshared SourceBindings = error \"Configure source bindings before refresh\";\n\nshared orderscurated = let\n    orders = Record.Field(SourceBindings, \"Orders\"),\n    flt_valid = Table.SelectRows(orders, each Record.Field(_, \"Amount\") > 0)\nin\n    flt_valid;\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "source_queries['Orders']",
+    "destinations['orderscurated']",
+    "independent semantic parity"
+  ],
+  "artifact_path": "informatica-powercenter/wf_orders",
+  "definition_files": [
+    "dataflow-mashup.pq",
+    "dataflow-queryMetadata.json",
+    "dataflow.platform.json",
+    "dataflow-create-item.json"
+  ],
+  "definition_queries": [
+    "SourceBindings",
+    "orderscurated"
+  ],
+  "loaded_queries": [
+    "orderscurated"
+  ],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "informatica_powercenter",
+  "source_product": "Informatica PowerCenter",
+  "asset_type": "workflow",
+  "native_id": "wf_orders",
+  "folder": "Sales"
+}

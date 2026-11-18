@@ -1,0 +1,298 @@
+<?xml version="1.0"?>
+<AlteryxDocument yxmdVer="2024.1">
+  <Nodes>
+    <Node ToolID="1">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.TextInput.TextInput">
+        <Position x="48" y="42" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <NumRows value="8" />
+          <Fields>
+          <Field name="CustomerID" />
+          <Field name="Region" />
+          <Field name="Channel" />
+          <Field name="OrderDate" />
+          <Field name="SKU" />
+          <Field name="Amount" />
+          <Field name="Units" />
+          </Fields>
+          <Data>
+          <r><c>C001</c><c>West</c><c>Online</c><c>2026-01-12</c><c>SKU-A-100</c><c>1200</c><c>4</c></r>
+          <r><c>C002</c><c>East</c><c>Store</c><c>2026-01-18</c><c>SKU-B-220</c><c>840</c><c>2</c></r>
+          <r><c>C001</c><c>West</c><c>Online</c><c>2026-02-03</c><c>SKU-A-140</c><c>640</c><c>1</c></r>
+          <r><c>C003</c><c>North</c><c>Partner</c><c>2026-02-11</c><c>SKU-C-010</c><c>2100</c><c>6</c></r>
+          <r><c>C004</c><c>South</c><c>Store</c><c>2026-03-01</c><c>SKU-B-220</c><c>430</c><c>3</c></r>
+          <r><c>C002</c><c>East</c><c>Online</c><c>2026-03-09</c><c>SKU-A-100</c><c>990</c><c>2</c></r>
+          <r><c>C005</c><c>West</c><c>Partner</c><c>2026-03-21</c><c>SKU-C-010</c><c>150</c><c>1</c></r>
+          <r><c>C003</c><c>North</c><c>Store</c><c>2026-04-02</c><c>SKU-A-140</c><c>1760</c><c>5</c></r>
+          </Data>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Orders</Name>
+          <DefaultAnnotationText>Orders</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxTextInput" />
+    </Node>
+    <Node ToolID="2">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.TextInput.TextInput">
+        <Position x="48" y="180" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <NumRows value="5" />
+          <Fields>
+          <Field name="CustomerID" />
+          <Field name="CustomerName" />
+          <Field name="Tier" />
+          </Fields>
+          <Data>
+          <r><c>C001</c><c>Acme Retail</c><c>Gold</c></r>
+          <r><c>C002</c><c>Northwind</c><c>Silver</c></r>
+          <r><c>C003</c><c>Contoso</c><c>Gold</c></r>
+          <r><c>C004</c><c>Fabrikam</c><c>Bronze</c></r>
+          <r><c>C005</c><c>Adventure</c><c>Silver</c></r>
+          </Data>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Customers</Name>
+          <DefaultAnnotationText>Customers</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxTextInput" />
+    </Node>
+    <Node ToolID="3">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+        <Position x="192" y="42" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <FormulaFields>
+            <FormulaField expression="ToNumber([Amount])" field="AmountNum" size="8" type="Double" />
+          </FormulaFields>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Amount number</Name>
+          <DefaultAnnotationText>Amount number</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFormula" />
+    </Node>
+    <Node ToolID="4">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+        <Position x="192" y="42" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <FormulaFields>
+            <FormulaField expression="ToNumber([Units])" field="UnitsNum" size="8" type="Double" />
+          </FormulaFields>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Units number</Name>
+          <DefaultAnnotationText>Units number</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFormula" />
+    </Node>
+    <Node ToolID="5">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Join.Join">
+        <Position x="360" y="96" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <JoinMode>Inner</JoinMode>
+          <JoinInfo connection="Left">
+            <Field field="CustomerID" />
+          </JoinInfo>
+          <JoinInfo connection="Right">
+            <Field field="CustomerID" />
+          </JoinInfo>
+          <SelectConfiguration>
+            <Configuration outputConnection="Join">
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="Right_CustomerID" selected="False" />
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+          </SelectConfiguration>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Orders to customers</Name>
+          <DefaultAnnotationText>Orders to customers</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxJoin" />
+    </Node>
+    <Node ToolID="6">
+      <GuiSettings Plugin="AlteryxSpatialPluginsGui.Summarize.Summarize">
+        <Position x="516" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <SummarizeFields>
+            <SummarizeField field="Tier" action="GroupBy" rename="Tier" />
+            <SummarizeField field="AmountNum" action="Sum" rename="Sum_AmountNum" />
+            <SummarizeField field="AmountNum" action="Count" rename="RowCount" />
+          </SummarizeFields>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Spend by tier</Name>
+          <DefaultAnnotationText>Spend by tier</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSummarize" />
+    </Node>
+    <Node ToolID="7">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Sort.Sort">
+        <Position x="660" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <SortInfo locale="0">
+            <Field field="Sum_AmountNum" order="Descending" />
+          </SortInfo>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Rank tiers</Name>
+          <DefaultAnnotationText>Rank tiers</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSort" />
+    </Node>
+    <Node ToolID="8">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="792" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File FileFormat="0" MaxRecords="">05_high_spend_by_tier.csv</File>
+          <FormatSpecificOptions>
+            <LineEndStyle>CRLF</LineEndStyle>
+            <Delimeter>,</Delimeter>
+            <ForceQuotes>False</ForceQuotes>
+            <HeaderRow>True</HeaderRow>
+            <CodePage>65001</CodePage>
+            <WriteBOM>True</WriteBOM>
+          </FormatSpecificOptions>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Spend by tier</Name>
+          <DefaultAnnotationText>Spend by tier</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+    </Node>
+    <Node ToolID="9">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="516" y="180" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File FileFormat="0" MaxRecords="">05_high_unmatched_orders.csv</File>
+          <FormatSpecificOptions>
+            <LineEndStyle>CRLF</LineEndStyle>
+            <Delimeter>,</Delimeter>
+            <ForceQuotes>False</ForceQuotes>
+            <HeaderRow>True</HeaderRow>
+            <CodePage>65001</CodePage>
+            <WriteBOM>True</WriteBOM>
+          </FormatSpecificOptions>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Left unmatched</Name>
+          <DefaultAnnotationText>Left unmatched</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection>
+      <Origin ToolID="1" Connection="Output" />
+      <Destination ToolID="3" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="3" Connection="Output" />
+      <Destination ToolID="4" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="4" Connection="Output" />
+      <Destination ToolID="5" Connection="Left" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="2" Connection="Output" />
+      <Destination ToolID="5" Connection="Right" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="5" Connection="Join" />
+      <Destination ToolID="6" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="6" Connection="Output" />
+      <Destination ToolID="7" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="7" Connection="Output" />
+      <Destination ToolID="8" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="5" Connection="Left" />
+      <Destination ToolID="9" Connection="Input" />
+    </Connection>
+  </Connections>
+  <Properties>
+    <MetaInfo>
+      <Name>05 High - Spend by tier</Name>
+      <Description>Join orders to a customer lookup, summarize by tier, keep unmatched orders.</Description>
+      <RootToolName />
+      <ToolVersion />
+      <ToolInDb value="False" />
+      <CategoryName />
+      <SearchTags />
+      <Author>Microsoft Scout sample generator</Author>
+      <Company />
+      <Copyright />
+      <DescriptionLink actual="" displayed="" />
+      <Example>
+        <Description />
+        <File />
+      </Example>
+      <WorkflowId value="" />
+      <Telemetry>
+        <PreviousWorkflowId value="" />
+        <OriginWorkflowId value="" />
+      </Telemetry>
+    </MetaInfo>
+    <Events>
+      <Enabled value="False" />
+    </Events>
+    <RuntimeProperties>
+      <Actions />
+      <Questions />
+      <ModuleType />
+      <MacroCustomHelp value="False" />
+      <MacroDynamicOutputFields value="False" />
+      <MacroImageStd value="0" />
+      <Wiz_CustomHelp value="False" />
+      <Wiz_CustomGraphic value="False" />
+      <Wiz_ShowOutput value="True" />
+      <Wiz_OpenOutputTools />
+      <Wiz_OutputMessage />
+      <Wiz_NoOutputFilesMessage />
+      <Wiz_ChainRunWizard />
+    </RuntimeProperties>
+  </Properties>
+</AlteryxDocument>

@@ -1,0 +1,24 @@
+{
+  "definition": {
+    "parts": [
+      {
+        "path": "mashup.pq",
+        "payload": "c2VjdGlvbiBTZWN0aW9uMTsKCnNoYXJlZCBjbGVhbl9vcmRlcnMgPSBsZXQKICAgIG9yZGVycyA9ICN0YWJsZSh7IkN1c3RvbWVySUQiLCAiUmVnaW9uIiwgIkNoYW5uZWwiLCAiT3JkZXJEYXRlIiwgIlNLVSIsICJBbW91bnQiLCAiVW5pdHMifSwge3siQzAwMSIsICJXZXN0IiwgIk9ubGluZSIsICIyMDI2LTAxLTEyIiwgIlNLVS1BLTEwMCIsICIxMjAwIiwgIjQifSwgeyJDMDAyIiwgIkVhc3QiLCAiU3RvcmUiLCAiMjAyNi0wMS0xOCIsICJTS1UtQi0yMjAiLCAiODQwIiwgIjIifSwgeyJDMDAxIiwgIldlc3QiLCAiT25saW5lIiwgIjIwMjYtMDItMDMiLCAiU0tVLUEtMTQwIiwgIjY0MCIsICIxIn0sIHsiQzAwMyIsICJOb3J0aCIsICJQYXJ0bmVyIiwgIjIwMjYtMDItMTEiLCAiU0tVLUMtMDEwIiwgIjIxMDAiLCAiNiJ9LCB7IkMwMDQiLCAiU291dGgiLCAiU3RvcmUiLCAiMjAyNi0wMy0wMSIsICJTS1UtQi0yMjAiLCAiNDMwIiwgIjMifSwgeyJDMDAyIiwgIkVhc3QiLCAiT25saW5lIiwgIjIwMjYtMDMtMDkiLCAiU0tVLUEtMTAwIiwgIjk5MCIsICIyIn0sIHsiQzAwNSIsICJXZXN0IiwgIlBhcnRuZXIiLCAiMjAyNi0wMy0yMSIsICJTS1UtQy0wMTAiLCAiMTUwIiwgIjEifSwgeyJDMDAzIiwgIk5vcnRoIiwgIlN0b3JlIiwgIjIwMjYtMDQtMDIiLCAiU0tVLUEtMTQwIiwgIjE3NjAiLCAiNSJ9fSksCiAgICBhbW91bnRfYXNfbnVtYmVyID0gVGFibGUuQWRkQ29sdW1uKG9yZGVycywgIkFtb3VudE51bSIsIGVhY2ggTnVtYmVyLkZyb20oUmVjb3JkLkZpZWxkKF8sICJBbW91bnQiKSkpLAogICAgbGFyZ2VzdF9maXJzdCA9IFRhYmxlLlNvcnQoYW1vdW50X2FzX251bWJlciwge3siQW1vdW50TnVtIiwgT3JkZXIuRGVzY2VuZGluZ319KQppbgogICAgbGFyZ2VzdF9maXJzdDsK",
+        "payloadType": "InlineBase64"
+      },
+      {
+        "path": "queryMetadata.json",
+        "payload": "ewogICJjb21wdXRlRW5naW5lU2V0dGluZ3MiOiB7CiAgICAiYWxsb3dGYXN0Q29weSI6IGZhbHNlCiAgfSwKICAiY29ubmVjdGlvbnMiOiBbXSwKICAiZm9ybWF0VmVyc2lvbiI6ICIyMDI1MDIiLAogICJuYW1lIjogIjAxX2xvd19jbGVhbl9vcmRlcnMiLAogICJxdWVyaWVzTWV0YWRhdGEiOiB7CiAgICAiY2xlYW5fb3JkZXJzIjogewogICAgICAibG9hZEVuYWJsZWQiOiBmYWxzZSwKICAgICAgInF1ZXJ5SWQiOiAiOGFlY2MzM2QtYWFjYy01ODcxLWIxZTQtYTI2M2I3M2Q3ZjRjIiwKICAgICAgInF1ZXJ5TmFtZSI6ICJjbGVhbl9vcmRlcnMiCiAgICB9CiAgfSwKICAicXVlcnlHcm91cHMiOiBbXQp9",
+        "payloadType": "InlineBase64"
+      },
+      {
+        "path": ".platform",
+        "payload": "ewogICIkc2NoZW1hIjogImh0dHBzOi8vZGV2ZWxvcGVyLm1pY3Jvc29mdC5jb20vanNvbi1zY2hlbWFzL2ZhYnJpYy9naXRJbnRlZ3JhdGlvbi9wbGF0Zm9ybVByb3BlcnRpZXMvMi4wLjAvc2NoZW1hLmpzb24iLAogICJjb25maWciOiB7CiAgICAibG9naWNhbElkIjogIjRjOWQ2ZjY2LTM0OTctNWUxYi05MzRmLTExMDJkM2EwYzlkOSIsCiAgICAidmVyc2lvbiI6ICIyLjAiCiAgfSwKICAibWV0YWRhdGEiOiB7CiAgICAiZGVzY3JpcHRpb24iOiAiR2VuZXJhdGVkIGZyb20gQWx0ZXJ5eCBzdGF0aWMgYW5hbHlzaXMuIEluZGVwZW5kZW50IHNlbWFudGljIHZhbGlkYXRpb24gcmVtYWlucyByZXF1aXJlZC4iLAogICAgImRpc3BsYXlOYW1lIjogIjAxX2xvd19jbGVhbl9vcmRlcnMiLAogICAgInR5cGUiOiAiRGF0YWZsb3ciCiAgfQp9",
+        "payloadType": "InlineBase64"
+      }
+    ]
+  },
+  "description": "Generated from Alteryx static analysis. Independent semantic validation remains required.",
+  "displayName": "01_low_clean_orders",
+  "type": "Dataflow"
+}

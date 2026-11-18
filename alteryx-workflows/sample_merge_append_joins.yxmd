@@ -1,0 +1,427 @@
+<?xml version="1.0"?>
+<AlteryxDocument yxmdVer="2024.1">
+  <Nodes>
+    <Node ToolID="1">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.TextInput.TextInput">
+        <Position x="48" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <NumRows value="6" />
+          <Fields>
+            <Field name="CustomerID" />
+            <Field name="Region" />
+            <Field name="Channel" />
+            <Field name="SKU" />
+            <Field name="Amount" />
+            <Field name="Units" />
+          </Fields>
+          <Data>
+            <r><c>C001</c><c>West</c><c>Online</c><c>SKU-A-100</c><c>1200</c><c>4</c></r>
+            <r><c>C002</c><c>East</c><c>Store</c><c>SKU-B-220</c><c>840</c><c>2</c></r>
+            <r><c>C001</c><c>West</c><c>Online</c><c>SKU-A-140</c><c>640</c><c>1</c></r>
+            <r><c>C003</c><c>North</c><c>Partner</c><c>SKU-C-010</c><c>2100</c><c>6</c></r>
+            <r><c>C006</c><c>South</c><c>Store</c><c>SKU-B-220</c><c>430</c><c>3</c></r>
+            <r><c>C002</c><c>East</c><c>Online</c><c>SKU-A-100</c><c>990</c><c>2</c></r>
+          </Data>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Orders</Name>
+          <DefaultAnnotationText>Source 1 — Orders</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxTextInput" />
+    </Node>
+    <Node ToolID="2">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+        <Position x="180" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <OrderChanged value="False" />
+          <CommaDecimal value="False" />
+          <SelectFields>
+            <SelectField field="CustomerID" selected="True" />
+            <SelectField field="Region" selected="True" />
+            <SelectField field="Channel" selected="True" />
+            <SelectField field="SKU" selected="True" />
+            <SelectField field="Amount" selected="True" />
+            <SelectField field="Units" selected="True" />
+            <SelectField field="*Unknown" selected="True" />
+          </SelectFields>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Keep order fields</Name>
+          <DefaultAnnotationText>Select</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+    </Node>
+    <Node ToolID="3">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+        <Position x="312" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <FormulaFields>
+            <FormulaField expression="ToNumber([Amount])" field="AmountNum" size="8" type="Double" />
+            <FormulaField expression="ToNumber([Units])" field="UnitsNum" size="8" type="Double" />
+          </FormulaFields>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Amount and units</Name>
+          <DefaultAnnotationText>Formula</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFormula" />
+    </Node>
+    <Node ToolID="4">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Filter.Filter">
+        <Position x="456" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Mode>Custom</Mode>
+          <Expression>ToNumber([Amount]) &gt; 0</Expression>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Amount greater than zero</Name>
+          <DefaultAnnotationText>Filter</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFilter" />
+    </Node>
+    <Node ToolID="5">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Sort.Sort">
+        <Position x="588" y="54" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <SortInfo locale="0">
+            <Field field="AmountNum" order="Descending" />
+          </SortInfo>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Largest amount first</Name>
+          <DefaultAnnotationText>Sort</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSort" />
+    </Node>
+    <Node ToolID="6">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.TextInput.TextInput">
+        <Position x="456" y="216" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <NumRows value="4" />
+          <Fields>
+            <Field name="CustomerID" />
+            <Field name="CustomerName" />
+            <Field name="Tier" />
+          </Fields>
+          <Data>
+            <r><c>C001</c><c>Acme Retail</c><c>Gold</c></r>
+            <r><c>C002</c><c>Northwind</c><c>Silver</c></r>
+            <r><c>C003</c><c>Contoso</c><c>Gold</c></r>
+            <r><c>C004</c><c>Fabrikam</c><c>Bronze</c></r>
+          </Data>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Customers</Name>
+          <DefaultAnnotationText>Source 2 — Customers</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxTextInput" />
+    </Node>
+    <Node ToolID="7">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+        <Position x="588" y="216" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <OrderChanged value="False" />
+          <CommaDecimal value="False" />
+          <SelectFields>
+            <SelectField field="CustomerID" selected="True" />
+            <SelectField field="CustomerName" selected="True" />
+            <SelectField field="Tier" selected="True" />
+            <SelectField field="*Unknown" selected="False" />
+          </SelectFields>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Keep customer fields</Name>
+          <DefaultAnnotationText>Select</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+    </Node>
+    <Node ToolID="8">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Join.Join">
+        <Position x="756" y="120" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <JoinMode>Inner</JoinMode>
+          <JoinInfo connection="Left">
+            <Field field="CustomerID" />
+          </JoinInfo>
+          <JoinInfo connection="Right">
+            <Field field="CustomerID" />
+          </JoinInfo>
+          <SelectConfiguration>
+            <Configuration outputConnection="Join">
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="Left_CustomerID" selected="True" rename="CustomerID" />
+                <SelectField field="Left_Region" selected="True" />
+                <SelectField field="Left_Channel" selected="True" />
+                <SelectField field="Left_SKU" selected="True" />
+                <SelectField field="Left_Amount" selected="True" />
+                <SelectField field="Left_Units" selected="True" />
+                <SelectField field="Left_AmountNum" selected="True" />
+                <SelectField field="Left_UnitsNum" selected="True" />
+                <SelectField field="Right_CustomerID" selected="False" />
+                <SelectField field="Right_CustomerName" selected="True" />
+                <SelectField field="Right_Tier" selected="True" />
+                <SelectField field="*Unknown" selected="False" />
+              </SelectFields>
+            </Configuration>
+          </SelectConfiguration>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Merge as new</Name>
+          <DefaultAnnotationText>Join on CustomerID — matching rows become a new dataset</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxJoin" />
+    </Node>
+    <Node ToolID="9">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.TextInput.TextInput">
+        <Position x="756" y="312" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <NumRows value="1" />
+          <Fields>
+            <Field name="TaxRate" />
+            <Field name="Currency" />
+            <Field name="PriceList" />
+          </Fields>
+          <Data>
+            <r><c>0.08</c><c>USD</c><c>FY2026</c></r>
+          </Data>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Rates</Name>
+          <DefaultAnnotationText>Source 3 — Rates</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxTextInput" />
+    </Node>
+    <Node ToolID="10">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.AppendFields.AppendFields">
+        <Position x="960" y="168" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <CartesianMode>Allow</CartesianMode>
+          <SelectConfiguration>
+            <Configuration outputConnection="Output">
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="Target_CustomerID" selected="True" rename="CustomerID" />
+                <SelectField field="Target_Region" selected="True" />
+                <SelectField field="Target_Channel" selected="True" />
+                <SelectField field="Target_SKU" selected="True" />
+                <SelectField field="Target_AmountNum" selected="True" />
+                <SelectField field="Target_UnitsNum" selected="True" />
+                <SelectField field="Target_CustomerName" selected="True" />
+                <SelectField field="Target_Tier" selected="True" />
+                <SelectField field="Source_TaxRate" selected="True" rename="TaxRate" />
+                <SelectField field="Source_Currency" selected="True" rename="Currency" />
+                <SelectField field="Source_PriceList" selected="True" rename="PriceList" />
+                <SelectField field="*Unknown" selected="True" />
+              </SelectFields>
+            </Configuration>
+          </SelectConfiguration>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Append as new</Name>
+          <DefaultAnnotationText>Append Rates columns as new fields on every merged row</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxAppendFields" />
+    </Node>
+    <Node ToolID="11">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+        <Position x="1140" y="168" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <FormulaFields>
+            <FormulaField expression="[AmountNum] * (1 + ToNumber([TaxRate]))" field="AmountWithTax" size="8" type="Double" />
+          </FormulaFields>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Amount with tax</Name>
+          <DefaultAnnotationText>Formula</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFormula" />
+    </Node>
+    <Node ToolID="12">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="960" y="42" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File FileFormat="0" MaxRecords="">sample_merge_as_new.csv</File>
+          <FormatSpecificOptions>
+            <LineEndStyle>CRLF</LineEndStyle>
+            <Delimeter>,</Delimeter>
+            <ForceQuotes>False</ForceQuotes>
+            <HeaderRow>True</HeaderRow>
+            <CodePage>65001</CodePage>
+            <WriteBOM>True</WriteBOM>
+          </FormatSpecificOptions>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Merge output</Name>
+          <DefaultAnnotationText>sample_merge_as_new.csv</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+    </Node>
+    <Node ToolID="13">
+      <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+        <Position x="1296" y="168" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <File FileFormat="0" MaxRecords="">sample_append_as_new.csv</File>
+          <FormatSpecificOptions>
+            <LineEndStyle>CRLF</LineEndStyle>
+            <Delimeter>,</Delimeter>
+            <ForceQuotes>False</ForceQuotes>
+            <HeaderRow>True</HeaderRow>
+            <CodePage>65001</CodePage>
+            <WriteBOM>True</WriteBOM>
+          </FormatSpecificOptions>
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name>Append output</Name>
+          <DefaultAnnotationText>sample_append_as_new.csv</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection>
+      <Origin ToolID="1" Connection="Output" />
+      <Destination ToolID="2" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="2" Connection="Output" />
+      <Destination ToolID="3" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="3" Connection="Output" />
+      <Destination ToolID="4" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="4" Connection="True" />
+      <Destination ToolID="5" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="5" Connection="Output" />
+      <Destination ToolID="8" Connection="Left" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="6" Connection="Output" />
+      <Destination ToolID="7" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="7" Connection="Output" />
+      <Destination ToolID="8" Connection="Right" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="8" Connection="Join" />
+      <Destination ToolID="12" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="8" Connection="Join" />
+      <Destination ToolID="10" Connection="Targets" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="9" Connection="Output" />
+      <Destination ToolID="10" Connection="Source" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="10" Connection="Output" />
+      <Destination ToolID="11" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="11" Connection="Output" />
+      <Destination ToolID="13" Connection="Input" />
+    </Connection>
+  </Connections>
+  <Properties>
+    <MetaInfo>
+      <Name>Sample — merge as new and append as new</Name>
+      <Description>Three sources. Orders are selected, calculated, filtered, and sorted. Customers are merged on CustomerID into a new dataset. A one-row Rates source is appended as new columns.</Description>
+      <RootToolName />
+      <ToolVersion />
+      <ToolInDb value="False" />
+      <CategoryName />
+      <SearchTags />
+      <Author>Microsoft Scout sample generator</Author>
+      <Company />
+      <Copyright />
+      <DescriptionLink actual="" displayed="" />
+      <Example>
+        <Description />
+        <File />
+      </Example>
+      <WorkflowId value="" />
+      <Telemetry>
+        <PreviousWorkflowId value="" />
+        <OriginWorkflowId value="" />
+      </Telemetry>
+    </MetaInfo>
+    <Events>
+      <Enabled value="False" />
+    </Events>
+    <RuntimeProperties>
+      <Actions />
+      <Questions />
+      <ModuleType />
+      <MacroCustomHelp value="False" />
+      <MacroDynamicOutputFields value="False" />
+      <MacroImageStd value="0" />
+      <Wiz_CustomHelp value="False" />
+      <Wiz_CustomGraphic value="False" />
+      <Wiz_ShowOutput value="True" />
+      <Wiz_OpenOutputTools />
+      <Wiz_OutputMessage />
+      <Wiz_NoOutputFilesMessage />
+      <Wiz_ChainRunWizard />
+    </RuntimeProperties>
+  </Properties>
+</AlteryxDocument>

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "config": {
+    "logicalId": "18e0afb9-524c-507a-8791-664a9573089a",
+    "version": "2.0"
+  },
+  "metadata": {
+    "description": "Generated from Informatica PowerCenter static analysis. Independent semantic validation remains required.",
+    "displayName": "wf_STG_Ledger_Validation",
+    "type": "Notebook"
+  }
+}

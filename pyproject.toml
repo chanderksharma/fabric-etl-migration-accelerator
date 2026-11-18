@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fabric-etl-migration-accelerator"
+version = "1.0.0"
+description = "Deterministic assessment, compiler-grounded code generation, and CI deployment for migrating Alteryx and Informatica estates to Microsoft Fabric"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "defusedxml>=0.7.1,<1",
+  "fastapi>=0.120,<1",
+  "pyjwt[crypto]>=2.10,<3",
+  "pydantic>=2.12,<3",
+  "python-dotenv>=1.1,<2",
+  "python-multipart>=0.0.20,<1",
+  "typer>=0.20,<1",
+  "uvicorn>=0.38,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "ipykernel>=7,<8",
+  "ipywidgets>=8.1,<9",
+  "mypy>=1.18,<2",
+  "pytest>=8.4,<9",
+  "pytest-cov>=7,<8",
+  "ruff>=0.14,<1",
+  "tqdm>=4.67,<5",
+  "types-defusedxml>=0.7,<1",
+]
+
+[project.scripts]
+tool = "accelerator.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/accelerator"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --cov=accelerator --cov-report=term-missing"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["generated-fabric-workflows"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "tests"]

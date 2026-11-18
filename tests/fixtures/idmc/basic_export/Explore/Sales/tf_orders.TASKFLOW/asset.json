@@ -1,0 +1,10 @@
+{
+  "name": "tf_orders",
+  "steps": [
+    {"id": "start", "name": "Start", "type": "Start"},
+    {"id": "run-mapping", "name": "Run mt_orders", "type": "MappingTask", "assetId": "mapping-task-1"}
+  ],
+  "links": [
+    {"from": "start", "to": "run-mapping"}
+  ]
+}

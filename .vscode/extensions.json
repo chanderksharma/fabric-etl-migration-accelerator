@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "dbaeumer.vscode-eslint",
+    "GitHub.vscode-pull-request-github",
+    "ms-vscode.powershell",
+    "EditorConfig.EditorConfig",
+    "streetsidesoftware.code-spell-checker"
+  ]
+}

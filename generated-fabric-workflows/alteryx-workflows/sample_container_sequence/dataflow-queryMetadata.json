@@ -1,0 +1,56 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "sample_container_sequence",
+  "queriesMetadata": {
+    "SourceBindings": {
+      "loadEnabled": false,
+      "queryId": "9bc9c3ad-452c-5c00-900e-a44c5ed0ea80",
+      "queryName": "SourceBindings"
+    },
+    "active_customers": {
+      "loadEnabled": false,
+      "queryGroupId": "5b7837fb-37f4-5f76-ad80-5075d7a8a158",
+      "queryId": "6967b084-fb71-5b44-a4e8-ff512c4f6de6",
+      "queryName": "active_customers"
+    },
+    "matched_orders": {
+      "loadEnabled": false,
+      "queryGroupId": "9db5c0e8-a1d5-5a01-9f11-bd216a15aa6d",
+      "queryId": "81640504-6d40-50df-9cc0-e09934729e31",
+      "queryName": "matched_orders"
+    },
+    "positive_amounts": {
+      "loadEnabled": false,
+      "queryGroupId": "8b35a270-eb00-58b0-96d3-a81501fae74a",
+      "queryId": "8c7573eb-c92e-5b44-8823-52d1ba42ea4f",
+      "queryName": "positive_amounts"
+    }
+  },
+  "queryGroups": [
+    {
+      "description": "Migrated from Alteryx ToolContainer 20",
+      "id": "8b35a270-eb00-58b0-96d3-a81501fae74a",
+      "name": "1. Prepare orders",
+      "order": 0,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 21",
+      "id": "5b7837fb-37f4-5f76-ad80-5075d7a8a158",
+      "name": "2. Prepare customers",
+      "order": 1,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 22",
+      "id": "9db5c0e8-a1d5-5a01-9f11-bd216a15aa6d",
+      "name": "3. Match and publish",
+      "order": 2,
+      "parentId": null
+    }
+  ]
+}

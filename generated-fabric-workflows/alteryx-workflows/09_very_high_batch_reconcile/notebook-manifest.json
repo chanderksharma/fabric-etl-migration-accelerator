@@ -1,0 +1,35 @@
+{
+  "workflow": "alteryx-workflows\\09_very_high_batch_reconcile.yxmd",
+  "target": "notebook",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": true,
+  "source_sha256": "0a0d8c81fa825b0e434dbbc2217814e189b656178cc169375351a4021aa7a53b",
+  "code_sha256": "a8a947aadddc8cf04c87a484bfe7da78341ebd7515515ca44551b209dbc3916a",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "from pyspark.sql import Window, functions as F\n\nbatch_a = spark.createDataFrame([[\"C001\", \"West\", \"Online\", \"2026-01-12\", \"SKU-A-100\", \"1200\", \"4\"], [\"C002\", \"East\", \"Store\", \"2026-01-18\", \"SKU-B-220\", \"840\", \"2\"], [\"C001\", \"West\", \"Online\", \"2026-02-03\", \"SKU-A-140\", \"640\", \"1\"], [\"C003\", \"North\", \"Partner\", \"2026-02-11\", \"SKU-C-010\", \"2100\", \"6\"], [\"C004\", \"South\", \"Store\", \"2026-03-01\", \"SKU-B-220\", \"430\", \"3\"], [\"C002\", \"East\", \"Online\", \"2026-03-09\", \"SKU-A-100\", \"990\", \"2\"], [\"C005\", \"West\", \"Partner\", \"2026-03-21\", \"SKU-C-010\", \"150\", \"1\"], [\"C003\", \"North\", \"Store\", \"2026-04-02\", \"SKU-A-140\", \"1760\", \"5\"]], [\"CustomerID\", \"Region\", \"Channel\", \"OrderDate\", \"SKU\", \"Amount\", \"Units\"])\nbatch_b = spark.createDataFrame([[\"C003\", \"North\", \"Store\", \"2026-04-02\", \"SKU-A-140\", \"1760\", \"5\"], [\"C005\", \"West\", \"Partner\", \"2026-03-21\", \"SKU-C-010\", \"150\", \"1\"], [\"C002\", \"East\", \"Online\", \"2026-03-09\", \"SKU-A-100\", \"990\", \"2\"], [\"C004\", \"South\", \"Store\", \"2026-03-01\", \"SKU-B-220\", \"430\", \"3\"], [\"C003\", \"North\", \"Partner\", \"2026-02-11\", \"SKU-C-010\", \"2100\", \"6\"], [\"C001\", \"West\", \"Online\", \"2026-02-03\", \"SKU-A-140\", \"640\", \"1\"], [\"C002\", \"East\", \"Store\", \"2026-01-18\", \"SKU-B-220\", \"840\", \"2\"], [\"C001\", \"West\", \"Online\", \"2026-01-12\", \"SKU-A-100\", \"1200\", \"4\"]], [\"CustomerID\", \"Region\", \"Channel\", \"OrderDate\", \"SKU\", \"Amount\", \"Units\"])\nbatch_a_id = batch_a.withColumn(\"RecordID\", F.monotonically_increasing_id() + 1)\nbatch_b_id = batch_b.withColumn(\"RecordID\", F.monotonically_increasing_id() + 1)\nregion_key_a = batch_a_id.withColumn(\"RegionKey\", F.upper(F.col(\"Region\")))\nregion_key_b = batch_b_id.withColumn(\"RegionKey\", F.upper(F.col(\"Region\")))\nmatch_key_a = region_key_a.withColumn(\"MatchKey\", F.concat_ws(\"|\", F.col(\"CustomerID\"), F.col(\"SKU\"), F.col(\"OrderDate\")))\nmatch_key_b = region_key_b.withColumn(\"MatchKey\", F.concat_ws(\"|\", F.col(\"CustomerID\"), F.col(\"SKU\"), F.col(\"OrderDate\")))\nreconcile_batches = match_key_a.join(match_key_b, (match_key_a[\"MatchKey\"] == match_key_b[\"MatchKey\"]), 'inner').drop(match_key_b[\"MatchKey\"])\namount_delta = reconcile_batches.withColumn(\"AmountDelta\", F.col(\"Left_Amount\").cast('double') - F.col(\"Right_Amount\").cast('double'))\nchanged_amounts = amount_delta.filter(F.col(\"AmountDelta\") != \"0\")\ndelta_by_region = changed_amounts.groupBy(*[\"Left_Region\"]).agg(F.sum(F.col(\"AmountDelta\").cast('double')).alias(\"Sum_AmountDelta\"), F.count(F.col(\"AmountDelta\")).alias(\"RowCount\"))\nleft_only_keys = reconcile_batches.dropDuplicates([\"MatchKey\"])\nright_only_keys = reconcile_batches.dropDuplicates([\"MatchKey\"])\nexceptions = left_only_keys.unionByName(right_only_keys, allowMissingColumns=True)\nsort_exceptions = exceptions.orderBy(F.col(\"MatchKey\").asc())\nexception_sample = sort_exceptions.limit(20)\n\ndisplay(delta_by_region)\ndisplay(exception_sample)\ndisplay(amount_delta)\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "independent semantic parity"
+  ],
+  "artifact_path": "alteryx-workflows/09_very_high_batch_reconcile",
+  "definition_files": [
+    "notebook-content.ipynb",
+    "notebook.platform.json",
+    "notebook-create-item.json"
+  ],
+  "definition_queries": [],
+  "loaded_queries": [],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

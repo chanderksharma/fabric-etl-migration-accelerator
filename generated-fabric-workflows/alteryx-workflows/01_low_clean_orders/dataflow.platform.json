@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "config": {
+    "logicalId": "4c9d6f66-3497-5e1b-934f-1102d3a0c9d9",
+    "version": "2.0"
+  },
+  "metadata": {
+    "description": "Generated from Alteryx static analysis. Independent semantic validation remains required.",
+    "displayName": "01_low_clean_orders",
+    "type": "Dataflow"
+  }
+}

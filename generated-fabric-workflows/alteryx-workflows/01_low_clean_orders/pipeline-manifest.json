@@ -1,0 +1,34 @@
+{
+  "workflow": "alteryx-workflows\\01_low_clean_orders.yxmd",
+  "target": "pipeline",
+  "validation_state": "scaffold",
+  "translation_mode": "scaffold",
+  "deployable": false,
+  "definition_ready": false,
+  "runtime_ready": false,
+  "source_sha256": "46964a05370493182ac45848f68e991258b739102fbc28ce94fa0d86b10854db",
+  "code_sha256": "ed7c225ea5190c2c4572776bb67447d2b1643e756a14fe49fd3a68b5916c13ff",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "Alteryx pipeline generation is available only for mixed-item bundles",
+  "diagnostics": [
+    "Alteryx pipeline generation is available only for mixed-item bundles"
+  ],
+  "required_bindings": [],
+  "artifact_path": "alteryx-workflows/01_low_clean_orders",
+  "definition_files": [
+    "pipeline-diagnostics.json",
+    "pipeline-manifest.json"
+  ],
+  "definition_queries": [],
+  "loaded_queries": [],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

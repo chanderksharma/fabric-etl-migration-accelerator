@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "config": {
+    "logicalId": "d72ce70d-febc-51f6-a2f3-957f49429523",
+    "version": "2.0"
+  },
+  "metadata": {
+    "description": "Generated from Alteryx static analysis. Independent semantic validation remains required.",
+    "displayName": "02_low_west_sample",
+    "type": "Notebook"
+  }
+}

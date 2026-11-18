@@ -1,0 +1,7 @@
+{
+  "workflow": "alteryx-workflows\\08_very_high_customer_attainment.yxmd",
+  "state": "blocked",
+  "diagnostics": [
+    "Only a supported linear or Union/CrossTab graph is native"
+  ]
+}

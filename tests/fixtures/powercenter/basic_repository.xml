@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE POWERMART SYSTEM "powrmart.dtd">
+<POWERMART CREATION_DATE="11/13/2026" REPOSITORY_VERSION="10.5">
+  <REPOSITORY NAME="DemoRepository" VERSION="190">
+    <FOLDER NAME="Sales" OWNER="etl-user" SHARED="NOTSHARED">
+      <SOURCE DATABASETYPE="Flat File" NAME="Orders">
+        <SOURCEFIELD DATATYPE="decimal" FIELDNUMBER="1" NAME="Amount"/>
+      </SOURCE>
+      <TARGET DATABASETYPE="Microsoft SQL Server" NAME="OrdersCurated">
+        <TARGETFIELD DATATYPE="decimal" FIELDNUMBER="1" NAME="Amount"/>
+      </TARGET>
+      <MAPPING NAME="m_orders" DESCRIPTION="Filter valid orders">
+        <TRANSFORMATION NAME="SQ_Orders" TYPE="Source Qualifier"/>
+        <TRANSFORMATION NAME="FLT_Valid" TYPE="Filter">
+          <TABLEATTRIBUTE NAME="Filter Condition" VALUE="Amount &gt; 0"/>
+        </TRANSFORMATION>
+        <INSTANCE NAME="Orders" TRANSFORMATION_NAME="Orders" TYPE="SOURCE"/>
+        <INSTANCE NAME="SQ_Orders" TRANSFORMATION_NAME="SQ_Orders" TYPE="TRANSFORMATION"/>
+        <INSTANCE NAME="FLT_Valid" TRANSFORMATION_NAME="FLT_Valid" TYPE="TRANSFORMATION"/>
+        <INSTANCE NAME="OrdersCurated" TRANSFORMATION_NAME="OrdersCurated" TYPE="TARGET"/>
+        <CONNECTOR FROMFIELD="Amount" FROMINSTANCE="Orders" TOFIELD="Amount" TOINSTANCE="SQ_Orders"/>
+        <CONNECTOR FROMFIELD="Amount" FROMINSTANCE="SQ_Orders" TOFIELD="Amount" TOINSTANCE="FLT_Valid"/>
+        <CONNECTOR FROMFIELD="Amount" FROMINSTANCE="FLT_Valid" TOFIELD="Amount" TOINSTANCE="OrdersCurated"/>
+      </MAPPING>
+      <SESSION MAPPINGNAME="m_orders" NAME="s_orders"/>
+      <WORKFLOW NAME="wf_orders" SCHEDULERNAME="Daily">
+        <TASKINSTANCE NAME="Start" TASKNAME="Start" TASKTYPE="Start"/>
+        <TASKINSTANCE NAME="s_orders" TASKNAME="s_orders" TASKTYPE="Session"/>
+        <WORKFLOWLINK FROMTASK="Start" TOTASK="s_orders"/>
+      </WORKFLOW>
+      <SCHEDULER NAME="Daily" REUSABLE="YES" SCHEDULEINFO="Every day"/>
+    </FOLDER>
+  </REPOSITORY>
+</POWERMART>

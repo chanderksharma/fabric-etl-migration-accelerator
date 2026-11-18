@@ -1,0 +1,9 @@
+# BEGIN Technical Workspace managed entries
+.github/agents/** merge=ours linguist-generated
+.github/skills/** merge=ours linguist-generated
+.github/prompts/** merge=ours linguist-generated
+.github/prompts/objective-discovery.prompt.md text !merge -linguist-generated
+*.sh text eol=lf
+*.ps1 text eol=lf
+* text=auto
+# END Technical Workspace managed entries

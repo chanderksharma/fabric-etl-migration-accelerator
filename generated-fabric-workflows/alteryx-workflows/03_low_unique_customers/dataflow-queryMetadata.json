@@ -1,0 +1,16 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "03_low_unique_customers",
+  "queriesMetadata": {
+    "unique_customers": {
+      "loadEnabled": false,
+      "queryId": "8ba909a1-eb12-5f9d-842c-592a3e14aaf3",
+      "queryName": "unique_customers"
+    }
+  },
+  "queryGroups": []
+}

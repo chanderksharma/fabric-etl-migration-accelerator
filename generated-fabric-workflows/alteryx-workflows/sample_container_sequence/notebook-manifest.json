@@ -1,0 +1,37 @@
+{
+  "workflow": "alteryx-workflows\\sample_container_sequence.yxmd",
+  "target": "notebook",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": false,
+  "source_sha256": "cc90134d234e7c2948af93e44872292f79a6930a920ec09065a244d0dc4a3f1f",
+  "code_sha256": "08e89f5dc06c39f2642440901c60b2c037add4bcc1bb4d0fe40086b4a3fbde87",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "from pyspark.sql import Window, functions as F\n\nsource_paths = globals().get('source_paths', {})\norders_Path = source_paths.get('1')\nif not orders_Path: raise ValueError(\"Configure source_paths['1'] before running\")\norders = spark.read.option('header', True).option('inferSchema', True).csv(orders_Path)\nkeep_order_fields = orders.select(*[\"OrderID\", \"CustomerID\", \"SKU\", \"Amount\", \"Units\"])\namount_and_units_1 = keep_order_fields.withColumn(\"AmountNum\", F.col(\"Amount\").cast('double'))\namount_and_units_2 = amount_and_units_1.withColumn(\"UnitsNum\", F.col(\"Units\").cast('double'))\npositive_amounts = amount_and_units_2.filter(F.col(\"AmountNum\") > 0)\nsource_paths = globals().get('source_paths', {})\ncustomers_Path = source_paths.get('5')\nif not customers_Path: raise ValueError(\"Configure source_paths['5'] before running\")\ncustomers = spark.read.option('header', True).option('inferSchema', True).csv(customers_Path)\nkeep_customer_fields = customers.select(*[\"CustomerID\", \"CustomerName\", \"Tier\", \"Status\"])\nactive_customers = keep_customer_fields.filter(F.col(\"Status\") == \"Active\")\nmatch_on_customer = positive_amounts.join(active_customers, (positive_amounts[\"CustomerID\"] == active_customers[\"CustomerID\"]), 'inner').drop(active_customers[\"CustomerID\"])\nline_value = match_on_customer.withColumn(\"LineValue\", F.col(\"AmountNum\") * F.col(\"UnitsNum\"))\n\ndisplay(line_value)\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "source_paths['1']",
+    "source_paths['5']",
+    "independent semantic parity"
+  ],
+  "artifact_path": "alteryx-workflows/sample_container_sequence",
+  "definition_files": [
+    "notebook-content.ipynb",
+    "notebook.platform.json",
+    "notebook-create-item.json"
+  ],
+  "definition_queries": [],
+  "loaded_queries": [],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

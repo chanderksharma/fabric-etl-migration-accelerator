@@ -1,0 +1,39 @@
+{
+  "workflow": "alteryx-workflows\\sample_alteryx_workflow.yxmd",
+  "target": "notebook",
+  "validation_state": "scaffold",
+  "translation_mode": "scaffold",
+  "deployable": false,
+  "definition_ready": false,
+  "runtime_ready": false,
+  "source_sha256": "8d2760c148b523aea89c9b45f40230c34a2f46ee513026c25b98462d7fa0e8c5",
+  "code_sha256": "a1c12d5adb74450dd29aba5cb342936da7d58344c4f5301e7c4c5b188fe1e67f",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "import json\n\nmigration_graph = json.loads('{\"dependencies\": [\"GreatArcs.yxmc\"], \"edges\": [{\"anchor\": \"Output\", \"source\": \"2\", \"target\": \"3\"}, {\"anchor\": \"Output\", \"source\": \"3\", \"target\": \"5\"}, {\"anchor\": \"Output\", \"source\": \"5\", \"target\": \"7\"}, {\"anchor\": \"Output\", \"source\": \"6\", \"target\": \"9\"}, {\"anchor\": \"Output\", \"source\": \"8\", \"target\": \"9\"}, {\"anchor\": \"Output\", \"source\": \"7\", \"target\": \"6\"}, {\"anchor\": \"Output\", \"source\": \"8\", \"target\": \"10\"}, {\"anchor\": \"Join\", \"source\": \"9\", \"target\": \"10\"}, {\"anchor\": \"Join\", \"source\": \"10\", \"target\": \"11\"}, {\"anchor\": \"Output26\", \"source\": \"11\", \"target\": \"12\"}, {\"anchor\": \"Output\", \"source\": \"13\", \"target\": \"14\"}, {\"anchor\": \"Output\", \"source\": \"14\", \"target\": \"15\"}, {\"anchor\": \"Output\", \"source\": \"15\", \"target\": \"16\"}, {\"anchor\": \"Output\", \"source\": \"16\", \"target\": \"17\"}, {\"anchor\": \"Output\", \"source\": \"17\", \"target\": \"18\"}, {\"anchor\": \"Output\", \"source\": \"18\", \"target\": \"2\"}], \"nodes\": [{\"disabled\": false, \"id\": \"2\", \"name\": \"Download\", \"plugin\": \"AlteryxConnectorGui.Download.Download\"}, {\"disabled\": false, \"id\": \"3\", \"name\": \"RegEx\", \"plugin\": \"AlteryxBasePluginsGui.RegEx.RegEx\"}, {\"disabled\": false, \"id\": \"5\", \"name\": \"RegEx\", \"plugin\": \"AlteryxBasePluginsGui.RegEx.RegEx\"}, {\"disabled\": false, \"id\": \"6\", \"name\": \"AutoField\", \"plugin\": \"AlteryxBasePluginsGui.AutoField.AutoField\"}, {\"disabled\": false, \"id\": \"7\", \"name\": \"AlteryxSelect\", \"plugin\": \"AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect\"}, {\"disabled\": false, \"id\": \"8\", \"name\": \"DbFileInput\", \"plugin\": \"AlteryxBasePluginsGui.DbFileInput.DbFileInput\"}, {\"disabled\": false, \"id\": \"9\", \"name\": \"Join\", \"plugin\": \"AlteryxBasePluginsGui.Join.Join\"}, {\"disabled\": false, \"id\": \"10\", \"name\": \"Join\", \"plugin\": \"AlteryxBasePluginsGui.Join.Join\"}, {\"disabled\": false, \"id\": \"11\", \"name\": \"\", \"plugin\": \"\"}, {\"disabled\": false, \"id\": \"12\", \"name\": \"DbFileOutput\", \"plugin\": \"AlteryxBasePluginsGui.DbFileOutput.DbFileOutput\"}, {\"disabled\": false, \"id\": \"13\", \"name\": \"TextInput\", \"plugin\": \"AlteryxBasePluginsGui.TextInput.TextInput\"}, {\"disabled\": false, \"id\": \"14\", \"name\": \"Download\", \"plugin\": \"AlteryxConnectorGui.Download.Download\"}, {\"disabled\": false, \"id\": \"15\", \"name\": \"RegEx\", \"plugin\": \"AlteryxBasePluginsGui.RegEx.RegEx\"}, {\"disabled\": false, \"id\": \"16\", \"name\": \"RegEx\", \"plugin\": \"AlteryxBasePluginsGui.RegEx.RegEx\"}, {\"disabled\": false, \"id\": \"17\", \"name\": \"AlteryxSelect\", \"plugin\": \"AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect\"}, {\"disabled\": false, \"id\": \"18\", \"name\": \"AutoField\", \"plugin\": \"AlteryxBasePluginsGui.AutoField.AutoField\"}], \"schema_version\": \"1.3.0\", \"truncated\": false}')\nmigration_diagnostics = json.loads('[\"Executable workflow events require redesign\", \"Macro dependencies require independent redesign\", \"Only a supported linear or Union/CrossTab graph is native\"]')\n\nraise RuntimeError(\"Migration scaffold requires implementation and parity validation\")\n",
+  "diagnostics": [
+    "Executable workflow events require redesign",
+    "Macro dependencies require independent redesign",
+    "Only a supported linear or Union/CrossTab graph is native"
+  ],
+  "required_bindings": [
+    "manual implementation for unsupported Alteryx semantics",
+    "independent semantic parity"
+  ],
+  "artifact_path": "alteryx-workflows/sample_alteryx_workflow",
+  "definition_files": [
+    "notebook-diagnostics.json",
+    "notebook-manifest.json"
+  ],
+  "definition_queries": [],
+  "loaded_queries": [],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

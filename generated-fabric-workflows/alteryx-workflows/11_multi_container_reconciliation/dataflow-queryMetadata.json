@@ -1,0 +1,233 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "11_multi_container_reconciliation",
+  "queriesMetadata": {
+    "SourceBindings": {
+      "loadEnabled": false,
+      "queryId": "f0de5128-b58d-52f4-be15-d93e25d6222b",
+      "queryName": "SourceBindings"
+    },
+    "file_alpha_beta_export": {
+      "loadEnabled": false,
+      "queryGroupId": "e7d7f58d-3643-5b4e-9338-01942aa88ad4",
+      "queryId": "391933a7-0347-5825-8c38-a1c64247775a",
+      "queryName": "file_alpha_beta_export"
+    },
+    "file_settlement_export": {
+      "loadEnabled": false,
+      "queryGroupId": "e7d7f58d-3643-5b4e-9338-01942aa88ad4",
+      "queryId": "32041eeb-f153-5626-a313-e961c9dae83d",
+      "queryName": "file_settlement_export"
+    },
+    "load_alpha_beta": {
+      "loadEnabled": false,
+      "queryGroupId": "e7d7f58d-3643-5b4e-9338-01942aa88ad4",
+      "queryId": "3bf6a3c8-479b-5c08-b708-a198cc2b908b",
+      "queryName": "load_alpha_beta"
+    },
+    "load_settlement": {
+      "loadEnabled": false,
+      "queryGroupId": "e7d7f58d-3643-5b4e-9338-01942aa88ad4",
+      "queryId": "d34bf897-58f3-565f-b66e-2389439fa065",
+      "queryName": "load_settlement"
+    },
+    "out_alpha_beta": {
+      "loadEnabled": false,
+      "queryGroupId": "28fbbbee-0dea-5045-85cf-058621ebcd36",
+      "queryId": "a57d2f08-e540-53f2-8e35-64d660b766d8",
+      "queryName": "out_alpha_beta"
+    },
+    "out_settlement": {
+      "loadEnabled": false,
+      "queryGroupId": "28fbbbee-0dea-5045-85cf-058621ebcd36",
+      "queryId": "38075f27-ed6e-5443-917c-e7b150ce14ee",
+      "queryName": "out_settlement"
+    },
+    "qalpha_beta_calculated": {
+      "loadEnabled": false,
+      "queryGroupId": "3d666370-1a2a-5289-9782-3bc1beb4f2da",
+      "queryId": "b197eb63-81a2-54bb-ad47-224e575479ad",
+      "queryName": "qalpha_beta_calculated"
+    },
+    "qalpha_beta_combined": {
+      "loadEnabled": false,
+      "queryGroupId": "3d666370-1a2a-5289-9782-3bc1beb4f2da",
+      "queryId": "24aeb7b8-54b6-5847-8634-873286284dc7",
+      "queryName": "qalpha_beta_combined"
+    },
+    "qalpha_beta_current": {
+      "loadEnabled": false,
+      "queryGroupId": "3d666370-1a2a-5289-9782-3bc1beb4f2da",
+      "queryId": "461835cc-90a2-5b05-a33c-920a57c79aaa",
+      "queryName": "qalpha_beta_current"
+    },
+    "qalpha_beta_enriched": {
+      "loadEnabled": false,
+      "queryGroupId": "3d666370-1a2a-5289-9782-3bc1beb4f2da",
+      "queryId": "89a6acf9-5a96-52ed-826d-0c0ea162dd36",
+      "queryName": "qalpha_beta_enriched"
+    },
+    "qalpha_beta_previous": {
+      "loadEnabled": false,
+      "queryGroupId": "3d666370-1a2a-5289-9782-3bc1beb4f2da",
+      "queryId": "6ae0aae2-aaf6-5fcc-ad08-72f18cf5cbff",
+      "queryName": "qalpha_beta_previous"
+    },
+    "qalpha_current_calculated": {
+      "loadEnabled": false,
+      "queryGroupId": "3d666370-1a2a-5289-9782-3bc1beb4f2da",
+      "queryId": "35dab60d-b08d-5623-a5b2-ede70ed89e3e",
+      "queryName": "qalpha_current_calculated"
+    },
+    "qalpha_previous_calculated": {
+      "loadEnabled": false,
+      "queryGroupId": "3d666370-1a2a-5289-9782-3bc1beb4f2da",
+      "queryId": "302c90f8-3618-5480-89d5-40daf4a2200d",
+      "queryName": "qalpha_previous_calculated"
+    },
+    "qref_accountlookup": {
+      "loadEnabled": false,
+      "queryGroupId": "92098632-1fef-5d52-bed5-d5b458de0ad5",
+      "queryId": "159a53f8-c580-5a5b-b6ec-1db55d6fba5e",
+      "queryName": "qref_accountlookup"
+    },
+    "qref_entitylookup": {
+      "loadEnabled": false,
+      "queryGroupId": "92098632-1fef-5d52-bed5-d5b458de0ad5",
+      "queryId": "31c14b89-2c79-58db-aebf-55932818d662",
+      "queryName": "qref_entitylookup"
+    },
+    "qsettlement_combined": {
+      "loadEnabled": false,
+      "queryGroupId": "4fa40f2e-adc5-5e88-9dc6-cd0f98ed2836",
+      "queryId": "811ad1e0-4c86-52a5-8ef5-09cd539a3ba1",
+      "queryName": "qsettlement_combined"
+    },
+    "qsettlement_current_calculated": {
+      "loadEnabled": false,
+      "queryGroupId": "4fa40f2e-adc5-5e88-9dc6-cd0f98ed2836",
+      "queryId": "51b5ee22-e9ef-50c9-b58d-b4c6d60f7252",
+      "queryName": "qsettlement_current_calculated"
+    },
+    "qsettlement_current_result": {
+      "loadEnabled": false,
+      "queryGroupId": "4fa40f2e-adc5-5e88-9dc6-cd0f98ed2836",
+      "queryId": "351d2b3a-dd2a-5740-b2f2-d0946a9762a8",
+      "queryName": "qsettlement_current_result"
+    },
+    "qsettlement_previous_calculated": {
+      "loadEnabled": false,
+      "queryGroupId": "4fa40f2e-adc5-5e88-9dc6-cd0f98ed2836",
+      "queryId": "57cde008-20d7-5c00-ae16-001db6a96d31",
+      "queryName": "qsettlement_previous_calculated"
+    },
+    "qsettlement_previous_result": {
+      "loadEnabled": false,
+      "queryGroupId": "4fa40f2e-adc5-5e88-9dc6-cd0f98ed2836",
+      "queryId": "5dadd5b8-69f4-5fe4-9399-415ca2b24d0e",
+      "queryName": "qsettlement_previous_result"
+    },
+    "src_alpha_current": {
+      "loadEnabled": false,
+      "queryGroupId": "39ec4ffb-3ff5-5c45-a3df-00b0a32467a3",
+      "queryId": "dcff8846-4d2f-5a5b-b191-64ba0078692d",
+      "queryName": "src_alpha_current"
+    },
+    "src_alpha_previous": {
+      "loadEnabled": false,
+      "queryGroupId": "39ec4ffb-3ff5-5c45-a3df-00b0a32467a3",
+      "queryId": "3a1661aa-bbc8-561c-8d68-54cd13890934",
+      "queryName": "src_alpha_previous"
+    },
+    "src_beta_current": {
+      "loadEnabled": false,
+      "queryGroupId": "39ec4ffb-3ff5-5c45-a3df-00b0a32467a3",
+      "queryId": "4206ed26-0391-5479-aa82-96aebb373c95",
+      "queryName": "src_beta_current"
+    },
+    "src_beta_previous": {
+      "loadEnabled": false,
+      "queryGroupId": "39ec4ffb-3ff5-5c45-a3df-00b0a32467a3",
+      "queryId": "74685f10-1db3-51ff-aaf3-0774f4f5af12",
+      "queryName": "src_beta_previous"
+    },
+    "src_businessdate": {
+      "loadEnabled": false,
+      "queryGroupId": "39ec4ffb-3ff5-5c45-a3df-00b0a32467a3",
+      "queryId": "0d85a47c-4644-5d58-9517-10293d1db875",
+      "queryName": "src_businessdate"
+    },
+    "src_manifestfiles": {
+      "loadEnabled": false,
+      "queryGroupId": "39ec4ffb-3ff5-5c45-a3df-00b0a32467a3",
+      "queryId": "8d229fe4-6ce4-59fb-b9ab-3d9f42dd3d45",
+      "queryName": "src_manifestfiles"
+    },
+    "src_ref_details": {
+      "loadEnabled": false,
+      "queryGroupId": "39ec4ffb-3ff5-5c45-a3df-00b0a32467a3",
+      "queryId": "e9d269c3-af49-57a9-9a2e-138f9299d050",
+      "queryName": "src_ref_details"
+    },
+    "src_settlement_current": {
+      "loadEnabled": false,
+      "queryGroupId": "39ec4ffb-3ff5-5c45-a3df-00b0a32467a3",
+      "queryId": "f87a366b-41bd-54b8-9db5-6306b3a5809b",
+      "queryName": "src_settlement_current"
+    },
+    "src_settlement_previous": {
+      "loadEnabled": false,
+      "queryGroupId": "39ec4ffb-3ff5-5c45-a3df-00b0a32467a3",
+      "queryId": "6ba588a1-181c-5e42-9bdc-daaaeb927cee",
+      "queryName": "src_settlement_previous"
+    }
+  },
+  "queryGroups": [
+    {
+      "description": "Migrated from Alteryx ToolContainer 100",
+      "id": "39ec4ffb-3ff5-5c45-a3df-00b0a32467a3",
+      "name": "00 Source Files",
+      "order": 0,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 101",
+      "id": "3d666370-1a2a-5289-9782-3bc1beb4f2da",
+      "name": "01 Ledger Alpha and Beta",
+      "order": 1,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 102",
+      "id": "92098632-1fef-5d52-bed5-d5b458de0ad5",
+      "name": "02 Reference Enrichment",
+      "order": 2,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 103",
+      "id": "4fa40f2e-adc5-5e88-9dc6-cd0f98ed2836",
+      "name": "03 Settlement Reconciliation",
+      "order": 3,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 104",
+      "id": "28fbbbee-0dea-5045-85cf-058621ebcd36",
+      "name": "04 Final Outputs",
+      "order": 4,
+      "parentId": null
+    },
+    {
+      "description": "Migrated from Alteryx ToolContainer 105",
+      "id": "e7d7f58d-3643-5b4e-9338-01942aa88ad4",
+      "name": "05 Destinations",
+      "order": 5,
+      "parentId": null
+    }
+  ]
+}

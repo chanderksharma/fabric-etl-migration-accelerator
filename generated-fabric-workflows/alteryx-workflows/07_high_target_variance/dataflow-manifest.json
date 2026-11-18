@@ -1,0 +1,47 @@
+{
+  "workflow": "alteryx-workflows\\07_high_target_variance.yxmd",
+  "target": "dataflow",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": false,
+  "source_sha256": "75f6ec2e8302eff6d344fa21fa669eef3500c0fa62312e222f278ffb65016d6a",
+  "code_sha256": "6da957edd8e50cb7a49f42a7bdcc61dc097017a23f8d54c222e9ab29794dea73",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "section Section1;\n\nshared running_total_by_region = let\n    orders = #table({\"CustomerID\", \"Region\", \"Channel\", \"OrderDate\", \"SKU\", \"Amount\", \"Units\"}, {{\"C001\", \"West\", \"Online\", \"2026-01-12\", \"SKU-A-100\", \"1200\", \"4\"}, {\"C002\", \"East\", \"Store\", \"2026-01-18\", \"SKU-B-220\", \"840\", \"2\"}, {\"C001\", \"West\", \"Online\", \"2026-02-03\", \"SKU-A-140\", \"640\", \"1\"}, {\"C003\", \"North\", \"Partner\", \"2026-02-11\", \"SKU-C-010\", \"2100\", \"6\"}, {\"C004\", \"South\", \"Store\", \"2026-03-01\", \"SKU-B-220\", \"430\", \"3\"}, {\"C002\", \"East\", \"Online\", \"2026-03-09\", \"SKU-A-100\", \"990\", \"2\"}, {\"C005\", \"West\", \"Partner\", \"2026-03-21\", \"SKU-C-010\", \"150\", \"1\"}, {\"C003\", \"North\", \"Store\", \"2026-04-02\", \"SKU-A-140\", \"1760\", \"5\"}}),\n    numeric_amount = Table.AddColumn(orders, \"Amount\", each Number.From(Record.Field(_, \"Amount\"))),\n    chronological = Table.Sort(numeric_amount, {{\"OrderDate\", Order.Ascending}}),\n    running_total_by_region_Grouped = Table.Group(chronological, {\"Region\"}, {{{\"__rows\", (groupTable) => let Indexed = Table.AddIndexColumn(groupTable, \"__row_index\", 0, 1, Int64.Type), Running = Table.AddColumn(Indexed, \"RunningTotal\", each List.Sum(List.FirstN(Table.Column(Indexed, \"Amount\"), Record.Field(_, \"__row_index\") + 1)), type number) in Table.RemoveColumns(Running, {\"__row_index\"}), type table}}}),\n    running_total_by_region = Table.Combine(Table.Column(running_total_by_region_Grouped, \"__rows\"))\nin\n    running_total_by_region;\n\nshared region_totals = let\n    region_totals = Table.Group(running_total_by_region, {\"Region\"}, {{\"Sum_Amount\", each List.Sum(List.Transform([Amount], Number.From)), type number}, {\"RowCount\", each Table.RowCount(_), type number}})\nin\n    region_totals;\n\nshared numeric_target = let\n    targets = #table({\"Region\", \"TargetAmount\"}, {{\"West\", \"5000\"}, {\"East\", \"3000\"}, {\"North\", \"4000\"}, {\"South\", \"2000\"}}),\n    numeric_target = Table.AddColumn(targets, \"TargetAmount\", each Number.From(Record.Field(_, \"TargetAmount\")))\nin\n    numeric_target;\n\nshared variance_11 = let\n    actual_vs_target_Joined = Table.NestedJoin(region_totals, {\"Region\"}, numeric_target, {\"Region\"}, \"__right\", JoinKind.Inner),\n    actual_vs_target_RightColumns = List.RemoveItems(Table.ColumnNames(numeric_target), {\"Region\"}),\n    actual_vs_target_OutputColumns = List.Transform(actual_vs_target_RightColumns, each if List.Contains(Table.ColumnNames(region_totals), _) then _ & \"_Right\" else _),\n    actual_vs_target = Table.ExpandTableColumn(actual_vs_target_Joined, \"__right\", actual_vs_target_RightColumns, actual_vs_target_OutputColumns),\n    variance = Table.AddColumn(actual_vs_target, \"Variance\", each Record.Field(_, \"Sum_Amount\") - Record.Field(_, \"TargetAmount\")),\n    status = Table.AddColumn(variance, \"Status\", each if Record.Field(_, \"Variance\") >= 0 then \"Above\" else \"Below\")\nin\n    status;\n\nshared running_totals = running_total_by_region;\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "destinations['variance_11']",
+    "destinations['running_totals']",
+    "independent semantic parity"
+  ],
+  "artifact_path": "alteryx-workflows/07_high_target_variance",
+  "definition_files": [
+    "dataflow-mashup.pq",
+    "dataflow-queryMetadata.json",
+    "dataflow.platform.json",
+    "dataflow-create-item.json"
+  ],
+  "definition_queries": [
+    "running_total_by_region",
+    "region_totals",
+    "numeric_target",
+    "variance_11",
+    "running_totals"
+  ],
+  "loaded_queries": [
+    "variance_11",
+    "running_totals"
+  ],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

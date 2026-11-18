@@ -1,0 +1,35 @@
+{
+  "workflow": "alteryx-workflows\\01_low_clean_orders.yxmd",
+  "target": "notebook",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": true,
+  "source_sha256": "46964a05370493182ac45848f68e991258b739102fbc28ce94fa0d86b10854db",
+  "code_sha256": "287a3e6391d5dd14caffe94b1c9984ae53b2248849dba0c05f692896d2389799",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "from pyspark.sql import functions as F\n\ndf = spark.createDataFrame([[\"C001\", \"West\", \"Online\", \"2026-01-12\", \"SKU-A-100\", \"1200\", \"4\"], [\"C002\", \"East\", \"Store\", \"2026-01-18\", \"SKU-B-220\", \"840\", \"2\"], [\"C001\", \"West\", \"Online\", \"2026-02-03\", \"SKU-A-140\", \"640\", \"1\"], [\"C003\", \"North\", \"Partner\", \"2026-02-11\", \"SKU-C-010\", \"2100\", \"6\"], [\"C004\", \"South\", \"Store\", \"2026-03-01\", \"SKU-B-220\", \"430\", \"3\"], [\"C002\", \"East\", \"Online\", \"2026-03-09\", \"SKU-A-100\", \"990\", \"2\"], [\"C005\", \"West\", \"Partner\", \"2026-03-21\", \"SKU-C-010\", \"150\", \"1\"], [\"C003\", \"North\", \"Store\", \"2026-04-02\", \"SKU-A-140\", \"1760\", \"5\"]], [\"CustomerID\", \"Region\", \"Channel\", \"OrderDate\", \"SKU\", \"Amount\", \"Units\"])\ndf = df\ndf = df.withColumn(\"AmountNum\", F.col(\"Amount\").cast('double'))\ndf = df.orderBy(F.col(\"AmountNum\").desc())\n\ndisplay(df)\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "independent semantic parity"
+  ],
+  "artifact_path": "alteryx-workflows/01_low_clean_orders",
+  "definition_files": [
+    "notebook-content.ipynb",
+    "notebook.platform.json",
+    "notebook-create-item.json"
+  ],
+  "definition_queries": [],
+  "loaded_queries": [],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

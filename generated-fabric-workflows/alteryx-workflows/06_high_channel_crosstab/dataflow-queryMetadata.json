@@ -1,0 +1,26 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "06_high_channel_crosstab",
+  "queriesMetadata": {
+    "channel_crosstab": {
+      "loadEnabled": false,
+      "queryId": "ca76be42-4faa-590e-a783-f186ef94488c",
+      "queryName": "channel_crosstab"
+    },
+    "tag_online": {
+      "loadEnabled": false,
+      "queryId": "91136d07-bfe8-547f-acb4-2fdbce035755",
+      "queryName": "tag_online"
+    },
+    "tag_other": {
+      "loadEnabled": false,
+      "queryId": "2878c4dd-4f41-5dcd-b200-8fc02c2c6ac9",
+      "queryName": "tag_other"
+    }
+  },
+  "queryGroups": []
+}

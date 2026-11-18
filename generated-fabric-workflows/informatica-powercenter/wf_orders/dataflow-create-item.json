@@ -1,0 +1,24 @@
+{
+  "definition": {
+    "parts": [
+      {
+        "path": "mashup.pq",
+        "payload": "c2VjdGlvbiBTZWN0aW9uMTsKCnNoYXJlZCBTb3VyY2VCaW5kaW5ncyA9IGVycm9yICJDb25maWd1cmUgc291cmNlIGJpbmRpbmdzIGJlZm9yZSByZWZyZXNoIjsKCnNoYXJlZCBvcmRlcnNjdXJhdGVkID0gbGV0CiAgICBvcmRlcnMgPSBSZWNvcmQuRmllbGQoU291cmNlQmluZGluZ3MsICJPcmRlcnMiKSwKICAgIGZsdF92YWxpZCA9IFRhYmxlLlNlbGVjdFJvd3Mob3JkZXJzLCBlYWNoIFJlY29yZC5GaWVsZChfLCAiQW1vdW50IikgPiAwKQppbgogICAgZmx0X3ZhbGlkOwo=",
+        "payloadType": "InlineBase64"
+      },
+      {
+        "path": "queryMetadata.json",
+        "payload": "ewogICJjb21wdXRlRW5naW5lU2V0dGluZ3MiOiB7CiAgICAiYWxsb3dGYXN0Q29weSI6IGZhbHNlCiAgfSwKICAiY29ubmVjdGlvbnMiOiBbXSwKICAiZm9ybWF0VmVyc2lvbiI6ICIyMDI1MDIiLAogICJuYW1lIjogIndmX29yZGVycyIsCiAgInF1ZXJpZXNNZXRhZGF0YSI6IHsKICAgICJTb3VyY2VCaW5kaW5ncyI6IHsKICAgICAgImxvYWRFbmFibGVkIjogZmFsc2UsCiAgICAgICJxdWVyeUlkIjogIjNkODNmNmEzLTc3OTktNTIwYy04NmM5LWVjZTY2MGI3ZjM2NiIsCiAgICAgICJxdWVyeU5hbWUiOiAiU291cmNlQmluZGluZ3MiCiAgICB9LAogICAgIm9yZGVyc2N1cmF0ZWQiOiB7CiAgICAgICJsb2FkRW5hYmxlZCI6IGZhbHNlLAogICAgICAicXVlcnlJZCI6ICIzODRiZTIxNi00YjQyLTVlZGYtYmMyNS03MmFjZDk2YWFlMDgiLAogICAgICAicXVlcnlOYW1lIjogIm9yZGVyc2N1cmF0ZWQiCiAgICB9CiAgfSwKICAicXVlcnlHcm91cHMiOiBbXQp9",
+        "payloadType": "InlineBase64"
+      },
+      {
+        "path": ".platform",
+        "payload": "ewogICIkc2NoZW1hIjogImh0dHBzOi8vZGV2ZWxvcGVyLm1pY3Jvc29mdC5jb20vanNvbi1zY2hlbWFzL2ZhYnJpYy9naXRJbnRlZ3JhdGlvbi9wbGF0Zm9ybVByb3BlcnRpZXMvMi4wLjAvc2NoZW1hLmpzb24iLAogICJjb25maWciOiB7CiAgICAibG9naWNhbElkIjogIjRmODkzYTE1LWQ3NmItNTYzMy1iNjUxLTUzMDMzZDFlZDhmNCIsCiAgICAidmVyc2lvbiI6ICIyLjAiCiAgfSwKICAibWV0YWRhdGEiOiB7CiAgICAiZGVzY3JpcHRpb24iOiAiR2VuZXJhdGVkIGZyb20gSW5mb3JtYXRpY2EgUG93ZXJDZW50ZXIgc3RhdGljIGFuYWx5c2lzLiBJbmRlcGVuZGVudCBzZW1hbnRpYyB2YWxpZGF0aW9uIHJlbWFpbnMgcmVxdWlyZWQuIiwKICAgICJkaXNwbGF5TmFtZSI6ICJ3Zl9vcmRlcnMiLAogICAgInR5cGUiOiAiRGF0YWZsb3ciCiAgfQp9",
+        "payloadType": "InlineBase64"
+      }
+    ]
+  },
+  "description": "Generated from Informatica PowerCenter static analysis. Independent semantic validation remains required.",
+  "displayName": "wf_orders",
+  "type": "Dataflow"
+}

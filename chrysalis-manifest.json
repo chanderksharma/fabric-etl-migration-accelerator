@@ -1,0 +1,81 @@
+{
+  "PrimaryDetails": {
+    "AssetTitle": "Microsoft Fabric ETL Migration Accelerator",
+    "AssetURL": "https://github.com/mcaps-microsoft/fabric-etl-migration-accelerator",
+    "AssetType": "Collection",
+    "Description": "Deterministic multi-source ETL estate discovery, canonical graph assessment, compiler-grounded Microsoft Fabric code generation (Dataflow Gen2, PySpark Notebook, and Data Pipeline), and secretless Microsoft Entra OIDC CI/CD deployment for migrating Alteryx Designer, Informatica PowerCenter, and Informatica IDMC estates to Microsoft Fabric.",
+    "Products": [
+      "Microsoft Fabric",
+      "Azure"
+    ],
+    "Scenarios": [
+      "Data Modernization",
+      "ETL Migration"
+    ],
+    "SolutionAreas": [
+      "Data and AI"
+    ],
+    "Tags": [
+      "Microsoft Fabric",
+      "ETL Migration",
+      "Alteryx",
+      "Informatica PowerCenter",
+      "Informatica IDMC",
+      "Dataflow Gen2",
+      "PySpark Notebook",
+      "Data Pipeline"
+    ],
+    "AssetVersion": "1.0.0",
+    "AssetContributors": [
+      "chandsharma@microsoft.com"
+    ],
+    "AssetOwner": [
+      "chandsharma@microsoft.com"
+    ],
+    "RegisteredBy": "chandsharma@microsoft.com",
+    "RegisteredDate": "261115",
+    "IsPrivate": false,
+    "PrivateUsers": [],
+    "EffortsSpentWithoutAsset": 120,
+    "EffortsSpentWithAsset": 16,
+    "LinkedAssets": [],
+    "AssetURLScope": "Internal Only",
+    "AssetURLAccessSteps": "Hosted on Microsoft EMU (https://github.com/mcaps-microsoft/fabric-etl-migration-accelerator) with Internal visibility for all Microsoft EMU members. Submit a pull request against .github/acl/access.yml for contributor write access.",
+    "DeliveryProductID": "",
+    "DomainServiceline": "Data & AI"
+  },
+  "ArtifactDetails": {
+    "DisplayVersion": "1.0.0",
+    "WorkItems": [],
+    "Repository": [
+      {
+        "Name": "fabric-etl-migration-accelerator",
+        "SourceType": "GITHUB",
+        "Url": "https://github.com/mcaps-microsoft/fabric-etl-migration-accelerator"
+      }
+    ],
+    "Pipelines": [
+      {
+        "Name": "Deploy Fabric artifacts",
+        "SourceType": "GITHUB",
+        "Url": "https://github.com/mcaps-microsoft/fabric-etl-migration-accelerator/blob/main/.github/workflows/deploy-fabric-artifacts.yml"
+      }
+    ],
+    "ADOWiki": [
+      {
+        "name": "Fabric ETL Migration Accelerator Wiki",
+        "sourceType": "GITHUB",
+        "url": "https://github.com/mcaps-microsoft/fabric-etl-migration-accelerator",
+        "repoBranch": "https://github.com/mcaps-microsoft/fabric-etl-migration-accelerator/tree/main",
+        "path": "/"
+      }
+    ],
+    "iterationAreaTeams": [],
+    "Dashboards": [],
+    "Queries": [],
+    "VariableGroups": [],
+    "AssociatedComponents": [],
+    "PreProcessingSteps": "Install Python 3.13, uv, Node.js 22, and PowerShell 7. Configure Microsoft Entra Workload Identity Federation (OIDC) on target Microsoft Fabric dev workspace.",
+    "PostProcessingSteps": "Bind source connections and Lakehouse/Warehouse destinations in the Microsoft Fabric dev workspace and validate semantic parity prior to UAT/Prod promotion."
+  }
+}

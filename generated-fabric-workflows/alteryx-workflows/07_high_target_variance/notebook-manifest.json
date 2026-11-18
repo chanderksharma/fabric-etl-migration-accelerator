@@ -1,0 +1,35 @@
+{
+  "workflow": "alteryx-workflows\\07_high_target_variance.yxmd",
+  "target": "notebook",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": true,
+  "source_sha256": "75f6ec2e8302eff6d344fa21fa669eef3500c0fa62312e222f278ffb65016d6a",
+  "code_sha256": "027afea31da13f7de1b944ffb7da5c5e3e02067dfd52e740fcc15e882f1ede59",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "from pyspark.sql import Window, functions as F\n\norders = spark.createDataFrame([[\"C001\", \"West\", \"Online\", \"2026-01-12\", \"SKU-A-100\", \"1200\", \"4\"], [\"C002\", \"East\", \"Store\", \"2026-01-18\", \"SKU-B-220\", \"840\", \"2\"], [\"C001\", \"West\", \"Online\", \"2026-02-03\", \"SKU-A-140\", \"640\", \"1\"], [\"C003\", \"North\", \"Partner\", \"2026-02-11\", \"SKU-C-010\", \"2100\", \"6\"], [\"C004\", \"South\", \"Store\", \"2026-03-01\", \"SKU-B-220\", \"430\", \"3\"], [\"C002\", \"East\", \"Online\", \"2026-03-09\", \"SKU-A-100\", \"990\", \"2\"], [\"C005\", \"West\", \"Partner\", \"2026-03-21\", \"SKU-C-010\", \"150\", \"1\"], [\"C003\", \"North\", \"Store\", \"2026-04-02\", \"SKU-A-140\", \"1760\", \"5\"]], [\"CustomerID\", \"Region\", \"Channel\", \"OrderDate\", \"SKU\", \"Amount\", \"Units\"])\ntargets = spark.createDataFrame([[\"West\", \"5000\"], [\"East\", \"3000\"], [\"North\", \"4000\"], [\"South\", \"2000\"]], [\"Region\", \"TargetAmount\"])\nnumeric_amount = orders.withColumn(\"Amount\", F.col(\"Amount\").cast('double'))\nchronological = numeric_amount.orderBy(F.col(\"OrderDate\").asc())\nrunning_total_by_region = chronological.withColumn(\"RunningTotal\", F.sum(F.col(\"Amount\").cast('double')).over(Window.partitionBy(*[\"Region\"]).orderBy(F.col(\"OrderDate\").asc()).rowsBetween(Window.unboundedPreceding, Window.currentRow)))\nregion_totals = running_total_by_region.groupBy(*[\"Region\"]).agg(F.sum(F.col(\"Amount\").cast('double')).alias(\"Sum_Amount\"), F.count(F.col(\"Amount\")).alias(\"RowCount\"))\nnumeric_target = targets.withColumn(\"TargetAmount\", F.col(\"TargetAmount\").cast('double'))\nactual_vs_target = region_totals.join(numeric_target, (region_totals[\"Region\"] == numeric_target[\"Region\"]), 'inner').drop(numeric_target[\"Region\"])\nvariance = actual_vs_target.withColumn(\"Variance\", F.col(\"Sum_Amount\") - F.col(\"TargetAmount\"))\nstatus = variance.withColumn(\"Status\", F.when(F.col(\"Variance\") >= 0, F.lit(\"Above\")).otherwise(F.lit(\"Below\")))\n\ndisplay(status)\ndisplay(running_total_by_region)\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "independent semantic parity"
+  ],
+  "artifact_path": "alteryx-workflows/07_high_target_variance",
+  "definition_files": [
+    "notebook-content.ipynb",
+    "notebook.platform.json",
+    "notebook-create-item.json"
+  ],
+  "definition_queries": [],
+  "loaded_queries": [],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

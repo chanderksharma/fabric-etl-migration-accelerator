@@ -1,0 +1,265 @@
+{
+  "meta": {
+    "title": "Figure ARCH-01 — End-to-End ETL Migration Accelerator Architecture",
+    "subtitle": "Deterministic multi-source ETL discovery, canonical IR compilation, Microsoft Fabric artifact generation, consumer delivery, and Entra OIDC CI/CD control plane",
+    "audience": "tech",
+    "layout": "box",
+    "canvas": [1960, 888],
+    "icons": "none"
+  },
+  "root": {
+    "type": "zone",
+    "style": "none",
+    "dir": "col",
+    "gap": 34,
+    "children": [
+      {
+        "type": "zone",
+        "style": "none",
+        "dir": "row",
+        "gap": 36,
+        "children": [
+          {
+            "id": "z_sources",
+            "type": "zone",
+            "style": "header",
+            "color": "gray",
+            "dir": "col",
+            "span": 0.95,
+            "gap": 14,
+            "label": "Legacy ETL Source Estates",
+            "sub": "Untrusted file, XML & archive exports",
+            "children": [
+              {
+                "id": "src_alteryx",
+                "type": "card",
+                "color": "gray",
+                "label": "Alteryx Designer",
+                "sub": ".yxmd, .yxmc, .yxwz & .yxzp archives"
+              },
+              {
+                "id": "src_pc",
+                "type": "card",
+                "color": "gray",
+                "label": "Informatica PowerCenter",
+                "sub": "Repository XML (powrmart.dtd 10.5)"
+              },
+              {
+                "id": "src_idmc",
+                "type": "card",
+                "color": "gray",
+                "label": "Informatica IDMC",
+                "sub": ".DTEMPLATE, .MTT & .TASKFLOW ZIPs"
+              }
+            ]
+          },
+          {
+            "id": "z_local_boundary",
+            "type": "zone",
+            "style": "boundary",
+            "color": "blue",
+            "dir": "row",
+            "span": 2.35,
+            "gap": 74,
+            "label": "Local Workstation Boundary (FastAPI & CLI on 127.0.0.1)",
+            "sub": "Zero source execution, CSRF/host guardrails & immutable snapshots",
+            "children": [
+              {
+                "id": "z_intake_ir",
+                "type": "zone",
+                "style": "header",
+                "color": "teal",
+                "dir": "col",
+                "span": 1.0,
+                "gap": 14,
+                "label": "Intake & Canonical ETL IR",
+                "sub": "Python 3.13, defusedxml & SQLite WAL",
+                "children": [
+                  {
+                    "id": "c_staging",
+                    "type": "card",
+                    "color": "teal",
+                    "label": "Secure Staging & Dedup",
+                    "sub": "ZIP-bomb, traversal & XML depth caps"
+                  },
+                  {
+                    "id": "c_ir",
+                    "type": "card",
+                    "color": "teal",
+                    "emphasis": true,
+                    "label": "Source Adapters & Canonical IR",
+                    "sub": "Versioned EtlPackage, DAG & SQLite WAL"
+                  },
+                  {
+                    "id": "c_assess",
+                    "type": "card",
+                    "color": "teal",
+                    "label": "Assessment & Effort Engine",
+                    "sub": "Complexity, wave & capped residual effort"
+                  }
+                ]
+              },
+              {
+                "id": "z_compilers",
+                "type": "zone",
+                "style": "header",
+                "color": "blue",
+                "dir": "col",
+                "span": 1.05,
+                "gap": 14,
+                "label": "Microsoft Fabric Compilers",
+                "sub": "Native-first deterministic code generation",
+                "children": [
+                  {
+                    "id": "c_df",
+                    "type": "card",
+                    "color": "blue",
+                    "emphasis": true,
+                    "label": "Dataflow Gen2 M Compiler",
+                    "sub": "mashup.pq, queryGroups & staging off"
+                  },
+                  {
+                    "id": "c_nb",
+                    "type": "card",
+                    "color": "blue",
+                    "emphasis": true,
+                    "label": "Fabric PySpark Notebook Compiler",
+                    "sub": "Semantic stages & transform_bindings"
+                  },
+                  {
+                    "id": "c_pl",
+                    "type": "card",
+                    "color": "blue",
+                    "label": "Pipeline Bundler & Scaffolds",
+                    "sub": "3-item bundles & fail-closed diagnostics"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "z_fabric",
+            "type": "zone",
+            "style": "header",
+            "color": "green",
+            "dir": "col",
+            "span": 0.98,
+            "gap": 14,
+            "label": "Microsoft Fabric Dev Serving",
+            "sub": "Create-Item REST API & validation",
+            "children": [
+              {
+                "id": "c_fab_items",
+                "type": "card",
+                "color": "green",
+                "emphasis": true,
+                "label": "Dataflow Gen2 & Notebooks",
+                "sub": "mashup.pq, queryGroups & PySpark items"
+              },
+              {
+                "id": "c_fab_pipe",
+                "type": "card",
+                "color": "green",
+                "label": "Fabric Data Pipelines",
+                "sub": "RefreshDataflow to Notebook orchestration"
+              },
+              {
+                "id": "c_fab_verify",
+                "type": "card",
+                "color": "green",
+                "label": "Readback & executeQuery Check",
+                "sub": "Part verification & BindingsRequired gate"
+              }
+            ]
+          },
+          {
+            "id": "z_consumers",
+            "type": "zone",
+            "style": "header",
+            "color": "purple",
+            "dir": "col",
+            "span": 0.98,
+            "gap": 14,
+            "label": "Consumer & Delivery Layer",
+            "sub": "Analysts, data engineers & exports",
+            "children": [
+              {
+                "id": "c_ui_cli",
+                "type": "card",
+                "color": "purple",
+                "emphasis": true,
+                "label": "React Portfolio UI & Typer CLI",
+                "sub": "6-tab drawer, source graph & registers"
+              },
+              {
+                "id": "c_exports",
+                "type": "card",
+                "color": "purple",
+                "label": "Assessment & Bundle Exports",
+                "sub": "JSON, formula-safe CSV & workflow ZIPs"
+              },
+              {
+                "id": "c_parity",
+                "type": "card",
+                "color": "purple",
+                "label": "Migration & Data Engineers",
+                "sub": "Lakehouse bindings & parity sign-off"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "z_control_plane",
+        "type": "zone",
+        "style": "header",
+        "color": "orange",
+        "dir": "row",
+        "gap": 26,
+        "label": "Security, Secretless CI/CD Dispatch & InnerSource Governance Control Plane",
+        "sub": "Dispatch-only GitOps, Microsoft Entra Workload Identity Federation (OIDC), and Chrysalis SDL gates",
+        "children": [
+          {
+            "id": "cp_sdl",
+            "type": "card",
+            "color": "orange",
+            "label": "Chrysalis SDL & InnerSource",
+            "sub": "CodeQL, pip/npm audit & synthetic corpus"
+          },
+          {
+            "id": "cp_dispatch",
+            "type": "card",
+            "color": "orange",
+            "label": "GitHub Actions & GitLab CI",
+            "sub": "Allowlisted dispatch-only dev workflows"
+          },
+          {
+            "id": "cp_oidc",
+            "type": "card",
+            "color": "orange",
+            "emphasis": true,
+            "label": "Microsoft Entra OIDC Federation",
+            "sub": "Secretless JWT exchange for Fabric API"
+          },
+          {
+            "id": "cp_ps",
+            "type": "card",
+            "color": "orange",
+            "label": "Deploy-FabricArtifacts.ps1",
+            "sub": "Idempotent Update & workspace lock"
+          }
+        ]
+      }
+    ]
+  },
+  "edges": [
+    { "from": "z_sources", "to": "z_intake_ir", "step": 1, "label": "ETL exports", "kind": "data" },
+    { "from": "z_intake_ir", "to": "c_nb", "step": 2, "label": "IR DAG", "kind": "data" },
+    { "from": "z_compilers", "to": "z_control_plane", "step": 3, "label": "Item envelopes", "kind": "control" },
+    { "from": "cp_sdl", "to": "cp_dispatch", "label": "SDL gates", "kind": "control" },
+    { "from": "cp_dispatch", "to": "cp_oidc", "step": 4, "label": "OIDC JWT", "kind": "control" },
+    { "from": "cp_oidc", "to": "cp_ps", "label": "Entra token", "kind": "control" },
+    { "from": "cp_ps", "to": "z_fabric", "step": 5, "label": "Fabric REST", "kind": "data" },
+    { "from": "z_fabric", "to": "z_consumers", "step": 6, "label": "Validated items", "kind": "data" }
+  ]
+}

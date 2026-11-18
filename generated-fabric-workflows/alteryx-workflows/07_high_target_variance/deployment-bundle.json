@@ -1,0 +1,30 @@
+{
+  "deploymentOrder": [
+    "Dataflow",
+    "Notebook",
+    "DataPipeline"
+  ],
+  "items": [
+    {
+      "key": "dataflow",
+      "request": "dataflow-create-item.json",
+      "type": "Dataflow"
+    },
+    {
+      "key": "notebook",
+      "request": "notebook-create-item.json",
+      "type": "Notebook"
+    },
+    {
+      "dependsOn": [
+        "dataflow",
+        "notebook"
+      ],
+      "key": "pipeline",
+      "request": "pipeline-create-item.json",
+      "type": "DataPipeline"
+    }
+  ],
+  "schemaVersion": "1.0",
+  "workflow": "alteryx-workflows\\07_high_target_variance.yxmd"
+}

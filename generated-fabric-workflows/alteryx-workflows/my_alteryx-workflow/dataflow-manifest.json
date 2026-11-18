@@ -1,0 +1,38 @@
+{
+  "workflow": "alteryx-workflows\\my_alteryx-workflow.yxmd",
+  "target": "dataflow",
+  "validation_state": "scaffold",
+  "translation_mode": "scaffold",
+  "deployable": false,
+  "definition_ready": false,
+  "runtime_ready": false,
+  "source_sha256": "fea02ecdb6d3fa7a148678a57a10f24a6e55eb9481ba1dd09cf0d4f77167b136",
+  "code_sha256": "2a917f48a7b1589aed47baf6128b5c5f8d39fad00aa8f261031dc0bab42cf87c",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "let\n    MigrationScaffold = #table({\"Status\", \"Diagnostic\"}, {{\"Manual implementation required\", \"Executable workflow events require redesign\"}, {\"Manual implementation required\", \"Only a supported linear or Union/CrossTab graph is native\"}})\nin\n    MigrationScaffold\n",
+  "diagnostics": [
+    "Executable workflow events require redesign",
+    "Only a supported linear or Union/CrossTab graph is native"
+  ],
+  "required_bindings": [
+    "manual implementation for unsupported Alteryx semantics",
+    "independent semantic parity"
+  ],
+  "artifact_path": "alteryx-workflows/my_alteryx-workflow",
+  "definition_files": [
+    "dataflow-diagnostics.json",
+    "dataflow-manifest.json"
+  ],
+  "definition_queries": [],
+  "loaded_queries": [],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

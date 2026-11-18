@@ -1,0 +1,21 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "wf_orders",
+  "queriesMetadata": {
+    "SourceBindings": {
+      "loadEnabled": false,
+      "queryId": "3d83f6a3-7799-520c-86c9-ece660b7f366",
+      "queryName": "SourceBindings"
+    },
+    "orderscurated": {
+      "loadEnabled": false,
+      "queryId": "384be216-4b42-5edf-bc25-72acd96aae08",
+      "queryName": "orderscurated"
+    }
+  },
+  "queryGroups": []
+}

@@ -1,0 +1,71 @@
+workflow:
+  name: 'Deploy $TARGET $WORKFLOW_FILTER ($DEPLOYMENT_ID)'
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - when: never
+
+stages:
+  - deploy
+
+variables:
+  FABRIC_WORKSPACE_ID:
+    value: ""
+    description: Fabric workspace ID
+  DEPLOYMENT_ID:
+    value: "manual"
+    description: Correlation ID supplied by the deployment API
+  ARTIFACT_ROOT:
+    value: "generated-fabric-workflows"
+    description: Repository-relative generated artifact root
+  TARGET:
+    value: "Both"
+    description: Fabric item type to deploy
+    options: ["Both", "Bundle", "Dataflow", "Notebook", "DataPipeline"]
+  WORKFLOW_FILTER:
+    value: "*"
+    description: Wildcard for workflow-relative directories
+  CONFLICT_BEHAVIOR:
+    value: "Update"
+    description: Behavior when an item with the same type and name exists
+    options: ["Fail", "Skip", "Update"]
+  DRY_RUN:
+    value: "false"
+    description: Validate and list envelopes without calling Fabric
+    options: ["false", "true"]
+
+deploy_fabric_artifacts:
+  name: Deploy generated definitions
+  stage: deploy
+  tags:
+    - fabric-deploy-windows
+  timeout: 30m
+  interruptible: false
+  resource_group: "fabric-deploy-$FABRIC_WORKSPACE_ID"
+  environment:
+    name: dev
+  script:
+    - |
+      $ErrorActionPreference = "Stop"
+      if (-not $env:FABRIC_WORKSPACE_ID) {
+        throw "FABRIC_WORKSPACE_ID is required"
+      }
+      if ($env:TARGET -notin @("Both", "Bundle", "Dataflow", "Notebook", "DataPipeline")) {
+        throw "unsupported TARGET: $env:TARGET"
+      }
+      if ($env:CONFLICT_BEHAVIOR -notin @("Fail", "Skip", "Update")) {
+        throw "unsupported CONFLICT_BEHAVIOR: $env:CONFLICT_BEHAVIOR"
+      }
+      if ($env:DRY_RUN -notin @("true", "false")) {
+        throw "DRY_RUN must be true or false"
+      }
+      $parameters = @{
+        ArtifactRoot = $env:ARTIFACT_ROOT
+        Target = $env:TARGET
+        WorkflowFilter = $env:WORKFLOW_FILTER
+        ConflictBehavior = $env:CONFLICT_BEHAVIOR
+      }
+      if ($env:DRY_RUN -eq "true") {
+        $parameters.DryRun = $true
+      }
+      ./scripts/Deploy-FabricArtifacts.ps1 @parameters

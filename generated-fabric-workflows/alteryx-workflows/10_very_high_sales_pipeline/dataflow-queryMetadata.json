@@ -1,0 +1,81 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "10_very_high_sales_pipeline",
+  "queriesMetadata": {
+    "by_channel": {
+      "loadEnabled": false,
+      "queryId": "01b057b5-f7ad-52c6-8d2e-92e168295535",
+      "queryName": "by_channel"
+    },
+    "by_region": {
+      "loadEnabled": false,
+      "queryId": "96c28938-1459-5e2b-ae53-0bcb76cfc5cf",
+      "queryName": "by_region"
+    },
+    "channel_matrix_30": {
+      "loadEnabled": false,
+      "queryId": "6f573a6f-2755-5c15-9d46-7880a39b1554",
+      "queryName": "channel_matrix_30"
+    },
+    "dim_unique": {
+      "loadEnabled": false,
+      "queryId": "89e7a9fb-595d-53c9-a014-6de6d2bfc026",
+      "queryName": "dim_unique"
+    },
+    "enriched_facts": {
+      "loadEnabled": false,
+      "queryId": "cd324dd7-cb33-5596-8b0d-d209214d30b1",
+      "queryName": "enriched_facts"
+    },
+    "goal_status": {
+      "loadEnabled": false,
+      "queryId": "2b3edf6d-026a-5266-9f0e-8feb3e77badd",
+      "queryName": "goal_status"
+    },
+    "goal_status_29": {
+      "loadEnabled": false,
+      "queryId": "2ecc3faa-e3f4-5de2-b33e-998f3fe8ae8a",
+      "queryName": "goal_status_29"
+    },
+    "publish_stack": {
+      "loadEnabled": false,
+      "queryId": "98421270-4281-508b-861d-f5c120e378c0",
+      "queryName": "publish_stack"
+    },
+    "rejected": {
+      "loadEnabled": false,
+      "queryId": "9036cc79-51d8-5617-81e2-91811d909033",
+      "queryName": "rejected"
+    },
+    "running_amount": {
+      "loadEnabled": false,
+      "queryId": "e18a2d31-fc8d-53e5-9446-c462e68a8767",
+      "queryName": "running_amount"
+    },
+    "sku_family": {
+      "loadEnabled": false,
+      "queryId": "513df859-8582-5e46-8df0-729c9f9ddb4c",
+      "queryName": "sku_family"
+    },
+    "target": {
+      "loadEnabled": false,
+      "queryId": "70f4e208-3e2c-52fc-8105-2dd933e7c90b",
+      "queryName": "target"
+    },
+    "top_gaps": {
+      "loadEnabled": false,
+      "queryId": "ed7e2ca3-9820-5fee-b8b6-35a065cb7baa",
+      "queryName": "top_gaps"
+    },
+    "valid_rows": {
+      "loadEnabled": false,
+      "queryId": "0b74b2ac-a2b0-5604-b2aa-3453fa3a8f1c",
+      "queryName": "valid_rows"
+    }
+  },
+  "queryGroups": []
+}

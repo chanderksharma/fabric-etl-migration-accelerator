@@ -1,0 +1,41 @@
+{
+  "workflow": "router_validation_repository.xml!Finance/wf_STG_Ledger_Validation",
+  "target": "notebook",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": false,
+  "source_sha256": "5fe56e6437cd9c3e2ce355b8e6a152d6589a5fe841d8efb7f25d63469ae1b66d",
+  "code_sha256": "9dd85a85bf9be0e712a3b88e54f12ac3364f3fc4e19e52889e4f512c4778344a",
+  "compiler_version": "1.4.0",
+  "graph_version": "1.0.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "from pyspark.sql import functions as F\n\nsource_paths = globals().get('source_paths', {})\ntransform_bindings = globals().get('transform_bindings', {})\n\ndef require_transform(name):\n    binding = transform_bindings.get(name)\n    if binding is None:\n        raise ValueError(f\"Configure transform_bindings[{name!r}] before running\")\n    return binding\n\ndef _read_source(location):\n    if location.endswith(\".parquet\") or \"/parquet/\" in location.lower():\n        return spark.read.parquet(location)\n    if \"/\" not in location and \"\\\\\" not in location and not location.endswith(\".csv\"):\n        return spark.read.table(location)\n    return spark.read.option(\"header\", True).option(\"inferSchema\", True).csv(location)\nledger_src_file_path = source_paths.get('Ledger_Src_File')\nif not ledger_src_file_path: raise ValueError(\"Configure source_paths['Ledger_Src_File'] before running\")\nledger_src_file = _read_source(ledger_src_file_path)\nsq_ledger_src_file = ledger_src_file\nexp_date_validation = sq_ledger_src_file.withColumn(\"File_Name\", F.trim(F.col(\"CurrentlyProcessedFileName\"))).withColumn(\"CHANNEL\", F.when(F.col(\"AccountGroup\") == F.lit(\"NORTH_REGION\"), F.lit(\"NORTH\")).otherwise(F.lit(\"SOUTH\"))).withColumn(\"REJECT_REASON\", F.when(F.col(\"AccountGroup\").isNull(), F.lit(\"Missing AccountGroup\")).otherwise(F.lit(None)))\nrtr_ledger_routes = require_transform(\"RTR_Ledger\")(exp_date_validation)\nrtr_ledger_stg_data = rtr_ledger_routes[\"STG_DATA\"]\nrtr_ledger_north_rejected = rtr_ledger_routes[\"NORTH_REJECTED\"]\nrtr_ledger_south_rejected = rtr_ledger_routes[\"SOUTH_REJECTED\"]\nrtr_ledger_default1 = rtr_ledger_routes[\"DEFAULT1\"]\nagg_north_rejects = rtr_ledger_north_rejected.select(\"File_Name3\", \"REJECT_REASON3\").dropDuplicates()\nagg_south_rejects = rtr_ledger_south_rejected.select(\"File_Name4\", \"REJECT_REASON4\").dropDuplicates()\nstg_ledger_content = rtr_ledger_stg_data\nunprocessed_north_file_list = agg_north_rejects\nunprocessed_south_file_list = agg_south_rejects\n\ndisplay(stg_ledger_content)\ndisplay(unprocessed_north_file_list)\ndisplay(unprocessed_south_file_list)\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "source_paths['Ledger_Src_File']",
+    "transform_bindings['RTR_Ledger'] (router)",
+    "independent semantic parity"
+  ],
+  "artifact_path": "informatica-powercenter/wf_STG_Ledger_Validation",
+  "definition_files": [
+    "notebook-content.ipynb",
+    "notebook.platform.json",
+    "notebook-create-item.json"
+  ],
+  "definition_queries": [],
+  "loaded_queries": [
+    "stg_ledger_content",
+    "unprocessed_north_file_list",
+    "unprocessed_south_file_list"
+  ],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "informatica_powercenter",
+  "source_product": "Informatica PowerCenter",
+  "asset_type": "workflow",
+  "native_id": "wf_STG_Ledger_Validation",
+  "folder": "Finance"
+}

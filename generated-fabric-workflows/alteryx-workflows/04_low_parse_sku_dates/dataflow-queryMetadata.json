@@ -1,0 +1,16 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "04_low_parse_sku_dates",
+  "queriesMetadata": {
+    "parsed_orders": {
+      "loadEnabled": false,
+      "queryId": "a430c25e-2b58-5d3b-8bfc-9df0996af0ca",
+      "queryName": "parsed_orders"
+    }
+  },
+  "queryGroups": []
+}

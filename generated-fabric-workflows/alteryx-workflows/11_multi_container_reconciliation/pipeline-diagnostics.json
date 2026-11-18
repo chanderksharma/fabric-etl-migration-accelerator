@@ -1,0 +1,7 @@
+{
+  "workflow": "alteryx-workflows\\11_multi_container_reconciliation.yxmd",
+  "state": "blocked",
+  "diagnostics": [
+    "Alteryx pipeline generation is available only for mixed-item bundles"
+  ]
+}

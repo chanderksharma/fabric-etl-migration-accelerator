@@ -1,0 +1,21 @@
+{
+  "exportVersion": "3",
+  "organization": "demo-org",
+  "assets": [
+    {
+      "path": "Explore/Sales/m_orders.DTEMPLATE",
+      "type": "DTEMPLATE",
+      "name": "m_orders"
+    },
+    {
+      "path": "Explore/Sales/mt_orders.MTT",
+      "type": "MTT",
+      "name": "mt_orders"
+    },
+    {
+      "path": "Explore/Sales/tf_orders.TASKFLOW",
+      "type": "TASKFLOW",
+      "name": "tf_orders"
+    }
+  ]
+}

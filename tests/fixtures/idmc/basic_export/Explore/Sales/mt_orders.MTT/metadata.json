@@ -1,0 +1,7 @@
+{
+  "id": "mapping-task-1",
+  "name": "mt_orders",
+  "type": "MTT",
+  "path": "Sales",
+  "mappingId": "mapping-1"
+}

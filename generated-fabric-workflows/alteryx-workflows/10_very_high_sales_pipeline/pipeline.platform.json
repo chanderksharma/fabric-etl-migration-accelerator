@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "config": {
+    "logicalId": "6627e89c-084a-53f7-8d62-121ae340ca98",
+    "version": "2.0"
+  },
+  "metadata": {
+    "description": "Orchestrates generated Dataflow Gen2 and Fabric Notebook for 10_very_high_sales_pipeline.",
+    "displayName": "10_very_high_sales_pipeline_Orchestration",
+    "type": "DataPipeline"
+  }
+}

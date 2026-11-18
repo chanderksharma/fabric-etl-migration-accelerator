@@ -1,0 +1,7 @@
+{
+  "workflow": "alteryx-workflows\\05_high_spend_by_tier.yxmd",
+  "state": "blocked",
+  "diagnostics": [
+    "Alteryx pipeline generation is available only for mixed-item bundles"
+  ]
+}

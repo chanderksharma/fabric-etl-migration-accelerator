@@ -1,0 +1,7 @@
+{
+  "workflow": "alteryx-workflows\\06_high_channel_crosstab.yxmd",
+  "state": "blocked",
+  "diagnostics": [
+    "Alteryx pipeline generation is available only for mixed-item bundles"
+  ]
+}

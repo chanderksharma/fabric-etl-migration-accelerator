@@ -1,0 +1,72 @@
+{
+  "workflow": "alteryx-workflows\\sample_container_sequence.yxmd",
+  "target": "dataflow",
+  "validation_state": "generated_unvalidated",
+  "translation_mode": "native",
+  "deployable": true,
+  "definition_ready": true,
+  "runtime_ready": false,
+  "source_sha256": "cc90134d234e7c2948af93e44872292f79a6930a920ec09065a244d0dc4a3f1f",
+  "code_sha256": "988ba8bd4a7a36887e97f2d15eef8628cdd67edc0ec254ba92bb046bcd7dc9fd",
+  "compiler_version": "2.2.0",
+  "graph_version": "1.3.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "section Section1;\n\nshared SourceBindings = error \"Configure source bindings before refresh\";\n\nshared positive_amounts = let\n    orders = Record.Field(SourceBindings, \"1\"),\n    keep_order_fields = Table.SelectColumns(orders, {\"OrderID\", \"CustomerID\", \"SKU\", \"Amount\", \"Units\"}),\n    amount_and_units_1 = Table.AddColumn(keep_order_fields, \"AmountNum\", each Number.From(Record.Field(_, \"Amount\"))),\n    amount_and_units_2 = Table.AddColumn(amount_and_units_1, \"UnitsNum\", each Number.From(Record.Field(_, \"Units\"))),\n    positive_amounts = Table.SelectRows(amount_and_units_2, each Record.Field(_, \"AmountNum\") > 0)\nin\n    positive_amounts;\n\nshared active_customers = let\n    customers = Record.Field(SourceBindings, \"5\"),\n    keep_customer_fields = Table.SelectColumns(customers, {\"CustomerID\", \"CustomerName\", \"Tier\", \"Status\"}),\n    active_customers = Table.SelectRows(keep_customer_fields, each Record.Field(_, \"Status\") = \"Active\")\nin\n    active_customers;\n\nshared matched_orders = let\n    match_on_customer_Joined = Table.NestedJoin(positive_amounts, {\"CustomerID\"}, active_customers, {\"CustomerID\"}, \"__right\", JoinKind.Inner),\n    match_on_customer_RightColumns = List.RemoveItems(Table.ColumnNames(active_customers), {\"CustomerID\"}),\n    match_on_customer_OutputColumns = List.Transform(match_on_customer_RightColumns, each if List.Contains(Table.ColumnNames(positive_amounts), _) then _ & \"_Right\" else _),\n    match_on_customer = Table.ExpandTableColumn(match_on_customer_Joined, \"__right\", match_on_customer_RightColumns, match_on_customer_OutputColumns),\n    line_value = Table.AddColumn(match_on_customer, \"LineValue\", each Record.Field(_, \"AmountNum\") * Record.Field(_, \"UnitsNum\"))\nin\n    line_value;\n",
+  "diagnostics": [],
+  "required_bindings": [
+    "source_queries['1']",
+    "source_queries['5']",
+    "destinations['matched_orders']",
+    "independent semantic parity"
+  ],
+  "artifact_path": "alteryx-workflows/sample_container_sequence",
+  "definition_files": [
+    "dataflow-mashup.pq",
+    "dataflow-queryMetadata.json",
+    "dataflow.platform.json",
+    "dataflow-create-item.json"
+  ],
+  "definition_queries": [
+    "SourceBindings",
+    "positive_amounts",
+    "active_customers",
+    "matched_orders"
+  ],
+  "loaded_queries": [
+    "matched_orders"
+  ],
+  "query_groups": [
+    {
+      "id": "8b35a270-eb00-58b0-96d3-a81501fae74a",
+      "name": "1. Prepare orders",
+      "description": "Migrated from Alteryx ToolContainer 20",
+      "parent_id": null,
+      "order": 0
+    },
+    {
+      "id": "5b7837fb-37f4-5f76-ad80-5075d7a8a158",
+      "name": "2. Prepare customers",
+      "description": "Migrated from Alteryx ToolContainer 21",
+      "parent_id": null,
+      "order": 1
+    },
+    {
+      "id": "9db5c0e8-a1d5-5a01-9f11-bd216a15aa6d",
+      "name": "3. Match and publish",
+      "description": "Migrated from Alteryx ToolContainer 22",
+      "parent_id": null,
+      "order": 2
+    }
+  ],
+  "query_group_assignments": {
+    "positive_amounts": "8b35a270-eb00-58b0-96d3-a81501fae74a",
+    "active_customers": "5b7837fb-37f4-5f76-ad80-5075d7a8a158",
+    "matched_orders": "9db5c0e8-a1d5-5a01-9f11-bd216a15aa6d"
+  },
+  "source_platform": "alteryx",
+  "source_product": "Alteryx Designer",
+  "asset_type": "workflow",
+  "native_id": null,
+  "folder": null
+}

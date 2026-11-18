@@ -1,0 +1,41 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "wf_STG_Ledger_Validation",
+  "queriesMetadata": {
+    "SourceBindings": {
+      "loadEnabled": false,
+      "queryId": "a6597f75-36db-5bb6-9b1e-2aa0f518f8ee",
+      "queryName": "SourceBindings"
+    },
+    "exp_date_validation": {
+      "loadEnabled": false,
+      "queryId": "387e499f-347d-5b34-ab1f-1a36cdfcbfba",
+      "queryName": "exp_date_validation"
+    },
+    "rtr_ledger_default1": {
+      "loadEnabled": false,
+      "queryId": "869bc75a-3d9e-52d6-8db5-2d2e65dc7cb1",
+      "queryName": "rtr_ledger_default1"
+    },
+    "stg_ledger_content": {
+      "loadEnabled": false,
+      "queryId": "565de9b5-8e18-57b1-9942-13f896faf46c",
+      "queryName": "stg_ledger_content"
+    },
+    "unprocessed_north_file_list": {
+      "loadEnabled": false,
+      "queryId": "ed47de16-00a3-53de-a770-850dc9f787dc",
+      "queryName": "unprocessed_north_file_list"
+    },
+    "unprocessed_south_file_list": {
+      "loadEnabled": false,
+      "queryId": "47994d59-b758-5d16-a729-062c33a374b3",
+      "queryName": "unprocessed_south_file_list"
+    }
+  },
+  "queryGroups": []
+}

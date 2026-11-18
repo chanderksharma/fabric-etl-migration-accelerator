@@ -1,0 +1,371 @@
+<?xml version="1.0"?>
+<AlteryxDocument yxmdVer="2024.1">
+  <Nodes>
+    <Node ToolID="20">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="24" y="24" width="620" height="150" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>1. Prepare orders</Caption>
+          <Style TextColor="#314c4a" FillColor="#ecf2f2" BorderColor="#314c4a" Transparency="25" Margin="25" />
+          <Disabled value="False" />
+          <Folded value="False" />
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name />
+          <DefaultAnnotationText>Input, select, calculate, and keep positive amounts</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="1">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+            <Position x="54" y="78" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File RecordLimit="" FileFormat="25">\\sharepoint\Shared Documents\Sources\Orders.xlsx</File>
+              <FormatSpecificOptions>
+                <FirstRowData>False</FirstRowData>
+                <ImportLine>1</ImportLine>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>Orders</Name>
+              <DefaultAnnotationText>Excel — Shared Documents/Sources/Orders.xlsx</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+            <MetaInfo connection="Output">
+              <RecordInfo>
+                <Field name="OrderID" source="File: Orders.xlsx" type="V_WString" />
+                <Field name="CustomerID" source="File: Orders.xlsx" type="V_WString" />
+                <Field name="SKU" source="File: Orders.xlsx" type="V_WString" />
+                <Field name="Amount" source="File: Orders.xlsx" type="V_WString" />
+                <Field name="Units" source="File: Orders.xlsx" type="V_WString" />
+              </RecordInfo>
+            </MetaInfo>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+        </Node>
+        <Node ToolID="2">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="198" y="78" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="OrderID" selected="True" />
+                <SelectField field="CustomerID" selected="True" />
+                <SelectField field="SKU" selected="True" />
+                <SelectField field="Amount" selected="True" />
+                <SelectField field="Units" selected="True" />
+                <SelectField field="*Unknown" selected="False" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>Keep order fields</Name>
+              <DefaultAnnotationText>Select</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+        <Node ToolID="3">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+            <Position x="342" y="78" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <FormulaFields>
+                <FormulaField expression="ToNumber([Amount])" field="AmountNum" size="8" type="Double" />
+                <FormulaField expression="ToNumber([Units])" field="UnitsNum" size="8" type="Double" />
+              </FormulaFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>Amount and units</Name>
+              <DefaultAnnotationText>Formula</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFormula" />
+        </Node>
+        <Node ToolID="4">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Filter.Filter">
+            <Position x="486" y="78" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <Mode>Custom</Mode>
+              <Expression>[AmountNum] &gt; 0</Expression>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>Positive amounts</Name>
+              <DefaultAnnotationText>Filter</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFilter" />
+        </Node>
+      </ChildNodes>
+    </Node>
+    <Node ToolID="21">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="24" y="210" width="480" height="140" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>2. Prepare customers</Caption>
+          <Style TextColor="#314c4a" FillColor="#eef6ea" BorderColor="#314c4a" Transparency="25" Margin="25" />
+          <Disabled value="False" />
+          <Folded value="False" />
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name />
+          <DefaultAnnotationText>Input, select, and keep active customers</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="5">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput">
+            <Position x="54" y="258" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File RecordLimit="" FileFormat="25">\\sharepoint\Shared Documents\Sources\Customers.xlsx</File>
+              <FormatSpecificOptions>
+                <FirstRowData>False</FirstRowData>
+                <ImportLine>1</ImportLine>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>Customers</Name>
+              <DefaultAnnotationText>Excel — Shared Documents/Sources/Customers.xlsx</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+            <MetaInfo connection="Output">
+              <RecordInfo>
+                <Field name="CustomerID" source="File: Customers.xlsx" type="V_WString" />
+                <Field name="CustomerName" source="File: Customers.xlsx" type="V_WString" />
+                <Field name="Tier" source="File: Customers.xlsx" type="V_WString" />
+                <Field name="Status" source="File: Customers.xlsx" type="V_WString" />
+              </RecordInfo>
+            </MetaInfo>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileInput" />
+        </Node>
+        <Node ToolID="6">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect">
+            <Position x="210" y="258" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <OrderChanged value="False" />
+              <CommaDecimal value="False" />
+              <SelectFields>
+                <SelectField field="CustomerID" selected="True" />
+                <SelectField field="CustomerName" selected="True" />
+                <SelectField field="Tier" selected="True" />
+                <SelectField field="Status" selected="True" />
+                <SelectField field="*Unknown" selected="False" />
+              </SelectFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>Keep customer fields</Name>
+              <DefaultAnnotationText>Select</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxSelect" />
+        </Node>
+        <Node ToolID="7">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Filter.Filter">
+            <Position x="366" y="258" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <Mode>Custom</Mode>
+              <Expression>[Status] = "Active"</Expression>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>Active customers</Name>
+              <DefaultAnnotationText>Filter</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFilter" />
+        </Node>
+      </ChildNodes>
+    </Node>
+    <Node ToolID="22">
+      <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer">
+        <Position x="680" y="72" width="520" height="200" />
+      </GuiSettings>
+      <Properties>
+        <Configuration>
+          <Caption>3. Match and publish</Caption>
+          <Style TextColor="#1e3a5f" FillColor="#eef3fb" BorderColor="#1e3a5f" Transparency="25" Margin="25" />
+          <Disabled value="False" />
+          <Folded value="False" />
+        </Configuration>
+        <Annotation DisplayMode="0">
+          <Name />
+          <DefaultAnnotationText>Join the two prepared inputs, then write the result</DefaultAnnotationText>
+          <Left value="False" />
+        </Annotation>
+      </Properties>
+      <ChildNodes>
+        <Node ToolID="8">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Join.Join">
+            <Position x="714" y="126" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <JoinMode>Inner</JoinMode>
+              <JoinInfo connection="Left">
+                <Field field="CustomerID" />
+              </JoinInfo>
+              <JoinInfo connection="Right">
+                <Field field="CustomerID" />
+              </JoinInfo>
+              <SelectConfiguration>
+                <Configuration outputConnection="Join">
+                  <OrderChanged value="False" />
+                  <CommaDecimal value="False" />
+                  <SelectFields>
+                    <SelectField field="Left_OrderID" selected="True" rename="OrderID" />
+                    <SelectField field="Left_CustomerID" selected="True" rename="CustomerID" />
+                    <SelectField field="Left_SKU" selected="True" rename="SKU" />
+                    <SelectField field="Left_AmountNum" selected="True" rename="AmountNum" />
+                    <SelectField field="Left_UnitsNum" selected="True" rename="UnitsNum" />
+                    <SelectField field="Right_CustomerName" selected="True" rename="CustomerName" />
+                    <SelectField field="Right_Tier" selected="True" rename="Tier" />
+                    <SelectField field="Right_CustomerID" selected="False" />
+                    <SelectField field="Right_Status" selected="False" />
+                    <SelectField field="*Unknown" selected="False" />
+                  </SelectFields>
+                </Configuration>
+              </SelectConfiguration>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>Match on customer</Name>
+              <DefaultAnnotationText>Join orders to active customers</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxJoin" />
+        </Node>
+        <Node ToolID="9">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula">
+            <Position x="870" y="126" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <FormulaFields>
+                <FormulaField expression="[AmountNum] * [UnitsNum]" field="LineValue" size="8" type="Double" />
+              </FormulaFields>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>Line value</Name>
+              <DefaultAnnotationText>Formula</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxFormula" />
+        </Node>
+        <Node ToolID="10">
+          <GuiSettings Plugin="AlteryxBasePluginsGui.DbFileOutput.DbFileOutput">
+            <Position x="1020" y="126" />
+          </GuiSettings>
+          <Properties>
+            <Configuration>
+              <File FileFormat="0" MaxRecords="">sample_container_orders.csv</File>
+              <FormatSpecificOptions>
+                <LineEndStyle>CRLF</LineEndStyle>
+                <Delimeter>,</Delimeter>
+                <ForceQuotes>False</ForceQuotes>
+                <HeaderRow>True</HeaderRow>
+                <CodePage>65001</CodePage>
+                <WriteBOM>True</WriteBOM>
+              </FormatSpecificOptions>
+            </Configuration>
+            <Annotation DisplayMode="0">
+              <Name>Matched orders</Name>
+              <DefaultAnnotationText>Output — sample_container_orders.csv</DefaultAnnotationText>
+              <Left value="False" />
+            </Annotation>
+          </Properties>
+          <EngineSettings EngineDll="AlteryxBasePluginsEngine.dll" EngineDllEntryPoint="AlteryxDbFileOutput" />
+        </Node>
+      </ChildNodes>
+    </Node>
+  </Nodes>
+  <Connections>
+    <Connection>
+      <Origin ToolID="1" Connection="Output" />
+      <Destination ToolID="2" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="2" Connection="Output" />
+      <Destination ToolID="3" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="3" Connection="Output" />
+      <Destination ToolID="4" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="4" Connection="True" />
+      <Destination ToolID="8" Connection="Left" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="5" Connection="Output" />
+      <Destination ToolID="6" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="6" Connection="Output" />
+      <Destination ToolID="7" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="7" Connection="True" />
+      <Destination ToolID="8" Connection="Right" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="8" Connection="Join" />
+      <Destination ToolID="9" Connection="Input" />
+    </Connection>
+    <Connection>
+      <Origin ToolID="9" Connection="Output" />
+      <Destination ToolID="10" Connection="Input" />
+    </Connection>
+  </Connections>
+  <Properties>
+    <MetaInfo>
+      <Name>Sample — three containers</Name>
+      <Description>Three containers in sequence. Orders.xlsx and Customers.xlsx are read from the SharePoint Sources folder, prepared, joined, and written to one output file.</Description>
+      <RootToolName />
+      <ToolVersion />
+      <ToolInDb value="False" />
+      <CategoryName />
+      <SearchTags />
+      <Author>Microsoft Scout sample generator</Author>
+      <Company />
+      <Copyright />
+      <DescriptionLink actual="" displayed="" />
+      <Example>
+        <Description />
+        <File />
+      </Example>
+      <WorkflowId value="" />
+      <Telemetry>
+        <PreviousWorkflowId value="" />
+        <OriginWorkflowId value="" />
+      </Telemetry>
+    </MetaInfo>
+    <Events>
+      <Enabled value="False" />
+    </Events>
+  </Properties>
+</AlteryxDocument>

@@ -1,0 +1,52 @@
+- name: Overview
+  href: index.md
+- name: Repository Guide (README)
+  href: README.md
+- name: Guides
+  items:
+    - name: Getting Started
+      href: docs/Guides/getting-started.md
+    - name: Installation & Runtime Modes
+      href: docs/Guides/installation.md
+    - name: Fabric CI/CD Setup (OIDC)
+      href: docs/Guides/fabric-ci-cd-setup.md
+    - name: Troubleshooting
+      href: docs/Guides/troubleshooting.md
+- name: Architecture & Design
+  items:
+    - name: System Architecture
+      href: docs/Architecture/system-architecture.md
+    - name: "ADR-001: Source Adapters & Canonical IR"
+      href: docs/Architecture/ADR-001-etl-source-adapters.md
+    - name: Local Architecture Decisions
+      href: docs/Planning/local-architecture-decisions.md
+    - name: Implementation Plan
+      href: docs/Planning/accelerator-implementation-plan.md
+- name: Security & Quality
+  items:
+    - name: Threat Model (STRIDE)
+      href: docs/Security/threat-model.md
+    - name: Security Policy
+      href: SECURITY.md
+    - name: Security Scan Results
+      href: docs/Quality/security-scan-results.md
+    - name: Audit Findings Disposition
+      href: docs/Quality/audit-findings-log.md
+    - name: Prototype UI Review
+      href: docs/Quality/prototype-ui-review.md
+- name: Release & Operations
+  items:
+    - name: Release Notes (v1.0.0)
+      href: docs/Release/release-notes.md
+    - name: Deployment Strategy
+      href: docs/Release/deployment-strategy.md
+    - name: Rollback Plan
+      href: docs/Release/rollback-plan.md
+- name: InnerSource Governance
+  items:
+    - name: Contributing Guide
+      href: CONTRIBUTING.md
+    - name: Support
+      href: SUPPORT.md
+    - name: Third-Party OSS Notice
+      href: NOTICE.md

@@ -1,0 +1,16 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "01_low_clean_orders",
+  "queriesMetadata": {
+    "clean_orders": {
+      "loadEnabled": false,
+      "queryId": "8aecc33d-aacc-5871-b1e4-a263b73d7f4c",
+      "queryName": "clean_orders"
+    }
+  },
+  "queryGroups": []
+}

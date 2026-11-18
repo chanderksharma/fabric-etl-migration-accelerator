@@ -1,0 +1,17 @@
+{
+  "name": "m_orders",
+  "transformations": [
+    {"id": "source-1", "name": "Orders", "type": "Source"},
+    {
+      "id": "filter-1",
+      "name": "Valid Orders",
+      "type": "Filter",
+      "condition": "Amount > 0"
+    },
+    {"id": "target-1", "name": "Orders Curated", "type": "Target"}
+  ],
+  "links": [
+    {"from": "source-1", "to": "filter-1"},
+    {"from": "filter-1", "to": "target-1"}
+  ]
+}

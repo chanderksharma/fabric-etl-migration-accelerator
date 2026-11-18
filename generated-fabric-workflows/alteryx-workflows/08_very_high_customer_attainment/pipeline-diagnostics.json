@@ -1,0 +1,7 @@
+{
+  "workflow": "alteryx-workflows\\08_very_high_customer_attainment.yxmd",
+  "state": "blocked",
+  "diagnostics": [
+    "Alteryx pipeline generation is available only for mixed-item bundles"
+  ]
+}

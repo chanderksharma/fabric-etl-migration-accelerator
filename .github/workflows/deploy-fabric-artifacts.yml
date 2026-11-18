@@ -1,0 +1,148 @@
+name: Deploy Fabric artifacts
+run-name: Deploy ${{ inputs.target }} ${{ inputs.workflow_filter }} (${{ inputs.deployment_id }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      FABRIC_WORKSPACE_ID:
+        description: Fabric workspace ID
+        required: true
+        type: string
+      deployment_id:
+        description: Correlation ID supplied by the deployment API
+        required: false
+        default: manual
+        type: string
+      artifact_root:
+        description: Repository-relative generated artifact root
+        required: true
+        default: generated-fabric-workflows
+        type: string
+      target:
+        description: Fabric item type to deploy
+        required: true
+        default: Both
+        type: choice
+        options:
+          - Both
+          - Bundle
+          - Dataflow
+          - Notebook
+          - DataPipeline
+      workflow_filter:
+        description: Wildcard for workflow-relative directories
+        required: true
+        default: "*"
+        type: string
+      conflict_behavior:
+        description: Behavior when an item with the same type and name exists
+        required: true
+        default: Update
+        type: choice
+        options:
+          - Fail
+          - Skip
+          - Update
+      dry_run:
+        description: Validate and list envelopes without calling Fabric
+        required: true
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      FABRIC_WORKSPACE_ID:
+        required: true
+        type: string
+      deployment_id:
+        required: false
+        default: reusable
+        type: string
+      artifact_root:
+        required: false
+        default: generated-fabric-workflows
+        type: string
+      target:
+        required: false
+        default: Both
+        type: string
+      workflow_filter:
+        required: false
+        default: "*"
+        type: string
+      conflict_behavior:
+        required: false
+        default: Update
+        type: string
+      dry_run:
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      AZURE_CLIENT_ID:
+        required: false
+      AZURE_TENANT_ID:
+        required: false
+      AZURE_CLIENT_SECRET:
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: fabric-deploy-dev-${{ inputs.FABRIC_WORKSPACE_ID }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy generated definitions
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
+    environment:
+      name: dev
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      FABRIC_WORKSPACE_ID: ${{ inputs.FABRIC_WORKSPACE_ID }}
+      INPUT_ARTIFACT_ROOT: ${{ inputs.artifact_root }}
+      INPUT_TARGET: ${{ inputs.target }}
+      INPUT_WORKFLOW_FILTER: ${{ inputs.workflow_filter }}
+      INPUT_CONFLICT_BEHAVIOR: ${{ inputs.conflict_behavior }}
+      INPUT_DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Deploy Fabric definitions
+        shell: pwsh
+        run: |
+          $Parameters = @{
+            ArtifactRoot = $env:INPUT_ARTIFACT_ROOT
+            Target = $env:INPUT_TARGET
+            WorkflowFilter = $env:INPUT_WORKFLOW_FILTER
+            ConflictBehavior = $env:INPUT_CONFLICT_BEHAVIOR
+          }
+          if ($env:INPUT_DRY_RUN -eq 'true') {
+            $Parameters.DryRun = $true
+          }
+          ./scripts/Deploy-FabricArtifacts.ps1 @Parameters
+
+      - name: Commit authoritative Development workspace to Git
+        if: ${{ inputs.dry_run == false && vars.FABRIC_SYNC_DEVELOPMENT_TO_GIT == 'true' }}
+        shell: pwsh
+        env:
+          FABRIC_COMMIT_COMMENT: Sync accelerator deployment ${{ inputs.deployment_id }}
+          FABRIC_VARIABLE_LIBRARY_NAME: ${{ vars.FABRIC_VARIABLE_LIBRARY_NAME }}
+          FABRIC_ACTIVE_VALUE_SET_NAME: ${{ vars.FABRIC_DEV_VALUE_SET_NAME }}
+        run: |
+          $Parameters = @{
+            Operation = 'SyncDevelopmentToGit'
+            WorkspaceId = $env:FABRIC_WORKSPACE_ID
+            CommitComment = $env:FABRIC_COMMIT_COMMENT
+          }
+          if ($env:FABRIC_VARIABLE_LIBRARY_NAME) {
+            $Parameters.VariableLibraryName = $env:FABRIC_VARIABLE_LIBRARY_NAME
+            $Parameters.ActiveValueSetName = $env:FABRIC_ACTIVE_VALUE_SET_NAME
+          }
+          ./scripts/Invoke-FabricAlm.ps1 @Parameters

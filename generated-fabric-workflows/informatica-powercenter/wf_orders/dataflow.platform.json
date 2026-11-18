@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "config": {
+    "logicalId": "4f893a15-d76b-5633-b651-53033d1ed8f4",
+    "version": "2.0"
+  },
+  "metadata": {
+    "description": "Generated from Informatica PowerCenter static analysis. Independent semantic validation remains required.",
+    "displayName": "wf_orders",
+    "type": "Dataflow"
+  }
+}

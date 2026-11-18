@@ -1,0 +1,36 @@
+{
+  "workflow": "basic_repository.xml!Sales/wf_orders",
+  "target": "pipeline",
+  "validation_state": "scaffold",
+  "translation_mode": "scaffold",
+  "deployable": false,
+  "definition_ready": false,
+  "runtime_ready": false,
+  "source_sha256": "4ce22861ce28d30036bdde7c43cfc629b5618737028ba4f98d2bf6dee46046c2",
+  "code_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "compiler_version": "1.4.0",
+  "graph_version": "1.0.0",
+  "registry_version": "2026.11.3",
+  "rules_version": "1.4.0",
+  "code": "",
+  "diagnostics": [
+    "A single PowerCenter session deploys directly as Dataflow Gen2; a Fabric Pipeline is not required"
+  ],
+  "required_bindings": [
+    "manual implementation for unsupported ETL semantics"
+  ],
+  "artifact_path": "informatica-powercenter/wf_orders",
+  "definition_files": [
+    "pipeline-diagnostics.json",
+    "pipeline-manifest.json"
+  ],
+  "definition_queries": [],
+  "loaded_queries": [],
+  "query_groups": [],
+  "query_group_assignments": {},
+  "source_platform": "informatica_powercenter",
+  "source_product": "Informatica PowerCenter",
+  "asset_type": "workflow",
+  "native_id": "wf_orders",
+  "folder": "Sales"
+}

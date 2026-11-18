@@ -1,0 +1,7 @@
+{
+  "workflow": "alteryx-workflows\\sample_merge_append_joins.yxmd",
+  "state": "blocked",
+  "diagnostics": [
+    "Only a supported linear or Union/CrossTab graph is native"
+  ]
+}

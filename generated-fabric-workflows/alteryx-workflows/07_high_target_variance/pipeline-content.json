@@ -1,0 +1,47 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "dependsOn": [],
+        "name": "Run Dataflow Gen2",
+        "policy": {
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureInput": false,
+          "secureOutput": false,
+          "timeout": "0.12:00:00"
+        },
+        "type": "RefreshDataflow",
+        "typeProperties": {
+          "dataflowId": "{{DATAFLOW_ITEM_ID}}",
+          "notifyOption": "NoNotification",
+          "workspaceId": "{{WORKSPACE_ID}}"
+        }
+      },
+      {
+        "dependsOn": [
+          {
+            "activity": "Run Dataflow Gen2",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "name": "Run Fabric Notebook",
+        "policy": {
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureInput": false,
+          "secureOutput": false,
+          "timeout": "0.12:00:00"
+        },
+        "type": "TridentNotebook",
+        "typeProperties": {
+          "notebookId": "{{NOTEBOOK_ITEM_ID}}",
+          "parameters": {},
+          "workspaceId": "{{WORKSPACE_ID}}"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "07_high_target_variance",
+  "queriesMetadata": {
+    "numeric_target": {
+      "loadEnabled": false,
+      "queryId": "1d297272-cb20-5a02-8e4f-49bb42a6d3e2",
+      "queryName": "numeric_target"
+    },
+    "region_totals": {
+      "loadEnabled": false,
+      "queryId": "ba75a454-bba7-5849-a625-a4708eb60f10",
+      "queryName": "region_totals"
+    },
+    "running_total_by_region": {
+      "loadEnabled": false,
+      "queryId": "89017f86-f8a9-55cd-bd25-41c778477aae",
+      "queryName": "running_total_by_region"
+    },
+    "running_totals": {
+      "loadEnabled": false,
+      "queryId": "ffcd1164-dd76-5527-9555-fc38a601223f",
+      "queryName": "running_totals"
+    },
+    "variance_11": {
+      "loadEnabled": false,
+      "queryId": "6d0dfd77-f82d-56e9-8340-7e6b4428a180",
+      "queryName": "variance_11"
+    }
+  },
+  "queryGroups": []
+}

@@ -1,0 +1,28 @@
+{
+  "name": "fabric-etl-migration-accelerator",
+  "image": "mcr.microsoft.com/devcontainers/python:3.13-bookworm",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    },
+    "ghcr.io/devcontainers/features/powershell:1": {}
+  },
+  "postCreateCommand": "pip install --no-cache-dir uv && uv sync --extra dev --locked",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "editor.formatOnSave": true
+      },
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "ms-vscode.powershell",
+        "GitHub.vscode-pull-request-github"
+      ]
+    }
+  }
+}
