@@ -161,11 +161,11 @@ repository variables when configured. The workflow exposes the verified
 `pipeline_id` and `pipeline_name` as job outputs and in its summary.
 
 An accessible pipeline with the exact same name is reused only when its stage
-names and order match. When `pipeline_name` does not exist yet, the default
-`on_workspace_conflict: Reuse` setting also reuses an existing pipeline if all
-requested workspaces are already assigned to it in matching stages, leaving
-empty stages ready to attach. Select `Fail` to require an exact `pipeline_name`
-match instead. Existing descriptions, stage visibility, and nonempty
+names and order match. When `pipeline_name` does not exist yet, the workflow
+automatically reuses an existing pipeline if all requested workspaces are
+already assigned to it in matching stages, leaving empty stages ready to
+attach. No conflict-mode input is required. Existing descriptions, stage
+visibility, and nonempty
 workspace assignments are preserved. Mismatches fail without deleting or replacing
 anything. A preview of a new name reports `WouldCreate` and has no pipeline ID.
 

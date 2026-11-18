@@ -22,7 +22,6 @@ def _run_provisioning(
     stages: list[str] | None = None,
     workflow_steps: bool = False,
     workspaces: tuple[str, str, str] = ("", "", ""),
-    on_workspace_conflict: str = "Fail",
 ) -> subprocess.CompletedProcess[str]:
     executable = shutil.which("pwsh")
     if executable is None:
@@ -34,7 +33,6 @@ def _run_provisioning(
         "failure": failure,
         "stage_names": stage_names,
         "workflow_steps": workflow_steps,
-        "on_workspace_conflict": on_workspace_conflict,
     }
     if workflow_steps:
         workflow = (
@@ -193,7 +191,6 @@ else {
         DisplayName = 'Synthetic ALM'
         Description = 'Synthetic provisioning fixture'
         StageNames = @($global:Scenario.stage_names)
-        OnWorkspaceConflict = $global:Scenario.on_workspace_conflict
         DryRun = [bool]$global:Scenario.dry_run
     }
     if ($env:INPUT_DEV_WORKSPACE_NAME -or $env:INPUT_TEST_WORKSPACE_NAME -or
@@ -227,7 +224,6 @@ exit $ExitCode
         "INPUT_DEV_WORKSPACE_NAME": workspaces[0],
         "INPUT_TEST_WORKSPACE_NAME": workspaces[1],
         "INPUT_PROD_WORKSPACE_NAME": workspaces[2],
-        "INPUT_ON_WORKSPACE_CONFLICT": on_workspace_conflict,
     }
     return subprocess.run(
         [executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
@@ -316,7 +312,6 @@ def test_reuse_by_workspace_returns_existing_pipeline_and_assigns_empty_stage(
         failure="reuse-by-workspace",
         workflow_steps=True,
         workspaces=("Synthetic Dev", "Synthetic Test", ""),
-        on_workspace_conflict="Reuse",
     )
     assert result.returncode == 0, result.stderr
     output = json.loads(result.stdout)
@@ -345,7 +340,6 @@ def test_reuse_by_workspace_rejects_mismatched_or_split_assignments(
         existing=False,
         failure=scenario,
         workspaces=("Synthetic Dev", "Synthetic Test", ""),
-        on_workspace_conflict="Reuse",
     )
     assert result.returncode != 0
     assert error in result.stderr

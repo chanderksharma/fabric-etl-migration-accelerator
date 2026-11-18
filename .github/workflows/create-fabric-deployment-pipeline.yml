@@ -22,14 +22,6 @@ on:
       prod_workspace_name:
         description: Exact name of an existing workspace for Production (optional)
         type: string
-      on_workspace_conflict:
-        description: When a requested workspace is already assigned, Reuse that pipeline if stages match or Fail
-        required: true
-        default: Reuse
-        type: choice
-        options:
-          - Reuse
-          - Fail
       dry_run:
         description: Preview without creating a pipeline or assigning workspaces
         required: true
@@ -67,7 +59,6 @@ jobs:
       INPUT_DEV_WORKSPACE_NAME: ${{ inputs.dev_workspace_name }}
       INPUT_TEST_WORKSPACE_NAME: ${{ inputs.test_workspace_name }}
       INPUT_PROD_WORKSPACE_NAME: ${{ inputs.prod_workspace_name }}
-      INPUT_ON_WORKSPACE_CONFLICT: ${{ inputs.on_workspace_conflict }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -89,7 +80,6 @@ jobs:
               [string]$env:INPUT_TEST_WORKSPACE_NAME
               [string]$env:INPUT_PROD_WORKSPACE_NAME
             )
-            OnWorkspaceConflict = $env:INPUT_ON_WORKSPACE_CONFLICT
             DryRun = $env:INPUT_DRY_RUN -eq 'true'
           }
           $ResultJson = (& .\scripts\New-FabricDeploymentPipeline.ps1 @Parameters | Out-String).Trim()

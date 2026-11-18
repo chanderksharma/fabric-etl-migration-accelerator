@@ -19,8 +19,6 @@
     Ordered stage names. Defaults to Development, Test, and Production.
 .PARAMETER WorkspaceNames
     Optional workspace names in stage order. Blank entries leave stages unchanged.
-.PARAMETER OnWorkspaceConflict
-    Behavior when a requested workspace is already assigned: Fail or Reuse.
 .PARAMETER DryRun
     Previews creation and workspace assignments without calling a write API.
 .EXAMPLE
@@ -47,10 +45,6 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string[]]$WorkspaceNames,
-
-    [Parameter(Mandatory = $false)]
-    [ValidateSet('Fail', 'Reuse')]
-    [string]$OnWorkspaceConflict = 'Fail',
 
     [Parameter(Mandatory = $false)]
     [switch]$DryRun
@@ -143,8 +137,6 @@ function Get-FabricWorkspaceAssignmentPlan {
         [object[]]$Pipelines,
         [string]$PipelineId,
         [string]$Token,
-        [ValidateSet('Fail', 'Reuse')]
-        [string]$OnConflict = 'Fail',
         [bool]$CanReuseByWorkspace = $false
     )
 
@@ -209,7 +201,7 @@ function Get-FabricWorkspaceAssignmentPlan {
         $_.PipelineId -ne $PipelineId -or $_.StageName -cne $_.Entry.StageName
     })
     if ($Conflicts.Count -gt 0) {
-        if (-not $CanReuseByWorkspace -or $OnConflict -ne 'Reuse') {
+        if (-not $CanReuseByWorkspace) {
             $First = $Conflicts[0]
             throw "Workspace '$($First.Entry.WorkspaceName)' is already assigned to '$($First.PipelineName)' / '$($First.StageName)'; it will not be moved"
         }
@@ -377,7 +369,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         if (@($WorkspaceNames | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
             $AssignmentPlan = Get-FabricWorkspaceAssignmentPlan -Names $WorkspaceNames `
                 -Stages $StageNames -Pipelines $Pipelines -PipelineId $PipelineId -Token $Token `
-                -OnConflict $OnWorkspaceConflict -CanReuseByWorkspace ($Status -eq 'WouldCreate')
+                -CanReuseByWorkspace ($Status -eq 'WouldCreate')
             $Assignments = @($AssignmentPlan.Assignments)
             if ($AssignmentPlan.ReusedByWorkspace) {
                 $PipelineId = $AssignmentPlan.PipelineId
