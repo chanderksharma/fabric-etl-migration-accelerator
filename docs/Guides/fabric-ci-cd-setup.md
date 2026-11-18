@@ -152,9 +152,11 @@ self-hosted Windows X64 runner.
 4. Enter the exact display names of the existing Development, Test, and
    Production workspaces. All three are required; create the workspaces and
    grant the deployment identity Admin access before running this workflow.
-5. To give a team access to the pipeline, enter its Entra security-group object
-   ID in `pipeline_admin_group_id`. This is the group object ID, not its name,
-   application ID, or email address.
+5. To give a team access to the pipeline, enter the configured Entra
+   security-group name or an object ID in `pipeline_admin_group`. Name resolution
+   uses `FABRIC_PIPELINE_ADMIN_GROUP_NAME` and
+   `FABRIC_PIPELINE_ADMIN_GROUP_ID` repository variables; it does not require
+   Microsoft Graph permissions. An arbitrary unconfigured name is rejected.
 6. Leave `dry_run` set to `true` and review the proposed pipeline, assignments,
    and group access
    in the run summary. Rerun with `dry_run: false` to apply them.
@@ -190,6 +192,15 @@ pipelines. Existing matching access is reported as `AlreadyAdmin`; dry runs
 report `WouldAddAdmin` or `WouldAddAfterCreate`. The service principal must
 already be pipeline Admin to grant access on a reused pipeline. No group
 membership is modified.
+
+Configure the standard name mapping once:
+
+```powershell
+gh variable set FABRIC_PIPELINE_ADMIN_GROUP_NAME `
+  --repo <owner>/<repository> --body '<exact-group-name>'
+gh variable set FABRIC_PIPELINE_ADMIN_GROUP_ID `
+  --repo <owner>/<repository> --body '<group-object-id>'
+```
 
 The workflow does not create workspaces, move or unassign existing workspaces,
 promote items, or overwrite `FABRIC_DEPLOYMENT_PIPELINE_ID`. Review and configure

@@ -19,8 +19,12 @@
     Ordered stage names. Defaults to Development, Test, and Production.
 .PARAMETER WorkspaceNames
     Required existing workspace names in stage order.
-.PARAMETER PipelineAdminGroupId
-    Optional Entra security-group object ID to grant pipeline Admin access.
+.PARAMETER PipelineAdminGroup
+    Optional configured Entra security-group display name or object ID.
+.PARAMETER ConfiguredPipelineAdminGroupName
+    Repository-configured group name used to resolve a name without Microsoft Graph.
+.PARAMETER ConfiguredPipelineAdminGroupId
+    Repository-configured object ID paired with ConfiguredPipelineAdminGroupName.
 .PARAMETER DryRun
     Previews creation, workspace assignments, and group access without calling a write API.
 .EXAMPLE
@@ -51,7 +55,14 @@ param(
     [string[]]$WorkspaceNames,
 
     [Parameter(Mandatory = $false)]
-    [string]$PipelineAdminGroupId,
+    [Alias('PipelineAdminGroupId')]
+    [string]$PipelineAdminGroup,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ConfiguredPipelineAdminGroupName,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ConfiguredPipelineAdminGroupId,
 
     [Parameter(Mandatory = $false)]
     [switch]$DryRun
@@ -127,6 +138,41 @@ function Get-FabricProvisioningId {
         throw "Fabric did not return a valid $Resource ID"
     }
     return $ParsedId.ToString()
+}
+
+function Resolve-FabricPipelineAdminGroupId {
+    <#
+    .SYNOPSIS
+        Resolves an object ID directly or through one repository-configured group mapping.
+    .OUTPUTS
+        System.String canonical GUID or an empty string.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [string]$InputValue,
+        [string]$ConfiguredName,
+        [string]$ConfiguredId
+    )
+
+    if ([string]::IsNullOrWhiteSpace($InputValue)) { return '' }
+    if ($InputValue -cne $InputValue.Trim()) {
+        throw 'PipelineAdminGroup must not have surrounding whitespace'
+    }
+    $ParsedId = [guid]::Empty
+    if ([guid]::TryParse($InputValue, [ref]$ParsedId) -and $ParsedId -ne [guid]::Empty) {
+        return $ParsedId.ToString()
+    }
+    if (
+        [string]::IsNullOrWhiteSpace($ConfiguredName) -or
+        [string]::IsNullOrWhiteSpace($ConfiguredId)
+    ) {
+        throw "Pipeline Admin group '$InputValue' is a name, but the repository group-name mapping is not configured"
+    }
+    if ($InputValue -cne $ConfiguredName) {
+        throw "Pipeline Admin group '$InputValue' does not exactly match the configured group '$ConfiguredName'"
+    }
+    return Get-FabricProvisioningId -Value $ConfiguredId -Resource 'configured pipeline Admin group'
 }
 
 function Get-FabricWorkspaceAssignmentPlan {
@@ -446,14 +492,10 @@ if ($MyInvocation.InvocationName -ne '.') {
         ) {
             throw 'DisplayName must be non-empty and have no leading or trailing whitespace'
         }
-        $AdminGroupId = ''
-        if (-not [string]::IsNullOrWhiteSpace($PipelineAdminGroupId)) {
-            if ($PipelineAdminGroupId -cne $PipelineAdminGroupId.Trim()) {
-                throw 'PipelineAdminGroupId must not have surrounding whitespace'
-            }
-            $AdminGroupId = Get-FabricProvisioningId `
-                -Value $PipelineAdminGroupId -Resource 'pipeline Admin group'
-        }
+        $AdminGroupId = Resolve-FabricPipelineAdminGroupId `
+            -InputValue $PipelineAdminGroup `
+            -ConfiguredName $ConfiguredPipelineAdminGroupName `
+            -ConfiguredId $ConfiguredPipelineAdminGroupId
         $Seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($Name in $StageNames) {
             if (

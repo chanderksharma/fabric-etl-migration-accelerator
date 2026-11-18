@@ -26,7 +26,9 @@ def _run_provisioning(
         "Synthetic Test",
         "Synthetic Prod",
     ),
-    admin_group_id: str = "",
+    admin_group: str = "",
+    configured_group_name: str = "sg-fabric-platform-admins",
+    configured_group_id: str = "00000000-0000-0000-0000-000000000501",
 ) -> subprocess.CompletedProcess[str]:
     executable = shutil.which("pwsh")
     if executable is None:
@@ -38,7 +40,9 @@ def _run_provisioning(
         "failure": failure,
         "stage_names": stage_names,
         "workflow_steps": workflow_steps,
-        "admin_group_id": admin_group_id,
+        "admin_group": admin_group,
+        "configured_group_name": configured_group_name,
+        "configured_group_id": configured_group_id,
     }
     if workflow_steps:
         workflow = (
@@ -235,7 +239,9 @@ else {
         DisplayName = 'Synthetic ALM'
         Description = 'Synthetic provisioning fixture'
         StageNames = @($global:Scenario.stage_names)
-        PipelineAdminGroupId = $global:Scenario.admin_group_id
+        PipelineAdminGroup = $global:Scenario.admin_group
+        ConfiguredPipelineAdminGroupName = $global:Scenario.configured_group_name
+        ConfiguredPipelineAdminGroupId = $global:Scenario.configured_group_id
         DryRun = [bool]$global:Scenario.dry_run
     }
     $Parameters.WorkspaceNames = @(
@@ -266,7 +272,9 @@ exit $ExitCode
         "INPUT_DEV_WORKSPACE_NAME": workspaces[0],
         "INPUT_TEST_WORKSPACE_NAME": workspaces[1],
         "INPUT_PROD_WORKSPACE_NAME": workspaces[2],
-        "INPUT_PIPELINE_ADMIN_GROUP_ID": admin_group_id,
+        "INPUT_PIPELINE_ADMIN_GROUP": admin_group,
+        "CONFIGURED_PIPELINE_ADMIN_GROUP_NAME": configured_group_name,
+        "CONFIGURED_PIPELINE_ADMIN_GROUP_ID": configured_group_id,
     }
     return subprocess.run(
         [executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
@@ -281,7 +289,9 @@ exit $ExitCode
 
 def test_workflow_adds_and_verifies_optional_admin_group(tmp_path: Path) -> None:
     group_id = "00000000-0000-0000-0000-000000000501"
-    result = _run_provisioning(tmp_path, workflow_steps=True, admin_group_id=group_id)
+    result = _run_provisioning(
+        tmp_path, workflow_steps=True, admin_group="sg-fabric-platform-admins"
+    )
     assert result.returncode == 0, result.stderr
     output = json.loads(result.stdout)
     assert output["Result"]["PipelineAdminGroup"] == {
@@ -307,7 +317,7 @@ def test_workflow_adds_and_verifies_optional_admin_group(tmp_path: Path) -> None
 def test_new_pipeline_dry_run_previews_group_access_without_writes(tmp_path: Path) -> None:
     group_id = "00000000-0000-0000-0000-000000000501"
     result = _run_provisioning(
-        tmp_path, dry_run=True, workflow_steps=True, admin_group_id=group_id
+        tmp_path, dry_run=True, workflow_steps=True, admin_group=group_id
     )
     assert result.returncode == 0, result.stderr
     output = json.loads(result.stdout)
@@ -324,7 +334,7 @@ def test_matching_group_admin_is_reused_without_writes(tmp_path: Path) -> None:
         tmp_path,
         existing=True,
         failure="group-existing",
-        admin_group_id=group_id,
+        admin_group=group_id,
     )
     assert result.returncode == 0, result.stderr
     output = json.loads(result.stdout)
@@ -332,10 +342,21 @@ def test_matching_group_admin_is_reused_without_writes(tmp_path: Path) -> None:
     assert all(call["Method"] == "Get" for call in output["Calls"])
 
 
-def test_invalid_admin_group_id_fails_before_api_calls(tmp_path: Path) -> None:
-    result = _run_provisioning(tmp_path, admin_group_id="not-a-guid")
+def test_unknown_admin_group_name_fails_before_api_calls(tmp_path: Path) -> None:
+    result = _run_provisioning(tmp_path, admin_group="unknown-group")
     assert result.returncode != 0
-    assert "valid pipeline Admin group ID" in result.stderr
+    assert "does not exactly match the configured group" in result.stderr
+    assert json.loads(result.stdout)["Calls"] == []
+
+
+def test_invalid_configured_admin_group_id_fails_before_api_calls(tmp_path: Path) -> None:
+    result = _run_provisioning(
+        tmp_path,
+        admin_group="sg-fabric-platform-admins",
+        configured_group_id="not-a-guid",
+    )
+    assert result.returncode != 0
+    assert "valid configured pipeline Admin group ID" in result.stderr
     assert json.loads(result.stdout)["Calls"] == []
 
 

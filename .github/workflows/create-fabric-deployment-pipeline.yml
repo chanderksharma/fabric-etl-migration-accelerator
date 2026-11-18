@@ -25,8 +25,8 @@ on:
         description: Exact name of the existing Production workspace
         required: true
         type: string
-      pipeline_admin_group_id:
-        description: Entra security-group object ID to add as pipeline Admin (optional)
+      pipeline_admin_group:
+        description: Configured Entra security-group name or object ID to add as pipeline Admin (optional)
         type: string
       dry_run:
         description: Preview without creating a pipeline or assigning workspaces
@@ -65,7 +65,9 @@ jobs:
       INPUT_DEV_WORKSPACE_NAME: ${{ inputs.dev_workspace_name }}
       INPUT_TEST_WORKSPACE_NAME: ${{ inputs.test_workspace_name }}
       INPUT_PROD_WORKSPACE_NAME: ${{ inputs.prod_workspace_name }}
-      INPUT_PIPELINE_ADMIN_GROUP_ID: ${{ inputs.pipeline_admin_group_id }}
+      INPUT_PIPELINE_ADMIN_GROUP: ${{ inputs.pipeline_admin_group }}
+      CONFIGURED_PIPELINE_ADMIN_GROUP_NAME: ${{ vars.FABRIC_PIPELINE_ADMIN_GROUP_NAME }}
+      CONFIGURED_PIPELINE_ADMIN_GROUP_ID: ${{ vars.FABRIC_PIPELINE_ADMIN_GROUP_ID }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -87,7 +89,9 @@ jobs:
               [string]$env:INPUT_TEST_WORKSPACE_NAME
               [string]$env:INPUT_PROD_WORKSPACE_NAME
             )
-            PipelineAdminGroupId = [string]$env:INPUT_PIPELINE_ADMIN_GROUP_ID
+            PipelineAdminGroup = [string]$env:INPUT_PIPELINE_ADMIN_GROUP
+            ConfiguredPipelineAdminGroupName = [string]$env:CONFIGURED_PIPELINE_ADMIN_GROUP_NAME
+            ConfiguredPipelineAdminGroupId = [string]$env:CONFIGURED_PIPELINE_ADMIN_GROUP_ID
             DryRun = $env:INPUT_DRY_RUN -eq 'true'
           }
           $ResultJson = (& .\scripts\New-FabricDeploymentPipeline.ps1 @Parameters | Out-String).Trim()
