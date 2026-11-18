@@ -151,6 +151,69 @@ workflow selects the environment from the requested target stage:
 The workflow only supports manual `workflow_dispatch`. It does not run on push
 or pull request events.
 
+### Choose promotion items
+
+The promotion workflow defaults to `promotion_scope: Selected`. Supply
+`selected_items` as a JSON array of exact, case-sensitive source item names and
+Fabric item types:
+
+```json
+[
+  {"name": "03_low_unique_customers", "type": "Dataflow"},
+  {"name": "Notebook_1", "type": "Notebook"}
+]
+```
+
+Select `dependencies_reviewed` only after reviewing Fabric lineage and checking
+that dependencies are included in the selection or already exist in the target.
+The stage-items API does not expose a dependency graph. The workflow does not
+claim automatic dependency discovery or add related items implicitly. Staging
+Lakehouse and Warehouse items are included only when explicitly selected or when
+you choose `All`.
+
+Choose `promotion_scope: All` and leave `selected_items` empty or `[]` for a
+whole-stage promotion. Both modes require between 1 and 300 resolved items.
+Empty Selected requests, malformed JSON, duplicate requests, and unknown or
+ambiguous name/type matches fail without falling back to All.
+
+The workflow runs in two jobs:
+
+1. A read-only planning job uses the source GitHub environment: `dev` for Test
+   promotions, or `test` for Production promotions. It resolves source-stage IDs
+   and publishes a summary of the exact item IDs, types, and create/update actions.
+2. The promotion job depends on that plan and uses the target GitHub environment.
+   Review the planning summary before approving Production. The job rechecks the
+   plan against current stage assignments, selections, pairings, and options.
+   Changed plans fail and require a new planning run.
+
+Both jobs need the Azure authentication secrets in their respective environments.
+The native deploy request always contains the explicit, non-empty item list,
+including in All mode. Selected item pairings are verified after deployment,
+and existing unselected target item metadata is checked for unexpected changes.
+The plan fixes the item scope, not the underlying item definitions; keep the
+source workspace stable during release approval. No data refresh is performed.
+
+For a read-only plan from PowerShell, followed by an explicitly reviewed promotion:
+
+```powershell
+$Parameters = @{
+    DeploymentPipelineId = $env:FABRIC_DEPLOYMENT_PIPELINE_ID
+    SourceStageName = 'Test'
+    TargetStageName = 'Production'
+    PromotionScope = 'Selected'
+    SelectedItemsJson = '[{"name":"Notebook_1","type":"Notebook"}]'
+    DependenciesReviewed = $true
+}
+$Plan = & .\scripts\Invoke-FabricAlm.ps1 -Operation PlanPromotion @Parameters |
+    Out-String
+$Plan | ConvertFrom-Json | Format-List
+# Review the plan before executing this separate command.
+& .\scripts\Invoke-FabricAlm.ps1 -Operation Promote @Parameters -ReviewedPlanJson $Plan
+```
+
+`Promote -DryRun` remains an offline configuration check. It does not resolve
+items or replace the read-only `PlanPromotion` operation.
+
 ### Configure Variable Library stages
 
 Create Development, Test, and Production value sets in one Fabric Variable
@@ -166,6 +229,8 @@ After each promotion, `Invoke-FabricAlm.ps1`:
 
 Leave `FABRIC_VARIABLE_LIBRARY_NAME` unset when no Variable Library is used.
 The workflow passes an active value set only when a library is configured.
+Activation is performed only when that Variable Library is included in the
+resolved promotion scope; an unselected library is left unchanged.
 
 > [!WARNING]
 > Deployment Plan support in the Fabric deployment API is Beta. The promotion
@@ -246,10 +311,13 @@ commits pending Development workspace changes to its connected branch.
 1. Open **Actions > Promote Fabric ALM**.
 2. Select **Run workflow**.
 3. Choose `Test` or `Production`.
-4. Enter an audit note.
-5. Leave preview Deployment Plan support disabled unless it has been evaluated.
-6. Submit the workflow and complete the configured environment approval.
-7. Verify the Fabric Deployment Pipeline operation and target Variable Library
+4. Choose `Selected`, enter the name/type JSON, and confirm dependency review.
+   Choose `All` explicitly only when a whole-stage release is intended.
+5. Enter an audit note.
+6. Leave preview Deployment Plan support disabled unless it has been evaluated.
+7. Submit the workflow and review the completed planning job's summary before
+   approving the target environment.
+8. Verify the selected item pairings and any selected target Variable Library
    active value set.
 
 ### Configure accelerator dispatch

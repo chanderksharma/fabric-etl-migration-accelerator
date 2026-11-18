@@ -1,5 +1,5 @@
 name: Promote Fabric ALM
-run-name: Promote Fabric ${{ inputs.target_stage }}
+run-name: Promote Fabric ${{ inputs.target_stage }} (${{ inputs.promotion_scope }})
 
 on:
   workflow_dispatch:
@@ -12,6 +12,24 @@ on:
         options:
           - Test
           - Production
+      promotion_scope:
+        description: Selected items by default; All explicitly includes the whole source stage
+        required: true
+        default: Selected
+        type: choice
+        options:
+          - Selected
+          - All
+      selected_items:
+        description: 'JSON array, for example [{"name":"Notebook_1","type":"Notebook"}]'
+        required: false
+        default: '[]'
+        type: string
+      dependencies_reviewed:
+        description: Confirm Selected items include dependencies or dependencies already exist in the target
+        required: true
+        default: false
+        type: boolean
       deployment_note:
         description: Deployment Pipeline audit note
         required: true
@@ -32,8 +50,67 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  plan:
+    name: Plan ${{ inputs.promotion_scope }} promotion to ${{ inputs.target_stage }}
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 10
+    environment:
+      name: ${{ inputs.target_stage == 'Production' && 'test' || 'dev' }}
+    outputs:
+      promotion_plan: ${{ steps.plan.outputs.promotion_plan }}
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      FABRIC_DEPLOYMENT_PIPELINE_ID: ${{ vars.FABRIC_DEPLOYMENT_PIPELINE_ID }}
+      FABRIC_SOURCE_STAGE_NAME: ${{ inputs.target_stage == 'Production' && (vars.FABRIC_TEST_STAGE_NAME || 'Test') || (vars.FABRIC_DEV_STAGE_NAME || 'Development') }}
+      FABRIC_TARGET_STAGE_NAME: ${{ inputs.target_stage == 'Production' && (vars.FABRIC_PROD_STAGE_NAME || 'Production') || (vars.FABRIC_TEST_STAGE_NAME || 'Test') }}
+      FABRIC_VARIABLE_LIBRARY_NAME: ${{ vars.FABRIC_VARIABLE_LIBRARY_NAME }}
+      INPUT_ACTIVE_VALUE_SET_NAME: ${{ inputs.target_stage == 'Production' && (vars.FABRIC_PROD_VALUE_SET_NAME || 'prod') || (vars.FABRIC_TEST_VALUE_SET_NAME || 'test') }}
+      FABRIC_DEPLOYMENT_PLAN_ID: ${{ vars.FABRIC_DEPLOYMENT_PLAN_ID }}
+      FABRIC_DEPLOYMENT_NOTE: ${{ inputs.deployment_note }}
+      INPUT_PROMOTION_SCOPE: ${{ inputs.promotion_scope }}
+      INPUT_SELECTED_ITEMS: ${{ inputs.selected_items }}
+      INPUT_DEPENDENCIES_REVIEWED: ${{ inputs.dependencies_reviewed }}
+      INPUT_PREVIEW_DEPLOYMENT_PLAN: ${{ inputs.use_preview_deployment_plan }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve and summarize promotion scope
+        id: plan
+        shell: pwsh
+        run: |
+          $Parameters = @{
+            Operation = 'PlanPromotion'
+            DeploymentPipelineId = $env:FABRIC_DEPLOYMENT_PIPELINE_ID
+            SourceStageName = $env:FABRIC_SOURCE_STAGE_NAME
+            TargetStageName = $env:FABRIC_TARGET_STAGE_NAME
+            PromotionScope = $env:INPUT_PROMOTION_SCOPE
+            SelectedItemsJson = $env:INPUT_SELECTED_ITEMS
+            DependenciesReviewed = $env:INPUT_DEPENDENCIES_REVIEWED -eq 'true'
+            DeploymentNote = $env:FABRIC_DEPLOYMENT_NOTE
+          }
+          if ($env:FABRIC_VARIABLE_LIBRARY_NAME) {
+            $Parameters.VariableLibraryName = $env:FABRIC_VARIABLE_LIBRARY_NAME
+            $Parameters.ActiveValueSetName = $env:INPUT_ACTIVE_VALUE_SET_NAME
+          }
+          if ($env:INPUT_PREVIEW_DEPLOYMENT_PLAN -eq 'true') {
+            $Parameters.DeploymentPlanId = $env:FABRIC_DEPLOYMENT_PLAN_ID
+            $Parameters.EnablePreviewDeploymentPlan = $true
+          }
+          $PlanJson = (& ./scripts/Invoke-FabricAlm.ps1 @Parameters | Out-String).Trim()
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $Plan = $PlanJson | ConvertFrom-Json -ErrorAction Stop
+          $CompactPlan = $Plan | ConvertTo-Json -Depth 20 -Compress
+          if ([Text.Encoding]::Unicode.GetByteCount($CompactPlan) -gt 1MB) {
+            throw 'Promotion plan exceeds the GitHub job-output limit'
+          }
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "promotion_plan=$CompactPlan" -Encoding utf8
+
   promote:
     name: Promote to ${{ inputs.target_stage }}
+    needs: plan
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 30
     environment:
@@ -49,6 +126,11 @@ jobs:
       INPUT_ACTIVE_VALUE_SET_NAME: ${{ inputs.target_stage == 'Production' && (vars.FABRIC_PROD_VALUE_SET_NAME || 'prod') || (vars.FABRIC_TEST_VALUE_SET_NAME || 'test') }}
       FABRIC_DEPLOYMENT_PLAN_ID: ${{ vars.FABRIC_DEPLOYMENT_PLAN_ID }}
       FABRIC_DEPLOYMENT_NOTE: ${{ inputs.deployment_note }}
+      INPUT_PROMOTION_SCOPE: ${{ inputs.promotion_scope }}
+      INPUT_SELECTED_ITEMS: ${{ inputs.selected_items }}
+      INPUT_DEPENDENCIES_REVIEWED: ${{ inputs.dependencies_reviewed }}
+      INPUT_PREVIEW_DEPLOYMENT_PLAN: ${{ inputs.use_preview_deployment_plan }}
+      INPUT_REVIEWED_PLAN: ${{ needs.plan.outputs.promotion_plan }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -56,18 +138,25 @@ jobs:
       - name: Promote adjacent Fabric stage
         shell: pwsh
         run: |
+          if ([string]::IsNullOrWhiteSpace($env:INPUT_REVIEWED_PLAN)) {
+            throw 'A successful preflight promotion plan is required'
+          }
           $Parameters = @{
             Operation = 'Promote'
             DeploymentPipelineId = $env:FABRIC_DEPLOYMENT_PIPELINE_ID
             SourceStageName = $env:FABRIC_SOURCE_STAGE_NAME
             TargetStageName = $env:FABRIC_TARGET_STAGE_NAME
+            PromotionScope = $env:INPUT_PROMOTION_SCOPE
+            SelectedItemsJson = $env:INPUT_SELECTED_ITEMS
+            DependenciesReviewed = $env:INPUT_DEPENDENCIES_REVIEWED -eq 'true'
+            ReviewedPlanJson = $env:INPUT_REVIEWED_PLAN
             DeploymentNote = $env:FABRIC_DEPLOYMENT_NOTE
           }
           if ($env:FABRIC_VARIABLE_LIBRARY_NAME) {
             $Parameters.VariableLibraryName = $env:FABRIC_VARIABLE_LIBRARY_NAME
             $Parameters.ActiveValueSetName = $env:INPUT_ACTIVE_VALUE_SET_NAME
           }
-          if ('${{ inputs.use_preview_deployment_plan }}' -eq 'true') {
+          if ($env:INPUT_PREVIEW_DEPLOYMENT_PLAN -eq 'true') {
             $Parameters.DeploymentPlanId = $env:FABRIC_DEPLOYMENT_PLAN_ID
             $Parameters.EnablePreviewDeploymentPlan = $true
           }

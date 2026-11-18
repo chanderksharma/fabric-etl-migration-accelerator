@@ -203,7 +203,7 @@ def test_fabric_alm_workflow_handles_optional_variable_library(
         for line in workflow.splitlines()
         if "vars.FABRIC_PROD_VALUE_SET_NAME" in line
     )
-    run_script = textwrap.dedent(workflow.partition("        run: |\n")[2])
+    run_script = textwrap.dedent(workflow.rpartition("        run: |\n")[2])
     assert run_script.count("@Parameters") == 1
     run_script = run_script.replace("@Parameters", "@Parameters -DryRun")
     run_script = run_script.replace("${{ inputs.use_preview_deployment_plan }}", "false")
@@ -220,6 +220,11 @@ def test_fabric_alm_workflow_handles_optional_variable_library(
         "FABRIC_ACTIVE_VALUE_SET_NAME": "",
         "FABRIC_DEPLOYMENT_PLAN_ID": "",
         "FABRIC_DEPLOYMENT_NOTE": "Synthetic promotion acceptance check",
+        "INPUT_PROMOTION_SCOPE": "All",
+        "INPUT_SELECTED_ITEMS": "[]",
+        "INPUT_DEPENDENCIES_REVIEWED": "false",
+        "INPUT_PREVIEW_DEPLOYMENT_PLAN": "false",
+        "INPUT_REVIEWED_PLAN": "{}",
     }
     environment[value_set_variable] = "prod" if target_stage == "Production" else "test"
     result = subprocess.run(
@@ -254,7 +259,7 @@ def test_fabric_alm_script_fails_closed_and_uses_native_alm_apis() -> None:
     assert "/git/status" in script
     assert "/git/commitToGit" in script
     assert "/deploymentPipelines/$PipelineId/stages" in script
-    assert "/deploymentPipelines/$PipelineId/deploy" in script
+    assert "/deploymentPipelines/$($PromotionPlan.PipelineId)/deploy" in script
     assert "/variableLibraries/$LibraryId" in script
     assert "remote changes; update or reconcile" in script
     assert "contains conflicts; reconcile" in script

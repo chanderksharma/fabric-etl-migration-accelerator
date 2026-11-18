@@ -8,18 +8,26 @@
     Synchronizes an authoritative Fabric workspace to Git or promotes pipeline stages.
 .DESCRIPTION
     Commits validated Development workspace changes to its connected Git branch,
-    promotes adjacent Fabric Deployment Pipeline stages, and optionally selects
-    the target workspace's active Variable Library value set.
+    plans and promotes explicit item scopes between adjacent deployment stages,
+    and optionally activates a selected target Variable Library value set.
 .PARAMETER Operation
-    SyncDevelopmentToGit or Promote.
+    SyncDevelopmentToGit, PlanPromotion, or Promote.
 .PARAMETER WorkspaceId
     Development workspace ID used by SyncDevelopmentToGit.
 .PARAMETER DeploymentPipelineId
-    Fabric Deployment Pipeline ID used by Promote.
+    Fabric Deployment Pipeline ID used by PlanPromotion and Promote.
 .PARAMETER SourceStageName
     Source deployment stage display name.
 .PARAMETER TargetStageName
     Adjacent target deployment stage display name.
+.PARAMETER PromotionScope
+    Selected by default, or All to explicitly include every supported source item.
+.PARAMETER SelectedItemsJson
+    JSON array of objects containing an exact item name and type.
+.PARAMETER DependenciesReviewed
+    Confirms that selected items include required dependencies or those dependencies exist in the target.
+.PARAMETER ReviewedPlanJson
+    Unmodified PlanPromotion JSON, required before a non-dry-run promotion.
 .PARAMETER VariableLibraryName
     Optional Variable Library display name in the affected workspace.
 .PARAMETER ActiveValueSetName
@@ -33,12 +41,12 @@
 .PARAMETER EnablePreviewDeploymentPlan
     Explicitly enables the beta Deployment Plan request contract.
 .PARAMETER DryRun
-    Validates configuration and prints the planned operation without calling Fabric.
+    Validates configuration without calling Fabric; use PlanPromotion for read-only item resolution.
 .EXAMPLE
     ./scripts/Invoke-FabricAlm.ps1 -Operation SyncDevelopmentToGit `
         -WorkspaceId $env:FABRIC_WORKSPACE_ID
 .EXAMPLE
-    ./scripts/Invoke-FabricAlm.ps1 -Operation Promote `
+    ./scripts/Invoke-FabricAlm.ps1 -Operation PlanPromotion -PromotionScope All `
         -DeploymentPipelineId $env:FABRIC_DEPLOYMENT_PIPELINE_ID `
         -SourceStageName Development -TargetStageName Test
 .NOTES
@@ -49,7 +57,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('SyncDevelopmentToGit', 'Promote')]
+    [ValidateSet('SyncDevelopmentToGit', 'PlanPromotion', 'Promote')]
     [string]$Operation,
 
     [Parameter(Mandatory = $false)]
@@ -63,6 +71,19 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$TargetStageName = $env:FABRIC_TARGET_STAGE_NAME,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('Selected', 'All')]
+    [string]$PromotionScope = 'Selected',
+
+    [Parameter(Mandatory = $false)]
+    [string]$SelectedItemsJson = '[]',
+
+    [Parameter(Mandatory = $false)]
+    [switch]$DependenciesReviewed,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ReviewedPlanJson,
 
     [Parameter(Mandatory = $false)]
     [string]$VariableLibraryName = $env:FABRIC_VARIABLE_LIBRARY_NAME,
@@ -168,26 +189,31 @@ function Set-FabricVariableLibraryValueSet {
 
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [string]$Token
+        [string]$Token,
+
+        [Parameter(Mandatory = $false)]
+        [string]$LibraryId
     )
 
-    $Libraries = @()
-    $NextUri = "$FabricApi/workspaces/$Workspace/items?type=VariableLibrary"
-    while (-not [string]::IsNullOrWhiteSpace($NextUri)) {
-        $Page = Invoke-FabricRequest -Method Get -Uri $NextUri -Token $Token `
-            -SkillName 'variable-library-cli'
-        $Libraries += @(
-            $Page.value | Where-Object {
-                $_.type -eq 'VariableLibrary' -and $_.displayName -eq $LibraryName
-            }
-        )
-        $NextUri = [string]$Page.continuationUri
+    if ([string]::IsNullOrWhiteSpace($LibraryId)) {
+        $Libraries = @()
+        $NextUri = "$FabricApi/workspaces/$Workspace/items?type=VariableLibrary"
+        while (-not [string]::IsNullOrWhiteSpace($NextUri)) {
+            $Page = Invoke-FabricRequest -Method Get -Uri $NextUri -Token $Token `
+                -SkillName 'variable-library-cli'
+            $Libraries += @(
+                $Page.value | Where-Object {
+                    $_.type -eq 'VariableLibrary' -and $_.displayName -eq $LibraryName
+                }
+            )
+            $NextUri = [string]$Page.continuationUri
+        }
+        if ($Libraries.Count -ne 1) {
+            throw "Expected one Variable Library named '$LibraryName', found $($Libraries.Count)"
+        }
+        $LibraryId = [string]$Libraries[0].id
     }
-    if ($Libraries.Count -ne 1) {
-        throw "Expected one Variable Library named '$LibraryName', found $($Libraries.Count)"
-    }
-
-    $LibraryId = [string]$Libraries[0].id
+    Assert-FabricGuid -Name 'Variable Library ID' -Value $LibraryId
     $Body = @{
         properties = @{ activeValueSetName = $ValueSetName }
     } | ConvertTo-Json -Depth 5 -Compress
@@ -344,12 +370,114 @@ function Resolve-FabricDeploymentStage {
     return $Matches[0]
 }
 
-function Invoke-FabricStagePromotion {
+function ConvertFrom-FabricItemSelection {
     <#
     .SYNOPSIS
-        Promotes all supported items between adjacent deployment stages.
+        Validates explicit promotion scope without resolving or executing item content.
     .OUTPUTS
-        PSCustomObject promotion result.
+        PSCustomObject item name and type selections.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('Selected', 'All')]
+        [string]$Scope,
+
+        [Parameter(Mandatory = $false)]
+        [string]$ItemsJson,
+
+        [Parameter(Mandatory = $false)]
+        [bool]$Reviewed = $false
+    )
+
+    $Entries = @()
+    if (-not [string]::IsNullOrWhiteSpace($ItemsJson)) {
+        $Parsed = ConvertFrom-Json -InputObject $ItemsJson -NoEnumerate -ErrorAction Stop
+        if ($Parsed -isnot [array]) {
+            throw 'SelectedItemsJson must be a JSON array of name/type objects'
+        }
+        $Entries = @($Parsed)
+    }
+    if ($Scope -eq 'All') {
+        if ($Entries.Count -ne 0) {
+            throw 'All scope cannot be combined with selected items'
+        }
+        return
+    }
+    if ($Entries.Count -lt 1 -or $Entries.Count -gt 300) {
+        throw 'Selected scope requires between 1 and 300 items; it never falls back to All'
+    }
+    if (-not $Reviewed) {
+        throw 'Selected scope requires DependenciesReviewed; review lineage and target dependencies first'
+    }
+    $Seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($Entry in $Entries) {
+        $Properties = @($Entry.PSObject.Properties.Name)
+        if (
+            $Entry -isnot [pscustomobject] -or
+            $Properties.Count -ne 2 -or
+            'name' -cnotin $Properties -or 'type' -cnotin $Properties -or
+            $Entry.name -isnot [string] -or $Entry.type -isnot [string] -or
+            [string]::IsNullOrWhiteSpace($Entry.name) -or
+            [string]::IsNullOrWhiteSpace($Entry.type)
+        ) {
+            throw 'Each selected item must contain only non-empty string name and type fields'
+        }
+        if (-not $Seen.Add("$($Entry.type)`0$($Entry.name)")) {
+            throw "Duplicate selected item '$($Entry.name)' ($($Entry.type))"
+        }
+        [pscustomobject]@{ Name = $Entry.name; Type = $Entry.type }
+    }
+}
+
+function Get-FabricDeploymentStageItems {
+    <#
+    .SYNOPSIS
+        Lists every supported item in one deployment stage.
+    .OUTPUTS
+        PSCustomObject deployment stage items.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PipelineId,
+
+        [Parameter(Mandatory = $true)]
+        [string]$StageId,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Token
+    )
+
+    $NextUri = "$FabricApi/deploymentPipelines/$PipelineId/stages/$StageId/items"
+    while (-not [string]::IsNullOrWhiteSpace($NextUri)) {
+        $Page = Invoke-FabricRequest -Method Get -Uri $NextUri -Token $Token `
+            -SkillName 'deployment-pipelines-authoring-cli'
+        if ($null -eq $Page -or $null -eq $Page.value) {
+            throw 'Fabric returned an invalid stage-items collection'
+        }
+        foreach ($Item in @($Page.value)) {
+            Assert-FabricGuid -Name 'Stage item ID' -Value ([string]$Item.itemId)
+            if (
+                [string]::IsNullOrWhiteSpace([string]$Item.itemDisplayName) -or
+                [string]::IsNullOrWhiteSpace([string]$Item.itemType)
+            ) {
+                throw 'Fabric returned an item without a name or type'
+            }
+            $Item
+        }
+        $NextUri = [string]$Page.continuationUri
+    }
+}
+
+function New-FabricPromotionPlan {
+    <#
+    .SYNOPSIS
+        Resolves an exact, read-only promotion plan from source-stage metadata.
+    .OUTPUTS
+        PSCustomObject promotion plan.
     #>
     [CmdletBinding()]
     [OutputType([pscustomobject])]
@@ -374,6 +502,16 @@ function Invoke-FabricStagePromotion {
         [ValidateNotNullOrEmpty()]
         [string]$Token,
 
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('Selected', 'All')]
+        [string]$Scope,
+
+        [Parameter(Mandatory = $false)]
+        [string]$ItemsJson,
+
+        [Parameter(Mandatory = $false)]
+        [bool]$Reviewed = $false,
+
         [Parameter(Mandatory = $false)]
         [string]$PlanId,
 
@@ -390,6 +528,8 @@ function Invoke-FabricStagePromotion {
     if ($Note.Length -gt 1024) {
         throw 'DeploymentNote must be 1024 characters or fewer'
     }
+    $Requests = @(ConvertFrom-FabricItemSelection -Scope $Scope `
+        -ItemsJson $ItemsJson -Reviewed $Reviewed)
     $Stages = @(Get-FabricDeploymentStages -PipelineId $PipelineId -Token $Token)
     $Source = Resolve-FabricDeploymentStage -Stages $Stages -DisplayName $SourceName
     $Target = Resolve-FabricDeploymentStage -Stages $Stages -DisplayName $TargetName
@@ -402,44 +542,205 @@ function Invoke-FabricStagePromotion {
     if ([string]::IsNullOrWhiteSpace([string]$Target.workspaceId)) {
         throw "Target stage '$TargetName' has no assigned workspace"
     }
-
-    $BodyObject = @{
-        sourceStageId = [string]$Source.id
-        targetStageId = [string]$Target.id
-        note          = $Note
-    }
-    $DeployUri = "$FabricApi/deploymentPipelines/$PipelineId/deploy"
     if (-not [string]::IsNullOrWhiteSpace($PlanId)) {
         if (-not $UsePreviewPlan) {
             throw 'EnablePreviewDeploymentPlan is required when DeploymentPlanId is set'
         }
-        $BodyObject.options = @{
-            deploymentPlan = @{
-                referenceType = 'ByItemId'
-                itemId        = $PlanId
-            }
-        }
-        $DeployUri += '?beta=true'
+        Assert-FabricGuid -Name 'DeploymentPlanId' -Value $PlanId
     }
     elseif ($UsePreviewPlan) {
         throw 'DeploymentPlanId is required when EnablePreviewDeploymentPlan is set'
     }
+    $SourceItems = @(Get-FabricDeploymentStageItems -PipelineId $PipelineId `
+        -StageId $Source.id -Token $Token)
+    $TargetItems = @(Get-FabricDeploymentStageItems -PipelineId $PipelineId `
+        -StageId $Target.id -Token $Token)
+    $Selected = @()
+    if ($Scope -eq 'All') {
+        $Selected = @($SourceItems | Sort-Object itemId)
+    }
+    else {
+        foreach ($Request in $Requests) {
+            $Matches = @($SourceItems | Where-Object {
+                $_.itemDisplayName -ceq $Request.Name -and $_.itemType -ceq $Request.Type
+            })
+            if ($Matches.Count -ne 1) {
+                throw "Expected one source item '$($Request.Name)' ($($Request.Type)), found $($Matches.Count)"
+            }
+            $Selected += $Matches[0]
+        }
+    }
+    if ($Selected.Count -lt 1 -or $Selected.Count -gt 300) {
+        throw 'A promotion must resolve between 1 and 300 source items'
+    }
+    $TargetById = @{}
+    foreach ($Item in $TargetItems) { $TargetById[$Item.itemId] = $Item }
+    $PlannedItems = @(
+        foreach ($Item in $Selected) {
+            $TargetId = [string]$Item.targetItemId
+            if (-not [string]::IsNullOrWhiteSpace($TargetId)) {
+                if (
+                    -not $TargetById.ContainsKey($TargetId) -or
+                    $TargetById[$TargetId].itemType -cne $Item.itemType
+                ) {
+                    throw "Paired target for '$($Item.itemDisplayName)' is missing or has a different type"
+                }
+            }
+            [pscustomobject][ordered]@{
+                Name = [string]$Item.itemDisplayName
+                Type = [string]$Item.itemType
+                SourceItemId = [string]$Item.itemId
+                TargetItemId = $TargetId
+                Action = if ($TargetId) { 'Update' } else { 'Create' }
+            }
+        }
+    )
+    $Activation = $null
+    if (
+        -not [string]::IsNullOrWhiteSpace($LibraryName) -and
+        @($PlannedItems | Where-Object {
+            $_.Type -ceq 'VariableLibrary' -and $_.Name -ceq $LibraryName
+        }).Count -gt 0
+    ) {
+        $Activation = [pscustomobject][ordered]@{
+            LibraryName = $LibraryName
+            ValueSetName = $ValueSetName
+        }
+    }
+    return [pscustomobject][ordered]@{
+        Version = 1
+        Operation = 'PlanPromotion'
+        Status = 'Planned'
+        PipelineId = $PipelineId
+        SourceStage = $SourceName
+        TargetStage = $TargetName
+        SourceStageId = [string]$Source.id
+        TargetStageId = [string]$Target.id
+        SourceWorkspaceId = [string]$Source.workspaceId
+        TargetWorkspaceId = [string]$Target.workspaceId
+        PromotionScope = if ($Scope -eq 'All') { 'All' } else { 'Selected' }
+        DependenciesReviewed = $Reviewed
+        DeploymentNote = $Note
+        DeploymentPlanId = [string]$PlanId
+        UsePreviewDeploymentPlan = $UsePreviewPlan.IsPresent
+        VariableLibrary = $Activation
+        Items = @($PlannedItems)
+    }
+}
 
+function Invoke-FabricStagePromotion {
+    <#
+    .SYNOPSIS
+        Deploys only planned source IDs and verifies selected and unselected target metadata.
+    .OUTPUTS
+        PSCustomObject verified promotion result.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$PromotionPlan,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Token
+    )
+
+    $Items = @($PromotionPlan.Items)
+    if ($Items.Count -lt 1 -or $Items.Count -gt 300) {
+        throw 'Promotion plan must contain between 1 and 300 items'
+    }
+    $Before = @(Get-FabricDeploymentStageItems -PipelineId $PromotionPlan.PipelineId `
+        -StageId $PromotionPlan.TargetStageId -Token $Token)
+    $SelectedTargetIds = @($Items.TargetItemId | Where-Object { $_ })
+    $Unselected = @{}
+    foreach ($Item in $Before | Where-Object { $_.itemId -notin $SelectedTargetIds }) {
+        $Unselected[$Item.itemId] = $Item |
+            Select-Object itemId, itemDisplayName, itemType, sourceItemId, lastDeploymentTime |
+            ConvertTo-Json -Compress
+    }
+    $BodyObject = @{
+        sourceStageId = $PromotionPlan.SourceStageId
+        targetStageId = $PromotionPlan.TargetStageId
+        note = $PromotionPlan.DeploymentNote
+        items = @($Items | ForEach-Object {
+            @{ sourceItemId = $_.SourceItemId; itemType = $_.Type }
+        })
+    }
+    $DeployUri = "$FabricApi/deploymentPipelines/$($PromotionPlan.PipelineId)/deploy"
+    if ($PromotionPlan.UsePreviewDeploymentPlan) {
+        $BodyObject.options = @{
+            deploymentPlan = @{
+                referenceType = 'ByItemId'
+                itemId = $PromotionPlan.DeploymentPlanId
+            }
+        }
+        $DeployUri += '?beta=true'
+    }
     $null = Invoke-FabricRequest -Method Post -Uri $DeployUri -Token $Token `
         -SkillName 'deployment-pipelines-authoring-cli' `
         -Body ($BodyObject | ConvertTo-Json -Depth 10 -Compress)
 
+    $VerifiedTargets = @{}
+    for ($Attempt = 0; $Attempt -lt 3; $Attempt++) {
+        $AfterSource = @(Get-FabricDeploymentStageItems -PipelineId $PromotionPlan.PipelineId `
+            -StageId $PromotionPlan.SourceStageId -Token $Token)
+        $AfterTarget = @(Get-FabricDeploymentStageItems -PipelineId $PromotionPlan.PipelineId `
+            -StageId $PromotionPlan.TargetStageId -Token $Token)
+        $AfterById = @{}
+        foreach ($Item in $AfterTarget) { $AfterById[$Item.itemId] = $Item }
+        $Missing = @(
+            foreach ($Item in $Items) {
+                $Source = @($AfterSource | Where-Object itemId -eq $Item.SourceItemId)
+                $TargetId = if ($Source.Count -eq 1) { [string]$Source[0].targetItemId } else { '' }
+                if (
+                    -not $TargetId -or -not $AfterById.ContainsKey($TargetId) -or
+                    $AfterById[$TargetId].itemType -cne $Item.Type -or
+                    ($Item.TargetItemId -and $Item.TargetItemId -ne $TargetId)
+                ) {
+                    $Item.Name
+                }
+                else {
+                    $VerifiedTargets[$Item.SourceItemId] = $AfterById[$TargetId]
+                }
+            }
+        )
+        if ($Missing.Count -eq 0) { break }
+        if ($Attempt -eq 2) {
+            throw "Deployment completed but selected item pairing could not be verified: $($Missing -join ', ')"
+        }
+        Start-Sleep -Seconds 2
+    }
+    foreach ($Id in $Unselected.Keys) {
+        $Current = if ($AfterById.ContainsKey($Id)) {
+            $AfterById[$Id] |
+                Select-Object itemId, itemDisplayName, itemType, sourceItemId, lastDeploymentTime |
+                ConvertTo-Json -Compress
+        } else { '' }
+        if ($Current -cne $Unselected[$Id]) {
+            throw "Unselected target item metadata changed during promotion: $Id"
+        }
+    }
     $VariableResult = $null
-    if (-not [string]::IsNullOrWhiteSpace($LibraryName)) {
+    if ($null -ne $PromotionPlan.VariableLibrary) {
+        $Library = @($Items | Where-Object {
+            $_.Type -ceq 'VariableLibrary' -and
+            $_.Name -ceq $PromotionPlan.VariableLibrary.LibraryName
+        })[0]
+        $TargetLibrary = $VerifiedTargets[$Library.SourceItemId]
         $VariableResult = Set-FabricVariableLibraryValueSet `
-            -Workspace ([string]$Target.workspaceId) -LibraryName $LibraryName `
-            -ValueSetName $ValueSetName -Token $Token
+            -Workspace $PromotionPlan.TargetWorkspaceId `
+            -LibraryName $TargetLibrary.itemDisplayName -LibraryId $TargetLibrary.itemId `
+            -ValueSetName $PromotionPlan.VariableLibrary.ValueSetName -Token $Token
     }
     return [pscustomobject]@{
         Operation       = 'Promote'
         Status          = 'Succeeded'
-        SourceStage     = $SourceName
-        TargetStage     = $TargetName
+        SourceStage     = $PromotionPlan.SourceStage
+        TargetStage     = $PromotionPlan.TargetStage
+        PromotionScope  = $PromotionPlan.PromotionScope
+        DependenciesReviewed = $PromotionPlan.DependenciesReviewed
+        Items           = $Items
+        VerifiedItemCount = $VerifiedTargets.Count
         VariableLibrary = $VariableResult
     }
 }
@@ -469,6 +770,53 @@ function Write-FabricAlmSummary {
     )
     if ($Result.SourceStage) {
         $Rows += "* Promotion: ``$($Result.SourceStage)`` to ``$($Result.TargetStage)``"
+    }
+    if ($Result.PromotionScope) {
+        $Rows += "* Scope: ``$($Result.PromotionScope)``"
+        $Rows += "* Dependency review confirmed: ``$($Result.DependenciesReviewed)``"
+        $Details = [ordered]@{
+            'Pipeline ID' = $Result.PipelineId
+            'Source workspace' = $Result.SourceWorkspaceId
+            'Target workspace' = $Result.TargetWorkspaceId
+            'Deployment note' = $Result.DeploymentNote
+            'Preview Deployment Plan' = if ($Result.UsePreviewDeploymentPlan) {
+                $Result.DeploymentPlanId
+            } else { 'Disabled' }
+        }
+        foreach ($Label in $Details.Keys) {
+            if ($null -ne $Details[$Label]) {
+                $Encoded = [Net.WebUtility]::HtmlEncode([string]$Details[$Label]).
+                    Replace("`r", ' ').Replace("`n", ' ')
+                $Rows += "* ${Label}: <code>$Encoded</code>"
+            }
+        }
+        $Rows += '* Dependency discovery is not available from stage metadata; review Fabric lineage manually.'
+        $Rows += '* Only the listed source IDs are submitted. Unselected items are not added automatically.'
+        $Rows += ''
+        $Rows += '| Item | Type | Action | Source item ID | Paired target ID |'
+        $Rows += '| --- | --- | --- | --- | --- |'
+        foreach ($Item in @($Result.Items)) {
+            $Cells = @(
+                foreach ($Value in @(
+                    $Item.Name, $Item.Type, $Item.Action, $Item.SourceItemId, $Item.TargetItemId
+                )) {
+                    $Encoded = [Net.WebUtility]::HtmlEncode([string]$Value).
+                        Replace('|', '&#124;').Replace("`r", ' ').Replace("`n", ' ')
+                    "<code>$Encoded</code>"
+                }
+            )
+            $Rows += '| ' + ($Cells -join ' | ') + ' |'
+        }
+        $Rows += ''
+        if ($Result.VariableLibrary) {
+            $Rows += '* Variable Library activation is restricted to the selected library.'
+            $Library = [Net.WebUtility]::HtmlEncode([string]$Result.VariableLibrary.LibraryName)
+            $ValueSet = [Net.WebUtility]::HtmlEncode([string]$Result.VariableLibrary.ValueSetName)
+            $Rows += "* Activate <code>$Library</code> value set <code>$ValueSet</code>."
+        }
+        else {
+            $Rows += '* No Variable Library activation is requested for this selection.'
+        }
     }
     $Rows += ''
     Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $Rows -Encoding utf8
@@ -529,29 +877,58 @@ if ($MyInvocation.InvocationName -ne '.') {
             ) {
                 throw 'DeploymentPlanId is required when EnablePreviewDeploymentPlan is set'
             }
+            $null = @(ConvertFrom-FabricItemSelection -Scope $PromotionScope `
+                -ItemsJson $SelectedItemsJson -Reviewed $DependenciesReviewed.IsPresent)
             if ($DryRun) {
+                if ($Operation -eq 'PlanPromotion') {
+                    throw 'PlanPromotion reads Fabric metadata; use Promote -DryRun for offline validation'
+                }
                 $Result = [pscustomobject]@{
                     Operation   = $Operation
                     Status      = 'WouldPromote'
                     SourceStage = $SourceStageName
                     TargetStage = $TargetStageName
+                    PromotionScope = $PromotionScope
+                    DependenciesReviewed = $DependenciesReviewed.IsPresent
+                    Items = @()
                 }
             }
             else {
+                if (
+                    $Operation -eq 'Promote' -and
+                    [string]::IsNullOrWhiteSpace($ReviewedPlanJson)
+                ) {
+                    throw 'Promote requires ReviewedPlanJson from a successful PlanPromotion operation'
+                }
                 $AccessToken = Get-FabricAccessToken
-                $Result = Invoke-FabricStagePromotion `
+                $Plan = New-FabricPromotionPlan `
                     -PipelineId $DeploymentPipelineId `
                     -SourceName $SourceStageName -TargetName $TargetStageName `
                     -Note $DeploymentNote -Token $AccessToken `
+                    -Scope $PromotionScope -ItemsJson $SelectedItemsJson `
+                    -Reviewed $DependenciesReviewed.IsPresent `
                     -PlanId $DeploymentPlanId `
                     -UsePreviewPlan:$EnablePreviewDeploymentPlan `
                     -LibraryName $VariableLibraryName `
                     -ValueSetName $ActiveValueSetName
+                if ($Operation -eq 'PlanPromotion') {
+                    $Result = $Plan
+                }
+                else {
+                    $ReviewedPlan = ConvertFrom-Json -InputObject $ReviewedPlanJson `
+                        -ErrorAction Stop
+                    $Expected = $Plan | ConvertTo-Json -Depth 20 -Compress
+                    $Reviewed = $ReviewedPlan | ConvertTo-Json -Depth 20 -Compress
+                    if ($Reviewed -cne $Expected) {
+                        throw 'Promotion plan changed or does not match the reviewed scope; generate and review a new plan'
+                    }
+                    $Result = Invoke-FabricStagePromotion -PromotionPlan $Plan -Token $AccessToken
+                }
             }
         }
 
         Write-FabricAlmSummary -Result $Result
-        $Result | ConvertTo-Json -Depth 10
+        $Result | ConvertTo-Json -Depth 20
     }
     catch {
         Write-Error -ErrorAction Continue "Fabric ALM operation failed: $($_.Exception.Message)"
