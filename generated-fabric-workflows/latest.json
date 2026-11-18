@@ -1,8 +1,6 @@
 {
-  "run_id": "c0cf6a0e85cb44378d9254d4cb960e27",
+  "run_id": "e46a068fb8dd4326b5538798e10304f9",
   "targets": {
-    "dataflow": "artifact-index-dataflow.json",
-    "notebook": "artifact-index-notebook.json",
-    "pipeline": "artifact-index-pipeline.json"
+    "dataflow": "artifact-index-dataflow.json"
   }
 }

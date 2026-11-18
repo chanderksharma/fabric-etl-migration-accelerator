@@ -1,0 +1,90 @@
+name: Create Fabric deployment pipeline
+run-name: 'Create Fabric deployment pipeline: ${{ inputs.pipeline_name }}'
+
+on:
+  workflow_dispatch:
+    inputs:
+      pipeline_name:
+        description: Fabric deployment pipeline display name
+        required: true
+        type: string
+      pipeline_description:
+        description: Description for a new pipeline; existing descriptions are preserved
+        required: false
+        default: Fabric deployment pipeline managed by the accelerator
+        type: string
+      dev_workspace_name:
+        description: Exact name of an existing workspace for Development (optional)
+        type: string
+      test_workspace_name:
+        description: Exact name of an existing workspace for Test (optional)
+        type: string
+      prod_workspace_name:
+        description: Exact name of an existing workspace for Production (optional)
+        type: string
+      dry_run:
+        description: Preview without creating a pipeline or assigning workspaces
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: fabric-deployment-pipeline-create
+  cancel-in-progress: false
+
+jobs:
+  create:
+    name: Create or reuse deployment pipeline
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 10
+    environment:
+      name: dev
+    outputs:
+      pipeline_id: ${{ steps.create.outputs.pipeline_id }}
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      INPUT_PIPELINE_NAME: ${{ inputs.pipeline_name }}
+      INPUT_PIPELINE_DESCRIPTION: ${{ inputs.pipeline_description }}
+      INPUT_DRY_RUN: ${{ inputs.dry_run }}
+      INPUT_DEV_STAGE_NAME: ${{ vars.FABRIC_DEV_STAGE_NAME || 'Development' }}
+      INPUT_TEST_STAGE_NAME: ${{ vars.FABRIC_TEST_STAGE_NAME || 'Test' }}
+      INPUT_PROD_STAGE_NAME: ${{ vars.FABRIC_PROD_STAGE_NAME || 'Production' }}
+      INPUT_DEV_WORKSPACE_NAME: ${{ inputs.dev_workspace_name }}
+      INPUT_TEST_WORKSPACE_NAME: ${{ inputs.test_workspace_name }}
+      INPUT_PROD_WORKSPACE_NAME: ${{ inputs.prod_workspace_name }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Provision Fabric deployment pipeline
+        id: create
+        shell: pwsh
+        run: |
+          $Parameters = @{
+            DisplayName = $env:INPUT_PIPELINE_NAME
+            Description = $env:INPUT_PIPELINE_DESCRIPTION
+            StageNames = @(
+              $env:INPUT_DEV_STAGE_NAME
+              $env:INPUT_TEST_STAGE_NAME
+              $env:INPUT_PROD_STAGE_NAME
+            )
+            WorkspaceNames = @(
+              [string]$env:INPUT_DEV_WORKSPACE_NAME
+              [string]$env:INPUT_TEST_WORKSPACE_NAME
+              [string]$env:INPUT_PROD_WORKSPACE_NAME
+            )
+            DryRun = $env:INPUT_DRY_RUN -eq 'true'
+          }
+          $ResultJson = (& .\scripts\New-FabricDeploymentPipeline.ps1 @Parameters | Out-String).Trim()
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $Result = $ResultJson | ConvertFrom-Json -ErrorAction Stop
+          if (-not [string]::IsNullOrWhiteSpace($Result.PipelineId)) {
+            Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "pipeline_id=$($Result.PipelineId)" -Encoding utf8
+          }
+          $ResultJson
