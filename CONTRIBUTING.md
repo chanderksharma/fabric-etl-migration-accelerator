@@ -50,6 +50,7 @@ Binary pursuit/delivery collateral (such as executive presentations or engagemen
    - Follow Test-Driven Development: add unit and golden/acceptance tests covering both supported compilation and fail-closed `scaffold` diagnostics for unsupported configurations.
    - Update documentation (`README.md`, `docs/`, and `toc.yml` if adding a new Markdown page) and regenerate `generated-fabric-workflows/` if synthetic sample outputs change.
    - Open a Pull Request against `main`, complete the PR checklist, and request review from `CODEOWNERS`. All CI checks (`python`, `web`, `security-audit`, `codeql`) must pass prior to merge.
+   - CI runs on pull request events, including updates to an open pull request. Push events do not trigger CI.
 
 ---
 
