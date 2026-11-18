@@ -165,6 +165,7 @@ After each promotion, `Invoke-FabricAlm.ps1`:
 3. Reads the Variable Library state back and verifies the selected value set.
 
 Leave `FABRIC_VARIABLE_LIBRARY_NAME` unset when no Variable Library is used.
+The workflow passes an active value set only when a library is configured.
 
 > [!WARNING]
 > Deployment Plan support in the Fabric deployment API is Beta. The promotion

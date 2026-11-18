@@ -46,7 +46,7 @@ jobs:
       FABRIC_SOURCE_STAGE_NAME: ${{ inputs.target_stage == 'Production' && (vars.FABRIC_TEST_STAGE_NAME || 'Test') || (vars.FABRIC_DEV_STAGE_NAME || 'Development') }}
       FABRIC_TARGET_STAGE_NAME: ${{ inputs.target_stage == 'Production' && (vars.FABRIC_PROD_STAGE_NAME || 'Production') || (vars.FABRIC_TEST_STAGE_NAME || 'Test') }}
       FABRIC_VARIABLE_LIBRARY_NAME: ${{ vars.FABRIC_VARIABLE_LIBRARY_NAME }}
-      FABRIC_ACTIVE_VALUE_SET_NAME: ${{ inputs.target_stage == 'Production' && (vars.FABRIC_PROD_VALUE_SET_NAME || 'prod') || (vars.FABRIC_TEST_VALUE_SET_NAME || 'test') }}
+      INPUT_ACTIVE_VALUE_SET_NAME: ${{ inputs.target_stage == 'Production' && (vars.FABRIC_PROD_VALUE_SET_NAME || 'prod') || (vars.FABRIC_TEST_VALUE_SET_NAME || 'test') }}
       FABRIC_DEPLOYMENT_PLAN_ID: ${{ vars.FABRIC_DEPLOYMENT_PLAN_ID }}
       FABRIC_DEPLOYMENT_NOTE: ${{ inputs.deployment_note }}
     steps:
@@ -65,7 +65,7 @@ jobs:
           }
           if ($env:FABRIC_VARIABLE_LIBRARY_NAME) {
             $Parameters.VariableLibraryName = $env:FABRIC_VARIABLE_LIBRARY_NAME
-            $Parameters.ActiveValueSetName = $env:FABRIC_ACTIVE_VALUE_SET_NAME
+            $Parameters.ActiveValueSetName = $env:INPUT_ACTIVE_VALUE_SET_NAME
           }
           if ('${{ inputs.use_preview_deployment_plan }}' -eq 'true') {
             $Parameters.DeploymentPlanId = $env:FABRIC_DEPLOYMENT_PLAN_ID

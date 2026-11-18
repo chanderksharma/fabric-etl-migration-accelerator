@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -181,9 +182,66 @@ def test_fabric_alm_promotion_is_manual_and_environment_gated() -> None:
     assert "name: ${{ inputs.target_stage == 'Production' && 'prod' || 'test' }}" in workflow
     assert "FABRIC_DEPLOYMENT_PIPELINE_ID" in workflow
     assert "FABRIC_VARIABLE_LIBRARY_NAME" in workflow
-    assert "FABRIC_ACTIVE_VALUE_SET_NAME" in workflow
+    assert "INPUT_ACTIVE_VALUE_SET_NAME" in workflow
     assert "Invoke-FabricAlm.ps1" in workflow
     assert "Operation = 'Promote'" in workflow
+
+
+@pytest.mark.parametrize("target_stage", ["Test", "Production"])
+@pytest.mark.parametrize("library_name", ["", "synthetic-library"], ids=["no-library", "library"])
+def test_fabric_alm_workflow_handles_optional_variable_library(
+    target_stage: str, library_name: str
+) -> None:
+    executable = shutil.which("pwsh")
+    if executable is None:
+        pytest.skip("PowerShell 7 is required to exercise the promotion workflow")
+    workflow = (ROOT / ".github" / "workflows" / "promote-fabric-alm.yml").read_text(
+        encoding="utf-8"
+    )
+    value_set_variable = next(
+        line.strip().split(":", 1)[0]
+        for line in workflow.splitlines()
+        if "vars.FABRIC_PROD_VALUE_SET_NAME" in line
+    )
+    run_script = textwrap.dedent(workflow.partition("        run: |\n")[2])
+    assert run_script.count("@Parameters") == 1
+    run_script = run_script.replace("@Parameters", "@Parameters -DryRun")
+    run_script = run_script.replace("${{ inputs.use_preview_deployment_plan }}", "false")
+    source_stage = "Test" if target_stage == "Production" else "Development"
+    environment = os.environ | {
+        "AZURE_CLIENT_ID": "",
+        "AZURE_TENANT_ID": "",
+        "AZURE_CLIENT_SECRET": "",
+        "GITHUB_STEP_SUMMARY": "",
+        "FABRIC_DEPLOYMENT_PIPELINE_ID": "00000000-0000-0000-0000-000000000001",
+        "FABRIC_SOURCE_STAGE_NAME": source_stage,
+        "FABRIC_TARGET_STAGE_NAME": target_stage,
+        "FABRIC_VARIABLE_LIBRARY_NAME": library_name,
+        "FABRIC_ACTIVE_VALUE_SET_NAME": "",
+        "FABRIC_DEPLOYMENT_PLAN_ID": "",
+        "FABRIC_DEPLOYMENT_NOTE": "Synthetic promotion acceptance check",
+    }
+    environment[value_set_variable] = "prod" if target_stage == "Production" else "test"
+    result = subprocess.run(
+        [
+            executable,
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$ErrorActionPreference = 'Stop'\n" + run_script,
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    response = json.loads(result.stdout)
+    assert response["Status"] == "WouldPromote"
+    assert response["SourceStage"] == source_stage
+    assert response["TargetStage"] == target_stage
 
 
 def test_fabric_alm_script_fails_closed_and_uses_native_alm_apis() -> None:
