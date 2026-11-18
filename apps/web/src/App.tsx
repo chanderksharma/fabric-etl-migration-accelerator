@@ -7,6 +7,11 @@ import "./workspace.css";
 type BrowseMode = "files" | "zip" | "folder";
 type SourceType = "alteryx" | "informatica";
 const RUN_STORAGE_KEY = "accelerator-run-v6";
+
+function sessionRunId(): string | null {
+  localStorage.removeItem(RUN_STORAGE_KEY);
+  return sessionStorage.getItem(RUN_STORAGE_KEY);
+}
 export type Page =
   | "intake"
   | "executive-summary"
@@ -106,7 +111,8 @@ const pages: Array<{ id: Page; label: string }> = [
 ];
 
 export function App() {
-  const [activePage, setActivePage] = useState<Page>(() => pageFromHash());
+  const [initialRunId] = useState(sessionRunId);
+  const [activePage, setActivePage] = useState<Page>(() => initialRunId ? pageFromHash() : "intake");
   const [sourceType, setSourceType] = useState<SourceType>("alteryx");
   const [selectedMode, setSelectedMode] = useState<BrowseMode>("files");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -115,7 +121,7 @@ export function App() {
   const [assessing, setAssessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
-  const [runId, setRunId] = useState(() => localStorage.getItem(RUN_STORAGE_KEY));
+  const [runId, setRunId] = useState(initialRunId);
   const [run, setRun] = useState<RunResult | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [generating, setGenerating] = useState(false);
@@ -195,6 +201,13 @@ export function App() {
     return () => window.removeEventListener("hashchange", updatePage);
   }, []);
 
+  useEffect(() => {
+    if (window.location.hash !== `#${activePage}`) {
+      window.location.hash = activePage;
+    }
+    document.documentElement.scrollTop = 0;
+  }, [activePage]);
+
   const inputModes = modes[sourceType];
   const accept = sourceType === "alteryx"
     ? selectedMode === "zip" ? ".zip,.yxzp" : ".yxmd,.yxmc,.yxwz,.yxzp"
@@ -204,6 +217,7 @@ export function App() {
   function clearSelection() {
     selectionEpoch.current += 1;
     activeRunId.current = null;
+    sessionStorage.removeItem(RUN_STORAGE_KEY);
     setRunId(null);
     setRun(null);
     setCandidates([]);
@@ -359,7 +373,7 @@ export function App() {
       const current: RunResult = await response.json();
       if (!isCurrent(epoch, identity)) return;
       setRun(current);
-      localStorage.setItem(RUN_STORAGE_KEY, current.id);
+      sessionStorage.setItem(RUN_STORAGE_KEY, current.id);
       activeRunId.current = current.id;
       setRunId(current.id);
     } catch (caught) {
@@ -410,9 +424,8 @@ export function App() {
 
   return <Workspace
     page={activePage} navigate={destination => {
+      if (destination === "intake") clearSelection();
       setActivePage(destination);
-      window.location.hash = destination;
-      document.documentElement.scrollTop = 0;
     }}
     assessment={assessment} run={run} runId={runId} candidates={candidates}
     generating={generating} generate={generate} request={apiRequest}

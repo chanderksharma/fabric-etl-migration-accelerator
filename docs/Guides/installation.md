@@ -31,6 +31,12 @@ uv run tool serve --port 8050
 
 The FastAPI server binds strictly to `127.0.0.1:8050` and serves the compiled React UI from `apps/web/dist`.
 
+Assessment navigation, the active run reference, filters, selected files, and
+deployment form values are browser-session state. A new browser session starts
+at Intake without restoring them. Reloading the same tab can restore its active
+run. Theme preference remains persistent. This cleanup does not delete SQLite
+runs, immutable snapshots, or generated Fabric artifacts.
+
 ### UI hot-reload development mode
 
 When iterating on the React frontend (`apps/web/src`):

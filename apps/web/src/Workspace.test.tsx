@@ -11,6 +11,7 @@ import type { EvidenceResponse } from "./evidence-types";
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 const assessment: AssessmentResult = {

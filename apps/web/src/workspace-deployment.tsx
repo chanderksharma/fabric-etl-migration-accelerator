@@ -27,7 +27,8 @@ const DEPLOY_PREFS_KEY = "accelerator-deploy-prefs";
 
 function readDeployPrefs(): DeployPrefs {
   try {
-    const raw = localStorage.getItem(DEPLOY_PREFS_KEY);
+    localStorage.removeItem(DEPLOY_PREFS_KEY);
+    const raw = sessionStorage.getItem(DEPLOY_PREFS_KEY);
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
     return typeof parsed === "object" && parsed !== null ? (parsed as DeployPrefs) : {};
@@ -38,7 +39,7 @@ function readDeployPrefs(): DeployPrefs {
 
 function writeDeployPrefs(prefs: DeployPrefs) {
   try {
-    localStorage.setItem(DEPLOY_PREFS_KEY, JSON.stringify(prefs));
+    sessionStorage.setItem(DEPLOY_PREFS_KEY, JSON.stringify(prefs));
   } catch {
     // ignore storage errors
   }

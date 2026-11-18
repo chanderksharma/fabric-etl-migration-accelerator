@@ -5,6 +5,7 @@ import { App } from "./App";
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   sessionStorage.setItem("accelerator-token", "test-token");
   window.location.hash = "#intake";
 });
@@ -315,18 +316,19 @@ test("confirms and displays deterministic assessment results", async () => {
   expect(screen.getByRole("heading", { name: "Technical Assessment Evidence" })).toBeInTheDocument();
 });
 
-test("opens the merged executive portfolio and provides an empty state", () => {
+test("starts a new browser session at Intake with no active portfolio", () => {
   window.location.hash = "";
   render(<App />);
 
   const portfolio = document.getElementById("portfolio-analysis");
   if (!portfolio) throw new Error("Missing portfolio analysis");
-  expect(
-    within(portfolio).getByRole("heading", { name: "Detailed Portfolio Assessment" }),
-  ).toBeInTheDocument();
-  expect(within(portfolio).getByText("No completed assessment.")).toBeInTheDocument();
+  expect(portfolio).not.toHaveClass("active");
+  expect(screen.getByRole("heading", {
+    name: "Choose your ETL workflow type and source",
+  })).toBeInTheDocument();
+  expect(window.location.hash).toBe("#intake");
   expect(within(screen.getByRole("navigation", {name: "Primary"})).getByRole(
-    "link", {name: "Portfolio"},
+    "link", {name: "New Assessment"},
   )).toHaveAttribute(
     "aria-current",
     "page",
@@ -366,7 +368,8 @@ function completedRun() {
   };
 }
 
-test("does not restore a run saved by an older compiler generation", () => {
+test("does not restore a run saved in persistent browser storage", () => {
+  localStorage.setItem("accelerator-run-v6", "persistent-run");
   localStorage.setItem("accelerator-run-v5", "stale-run");
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
@@ -374,13 +377,14 @@ test("does not restore a run saved by an older compiler generation", () => {
   render(<App />);
 
   expect(fetchMock).not.toHaveBeenCalled();
+  expect(localStorage.getItem("accelerator-run-v6")).toBeNull();
   expect(screen.getByRole("heading", {
     name: "Choose your ETL workflow type and source",
   })).toBeInTheDocument();
 });
 
-test("restores a saved run and offers real exports", async () => {
-  localStorage.setItem("accelerator-run-v6", "saved-run");
+test("restores a run within the same browser session and offers real exports", async () => {
+  sessionStorage.setItem("accelerator-run-v6", "saved-run");
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
     ok: true, json: async () => completedRun(),
   }));
@@ -407,7 +411,7 @@ test("restores a saved run and offers real exports", async () => {
 
 test("preserves the requested workspace page while restoring a completed run", async () => {
   window.location.hash = "#workflows";
-  localStorage.setItem("accelerator-run-v6", "saved-run");
+  sessionStorage.setItem("accelerator-run-v6", "saved-run");
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
     ok: true, json: async () => completedRun(),
   }));
@@ -424,7 +428,7 @@ test("preserves the requested workspace page while restoring a completed run", a
 });
 
 test("generates and displays explicit unvalidated review candidates", async () => {
-  localStorage.setItem("accelerator-run-v6", "saved-run");
+  sessionStorage.setItem("accelerator-run-v6", "saved-run");
   vi.stubGlobal("fetch", vi.fn()
     .mockResolvedValueOnce({ ok: true, json: async () => completedRun() })
     .mockResolvedValueOnce({
@@ -455,7 +459,7 @@ test("discards a late generation response after the analyst changes selection", 
   };
   let resolveResponse!: (response: PreviewResponse) => void;
   const pending = new Promise<PreviewResponse>((resolve) => { resolveResponse = resolve; });
-  localStorage.setItem("accelerator-run-v6", "saved-run");
+  sessionStorage.setItem("accelerator-run-v6", "saved-run");
   vi.stubGlobal("fetch", vi.fn()
     .mockResolvedValueOnce({ ok: true, json: async () => completedRun() })
     .mockReturnValueOnce(pending));
@@ -463,6 +467,7 @@ test("discards a late generation response after the analyst changes selection", 
   await screen.findByRole("heading", {name: "Portfolio Migration Summary"});
   fireEvent.click(await screen.findByRole("button", { name: "Generate Notebook previews" }));
   fireEvent.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "New Assessment" }));
+  expect(sessionStorage.getItem("accelerator-run-v6")).toBeNull();
   fireEvent.click(screen.getByRole("radio", { name: /Select folder/ }));
   await act(async () => {
     resolveResponse({
