@@ -19,6 +19,8 @@
     Ordered stage names. Defaults to Development, Test, and Production.
 .PARAMETER WorkspaceNames
     Optional workspace names in stage order. Blank entries leave stages unchanged.
+.PARAMETER OnWorkspaceConflict
+    Behavior when a requested workspace is already assigned: Fail or Reuse.
 .PARAMETER DryRun
     Previews creation and workspace assignments without calling a write API.
 .EXAMPLE
@@ -45,6 +47,10 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string[]]$WorkspaceNames,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateSet('Fail', 'Reuse')]
+    [string]$OnWorkspaceConflict = 'Fail',
 
     [Parameter(Mandatory = $false)]
     [switch]$DryRun
@@ -125,9 +131,9 @@ function Get-FabricProvisioningId {
 function Get-FabricWorkspaceAssignmentPlan {
     <#
     .SYNOPSIS
-        Resolves requested workspaces and rejects conflicting stage assignments.
+        Resolves requested workspaces and rejects or reuses existing stage assignments.
     .OUTPUTS
-        PSCustomObject workspace assignment entries.
+        PSCustomObject containing resolved pipeline target and assignment entries.
     #>
     [CmdletBinding()]
     [OutputType([pscustomobject])]
@@ -136,7 +142,10 @@ function Get-FabricWorkspaceAssignmentPlan {
         [string[]]$Stages,
         [object[]]$Pipelines,
         [string]$PipelineId,
-        [string]$Token
+        [string]$Token,
+        [ValidateSet('Fail', 'Reuse')]
+        [string]$OnConflict = 'Fail',
+        [bool]$CanReuseByWorkspace = $false
     )
 
     $Workspaces = @(Get-FabricProvisioningCollection -Uri "$FabricApi/workspaces?roles=Admin" -Token $Token)
@@ -165,10 +174,13 @@ function Get-FabricWorkspaceAssignmentPlan {
         $ByWorkspace[$Entry.WorkspaceId] = $Entry
         $ByStage[$Entry.StageName] = $Entry
     }
+    $StagesByPipeline = @{}
+    $WorkspaceMatches = @()
     foreach ($Pipeline in $Pipelines) {
         $Id = Get-FabricProvisioningId -Value $Pipeline.id -Resource 'deployment pipeline'
         $CurrentStages = @(Get-FabricProvisioningCollection `
             -Uri "$FabricApi/deploymentPipelines/$Id/stages" -Token $Token)
+        $StagesByPipeline[$Id] = $CurrentStages
         foreach ($Stage in $CurrentStages) {
             if (-not $Stage.workspaceId) { continue }
             $WorkspaceId = Get-FabricProvisioningId -Value $Stage.workspaceId -Resource 'assigned workspace'
@@ -180,14 +192,60 @@ function Get-FabricWorkspaceAssignmentPlan {
             }
             if ($ByWorkspace.ContainsKey($WorkspaceId)) {
                 $Entry = $ByWorkspace[$WorkspaceId]
-                if ($Id -ne $PipelineId -or $Stage.displayName -cne $Entry.StageName) {
-                    throw "Workspace '$($Entry.WorkspaceName)' is already assigned to '$($Pipeline.displayName)' / '$($Stage.displayName)'; it will not be moved"
+                $WorkspaceMatches += [pscustomobject]@{
+                    PipelineId = $Id
+                    PipelineName = [string]$Pipeline.displayName
+                    StageName = [string]$Stage.displayName
+                    Entry = $Entry
                 }
-                $Entry.Status = 'AlreadyAssigned'
             }
         }
     }
-    $Plan
+
+    $ReusedByWorkspace = $false
+    $TargetPipelineId = $PipelineId
+    $TargetDisplayName = ''
+    $Conflicts = @($WorkspaceMatches | Where-Object {
+        $_.PipelineId -ne $PipelineId -or $_.StageName -cne $_.Entry.StageName
+    })
+    if ($Conflicts.Count -gt 0) {
+        if (-not $CanReuseByWorkspace -or $OnConflict -ne 'Reuse') {
+            $First = $Conflicts[0]
+            throw "Workspace '$($First.Entry.WorkspaceName)' is already assigned to '$($First.PipelineName)' / '$($First.StageName)'; it will not be moved"
+        }
+        $MatchedPipelineIds = @($WorkspaceMatches.PipelineId | Sort-Object -Unique)
+        if ($MatchedPipelineIds.Count -gt 1) {
+            $Details = ($WorkspaceMatches | ForEach-Object {
+                "'$($_.Entry.WorkspaceName)' -> '$($_.PipelineName)' / '$($_.StageName)'"
+            }) -join '; '
+            throw "Requested workspaces are assigned to different pipelines ($Details); they will not be moved"
+        }
+        $WrongStage = @($WorkspaceMatches | Where-Object { $_.StageName -cne $_.Entry.StageName })
+        if ($WrongStage.Count -gt 0) {
+            $FirstWrong = $WrongStage[0]
+            throw "Workspace '$($FirstWrong.Entry.WorkspaceName)' is assigned to '$($FirstWrong.PipelineName)' / '$($FirstWrong.StageName)', which does not match requested stage '$($FirstWrong.Entry.StageName)'; it will not be moved"
+        }
+        $TargetPipelineId = $MatchedPipelineIds[0]
+        $TargetDisplayName = $WorkspaceMatches[0].PipelineName
+        $ReusedByWorkspace = $true
+        foreach ($Stage in $StagesByPipeline[$TargetPipelineId]) {
+            if (-not $Stage.workspaceId -or -not $ByStage.ContainsKey($Stage.displayName)) { continue }
+            $Entry = $ByStage[$Stage.displayName]
+            $AssignedId = Get-FabricProvisioningId -Value $Stage.workspaceId -Resource 'assigned workspace'
+            if ($Entry.WorkspaceId -ne $AssignedId) {
+                throw "Stage '$($Stage.displayName)' in '$TargetDisplayName' already has a different workspace; it will not be replaced"
+            }
+        }
+    }
+    foreach ($Match in $WorkspaceMatches) {
+        $Match.Entry.Status = 'AlreadyAssigned'
+    }
+    return [pscustomobject]@{
+        ReusedByWorkspace = $ReusedByWorkspace
+        PipelineId = $TargetPipelineId
+        DisplayName = $TargetDisplayName
+        Assignments = @($Plan)
+    }
 }
 
 function Set-FabricProvisioningAssignments {
@@ -309,6 +367,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             throw "More than one accessible pipeline has the exact name '$DisplayName'"
         }
         $PipelineId = ''
+        $ResolvedDisplayName = $DisplayName
         $Status = 'WouldCreate'
         if ($Matches.Count -eq 1) {
             $PipelineId = Get-FabricProvisioningId -Value $Matches[0].id -Resource 'deployment pipeline'
@@ -316,8 +375,15 @@ if ($MyInvocation.InvocationName -ne '.') {
         }
         $Assignments = @()
         if (@($WorkspaceNames | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
-            $Assignments = @(Get-FabricWorkspaceAssignmentPlan -Names $WorkspaceNames `
-                -Stages $StageNames -Pipelines $Pipelines -PipelineId $PipelineId -Token $Token)
+            $AssignmentPlan = Get-FabricWorkspaceAssignmentPlan -Names $WorkspaceNames `
+                -Stages $StageNames -Pipelines $Pipelines -PipelineId $PipelineId -Token $Token `
+                -OnConflict $OnWorkspaceConflict -CanReuseByWorkspace ($Status -eq 'WouldCreate')
+            $Assignments = @($AssignmentPlan.Assignments)
+            if ($AssignmentPlan.ReusedByWorkspace) {
+                $PipelineId = $AssignmentPlan.PipelineId
+                $ResolvedDisplayName = $AssignmentPlan.DisplayName
+                $Status = 'Reused'
+            }
         }
         if ($Status -eq 'WouldCreate' -and -not $DryRun) {
             $RequestedStages = @(
@@ -329,7 +395,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                 }
             )
             $Body = @{
-                displayName = $DisplayName
+                displayName = $ResolvedDisplayName
                 description = $Description
                 stages = $RequestedStages
             } | ConvertTo-Json -Depth 8 -Compress
@@ -343,7 +409,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Pipeline = Invoke-FabricRequest -Method Get `
                 -Uri "$FabricApi/deploymentPipelines/$PipelineId" -Token $Token `
                 -SkillName 'deployment-pipelines-authoring-cli'
-            if ($Pipeline.displayName -cne $DisplayName -or $Pipeline.id -ne $PipelineId) {
+            if ($Pipeline.displayName -cne $ResolvedDisplayName -or $Pipeline.id -ne $PipelineId) {
                 throw 'Pipeline identity did not match the requested display name and ID'
             }
             $Stages = @(Get-FabricProvisioningCollection `
@@ -359,16 +425,16 @@ if ($MyInvocation.InvocationName -ne '.') {
                 ) {
                     throw "Stage names or order differ for pipeline '$PipelineId'; no pipeline was replaced or deleted"
                 }
-                if (-not $DryRun -and $Assignments.Count -gt 0) {
-                    Set-FabricProvisioningAssignments -Plan $Assignments -Stages $Stages `
-                        -PipelineId $PipelineId -Token $Token
-                }
+            }
+            if (-not $DryRun -and $Assignments.Count -gt 0) {
+                Set-FabricProvisioningAssignments -Plan $Assignments -Stages $Stages `
+                    -PipelineId $PipelineId -Token $Token
             }
         }
         $Result = [pscustomobject]@{
             Status = $Status
             PipelineId = $PipelineId
-            DisplayName = $DisplayName
+            DisplayName = $ResolvedDisplayName
             StageNames = @($StageNames)
             WorkspaceAssignments = $Assignments
             DryRun = $DryRun.IsPresent

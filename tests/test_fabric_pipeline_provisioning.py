@@ -22,6 +22,7 @@ def _run_provisioning(
     stages: list[str] | None = None,
     workflow_steps: bool = False,
     workspaces: tuple[str, str, str] = ("", "", ""),
+    on_workspace_conflict: str = "Fail",
 ) -> subprocess.CompletedProcess[str]:
     executable = shutil.which("pwsh")
     if executable is None:
@@ -33,6 +34,7 @@ def _run_provisioning(
         "failure": failure,
         "stage_names": stage_names,
         "workflow_steps": workflow_steps,
+        "on_workspace_conflict": on_workspace_conflict,
     }
     if workflow_steps:
         workflow = (
@@ -101,6 +103,12 @@ function global:Invoke-FabricRequest {
                 displayName = 'Synthetic ALM'
             }
         }
+        if ($global:Scenario.failure -eq 'split-pipelines') {
+            $Items += @{
+                id = '00000000-0000-0000-0000-000000000103'
+                displayName = 'Other Pipeline'
+            }
+        }
         if ($global:Scenario.failure -eq 'duplicate') {
             $Items += @{
                 id = '00000000-0000-0000-0000-000000000102'
@@ -113,12 +121,39 @@ function global:Invoke-FabricRequest {
         if ($global:Scenario.failure -eq 'other-pipeline') {
             return @{ value = @(@{ displayName = 'QA'; workspaceId = $TestId }) }
         }
+        if ($global:Scenario.failure -eq 'reuse-by-workspace') {
+            return @{ value = @(
+                @{
+                    id = '00000000-0000-0000-0000-000000000401'
+                    order = 0; displayName = 'Development'; workspaceId = $DevId
+                },
+                @{
+                    id = '00000000-0000-0000-0000-000000000402'
+                    order = 1; displayName = 'Test'
+                },
+                @{
+                    id = '00000000-0000-0000-0000-000000000403'
+                    order = 2; displayName = 'Production'
+                }
+            ) }
+        }
+        if ($global:Scenario.failure -eq 'split-pipelines') {
+            return @{ value = @(@{ displayName = 'Development'; workspaceId = $DevId }) }
+        }
         return @{ value = @() }
     }
     if ($Uri -match '/stages/([^/]+)$') {
+        if ($Matches[1] -eq '00000000-0000-0000-0000-000000000402') {
+            return @{ id = $Matches[1]; workspaceId = $global:Assignments[$Matches[1]] }
+        }
         return @{ id = $Matches[1]; workspaceId = $global:Assignments[$Matches[1]] }
     }
     if ($Uri.EndsWith('/stages')) {
+        if ($global:Scenario.failure -eq 'split-pipelines') {
+            return @{ value = @(@{
+                id = $TestStageId; order = 1; displayName = 'Test'; workspaceId = $TestId
+            }) }
+        }
         return @{
             value = @(@{
                 id = $DevStageId; order = 0; displayName = 'Development'
@@ -139,6 +174,9 @@ function global:Invoke-FabricRequest {
             )
         }
     }
+    if ($Uri.EndsWith('/deploymentPipelines/00000000-0000-0000-0000-000000000100')) {
+        return @{ id = '00000000-0000-0000-0000-000000000100'; displayName = 'Unrelated' }
+    }
     if ($Uri.EndsWith('/deploymentPipelines/00000000-0000-0000-0000-000000000101')) {
         if (-not ($global:Created -or $global:Scenario.existing)) {
             throw 'Readback requested before creation'
@@ -155,6 +193,7 @@ else {
         DisplayName = 'Synthetic ALM'
         Description = 'Synthetic provisioning fixture'
         StageNames = @($global:Scenario.stage_names)
+        OnWorkspaceConflict = $global:Scenario.on_workspace_conflict
         DryRun = [bool]$global:Scenario.dry_run
     }
     if ($env:INPUT_DEV_WORKSPACE_NAME -or $env:INPUT_TEST_WORKSPACE_NAME -or
@@ -188,6 +227,7 @@ exit $ExitCode
         "INPUT_DEV_WORKSPACE_NAME": workspaces[0],
         "INPUT_TEST_WORKSPACE_NAME": workspaces[1],
         "INPUT_PROD_WORKSPACE_NAME": workspaces[2],
+        "INPUT_ON_WORKSPACE_CONFLICT": on_workspace_conflict,
     }
     return subprocess.run(
         [executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
@@ -266,6 +306,52 @@ def test_assignment_conflicts_fail_before_creating_or_attaching(
     assert all(call["Method"] == "Get" for call in json.loads(result.stdout)["Calls"])
 
 
+def test_reuse_by_workspace_returns_existing_pipeline_and_assigns_empty_stage(
+    tmp_path: Path,
+) -> None:
+    result = _run_provisioning(
+        tmp_path,
+        existing=False,
+        dry_run=False,
+        failure="reuse-by-workspace",
+        workflow_steps=True,
+        workspaces=("Synthetic Dev", "Synthetic Test", ""),
+        on_workspace_conflict="Reuse",
+    )
+    assert result.returncode == 0, result.stderr
+    output = json.loads(result.stdout)
+    assert output["Result"]["Status"] == "Reused"
+    assert output["Result"]["DisplayName"] == "Unrelated"
+    assert output["Result"]["PipelineId"] == "00000000-0000-0000-0000-000000000100"
+    assignments = output["Result"]["WorkspaceAssignments"]
+    assert [entry["Status"] for entry in assignments] == ["AlreadyAssigned", "Assigned"]
+    exported = (tmp_path / "provisioning-output.txt").read_text(encoding="utf-8-sig")
+    assert "pipeline_id=00000000-0000-0000-0000-000000000100" in exported
+    assert "pipeline_name=Unrelated" in exported
+
+
+@pytest.mark.parametrize(
+    ("scenario", "error"),
+    [
+        ("other-pipeline", "does not match requested stage"),
+        ("split-pipelines", "assigned to different pipelines"),
+    ],
+)
+def test_reuse_by_workspace_rejects_mismatched_or_split_assignments(
+    tmp_path: Path, scenario: str, error: str
+) -> None:
+    result = _run_provisioning(
+        tmp_path,
+        existing=False,
+        failure=scenario,
+        workspaces=("Synthetic Dev", "Synthetic Test", ""),
+        on_workspace_conflict="Reuse",
+    )
+    assert result.returncode != 0
+    assert error in result.stderr
+    assert all(call["Method"] == "Get" for call in json.loads(result.stdout)["Calls"])
+
+
 def test_workflow_creates_pipeline_and_exports_readback_id(tmp_path: Path) -> None:
     result = _run_provisioning(tmp_path, workflow_steps=True)
     assert result.returncode == 0, result.stderr
@@ -296,7 +382,9 @@ def test_workflow_preview_never_creates_or_exports_an_uncreated_id(tmp_path: Pat
     assert output["Result"]["Status"] == "WouldCreate"
     assert output["Result"]["PipelineId"] == ""
     assert all(call["Method"] == "Get" for call in output["Calls"])
-    assert not (tmp_path / "provisioning-output.txt").exists()
+    output_file = tmp_path / "provisioning-output.txt"
+    if output_file.exists():
+        assert "pipeline_id=" not in output_file.read_text(encoding="utf-8-sig")
 
 
 @pytest.mark.parametrize("dry_run", [True, False])

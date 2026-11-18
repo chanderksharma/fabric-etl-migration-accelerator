@@ -22,6 +22,14 @@ on:
       prod_workspace_name:
         description: Exact name of an existing workspace for Production (optional)
         type: string
+      on_workspace_conflict:
+        description: When a requested workspace is already assigned, Reuse that pipeline if stages match or Fail
+        required: true
+        default: Reuse
+        type: choice
+        options:
+          - Reuse
+          - Fail
       dry_run:
         description: Preview without creating a pipeline or assigning workspaces
         required: true
@@ -45,6 +53,7 @@ jobs:
       name: dev
     outputs:
       pipeline_id: ${{ steps.create.outputs.pipeline_id }}
+      pipeline_name: ${{ steps.create.outputs.pipeline_name }}
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -58,6 +67,7 @@ jobs:
       INPUT_DEV_WORKSPACE_NAME: ${{ inputs.dev_workspace_name }}
       INPUT_TEST_WORKSPACE_NAME: ${{ inputs.test_workspace_name }}
       INPUT_PROD_WORKSPACE_NAME: ${{ inputs.prod_workspace_name }}
+      INPUT_ON_WORKSPACE_CONFLICT: ${{ inputs.on_workspace_conflict }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,6 +89,7 @@ jobs:
               [string]$env:INPUT_TEST_WORKSPACE_NAME
               [string]$env:INPUT_PROD_WORKSPACE_NAME
             )
+            OnWorkspaceConflict = $env:INPUT_ON_WORKSPACE_CONFLICT
             DryRun = $env:INPUT_DRY_RUN -eq 'true'
           }
           $ResultJson = (& .\scripts\New-FabricDeploymentPipeline.ps1 @Parameters | Out-String).Trim()
@@ -86,5 +97,8 @@ jobs:
           $Result = $ResultJson | ConvertFrom-Json -ErrorAction Stop
           if (-not [string]::IsNullOrWhiteSpace($Result.PipelineId)) {
             Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "pipeline_id=$($Result.PipelineId)" -Encoding utf8
+          }
+          if (-not [string]::IsNullOrWhiteSpace($Result.DisplayName)) {
+            Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "pipeline_name=$($Result.DisplayName)" -Encoding utf8
           }
           $ResultJson
