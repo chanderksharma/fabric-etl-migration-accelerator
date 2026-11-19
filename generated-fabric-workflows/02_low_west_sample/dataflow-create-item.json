@@ -1,0 +1,24 @@
+{
+  "definition": {
+    "parts": [
+      {
+        "path": "mashup.pq",
+        "payload": "c2VjdGlvbiBTZWN0aW9uMTsKCnNoYXJlZCB3ZXN0X3NhbXBsZSA9IGxldAogICAgb3JkZXJzID0gI3RhYmxlKHsiQ3VzdG9tZXJJRCIsICJSZWdpb24iLCAiQ2hhbm5lbCIsICJPcmRlckRhdGUiLCAiU0tVIiwgIkFtb3VudCIsICJVbml0cyJ9LCB7eyJDMDAxIiwgIldlc3QiLCAiT25saW5lIiwgIjIwMjYtMDEtMTIiLCAiU0tVLUEtMTAwIiwgIjEyMDAiLCAiNCJ9LCB7IkMwMDIiLCAiRWFzdCIsICJTdG9yZSIsICIyMDI2LTAxLTE4IiwgIlNLVS1CLTIyMCIsICI4NDAiLCAiMiJ9LCB7IkMwMDEiLCAiV2VzdCIsICJPbmxpbmUiLCAiMjAyNi0wMi0wMyIsICJTS1UtQS0xNDAiLCAiNjQwIiwgIjEifSwgeyJDMDAzIiwgIk5vcnRoIiwgIlBhcnRuZXIiLCAiMjAyNi0wMi0xMSIsICJTS1UtQy0wMTAiLCAiMjEwMCIsICI2In0sIHsiQzAwNCIsICJTb3V0aCIsICJTdG9yZSIsICIyMDI2LTAzLTAxIiwgIlNLVS1CLTIyMCIsICI0MzAiLCAiMyJ9LCB7IkMwMDIiLCAiRWFzdCIsICJPbmxpbmUiLCAiMjAyNi0wMy0wOSIsICJTS1UtQS0xMDAiLCAiOTkwIiwgIjIifSwgeyJDMDA1IiwgIldlc3QiLCAiUGFydG5lciIsICIyMDI2LTAzLTIxIiwgIlNLVS1DLTAxMCIsICIxNTAiLCAiMSJ9LCB7IkMwMDMiLCAiTm9ydGgiLCAiU3RvcmUiLCAiMjAyNi0wNC0wMiIsICJTS1UtQS0xNDAiLCAiMTc2MCIsICI1In19KSwKICAgIHdlc3Rfb25seSA9IFRhYmxlLlNlbGVjdFJvd3Mob3JkZXJzLCBlYWNoIFJlY29yZC5GaWVsZChfLCAiUmVnaW9uIikgPSAiV2VzdCIpLAogICAgYWRkX3RheCA9IFRhYmxlLkFkZENvbHVtbih3ZXN0X29ubHksICJBbW91bnRXaXRoVGF4IiwgZWFjaCBOdW1iZXIuRnJvbShSZWNvcmQuRmllbGQoXywgIkFtb3VudCIpKSAqIDEuMDgpLAogICAgdG9wXzNfcm93cyA9IFRhYmxlLkZpcnN0TihhZGRfdGF4LCAzKQppbgogICAgdG9wXzNfcm93czsK",
+        "payloadType": "InlineBase64"
+      },
+      {
+        "path": "queryMetadata.json",
+        "payload": "ewogICJjb21wdXRlRW5naW5lU2V0dGluZ3MiOiB7CiAgICAiYWxsb3dGYXN0Q29weSI6IGZhbHNlCiAgfSwKICAiY29ubmVjdGlvbnMiOiBbXSwKICAiZm9ybWF0VmVyc2lvbiI6ICIyMDI1MDIiLAogICJuYW1lIjogIjAyX2xvd193ZXN0X3NhbXBsZSIsCiAgInF1ZXJpZXNNZXRhZGF0YSI6IHsKICAgICJ3ZXN0X3NhbXBsZSI6IHsKICAgICAgImxvYWRFbmFibGVkIjogZmFsc2UsCiAgICAgICJxdWVyeUlkIjogIjlhOTk5N2M4LWEyYWMtNTJlZC04MTE4LWFhYzZjZGE2MDg3YiIsCiAgICAgICJxdWVyeU5hbWUiOiAid2VzdF9zYW1wbGUiCiAgICB9CiAgfSwKICAicXVlcnlHcm91cHMiOiBbXQp9",
+        "payloadType": "InlineBase64"
+      },
+      {
+        "path": ".platform",
+        "payload": "ewogICIkc2NoZW1hIjogImh0dHBzOi8vZGV2ZWxvcGVyLm1pY3Jvc29mdC5jb20vanNvbi1zY2hlbWFzL2ZhYnJpYy9naXRJbnRlZ3JhdGlvbi9wbGF0Zm9ybVByb3BlcnRpZXMvMi4wLjAvc2NoZW1hLmpzb24iLAogICJjb25maWciOiB7CiAgICAibG9naWNhbElkIjogIjI3MzYxOGQ2LTkyNDktNTU5Ny04NjA5LTAyNTkxMWRjMzgxNCIsCiAgICAidmVyc2lvbiI6ICIyLjAiCiAgfSwKICAibWV0YWRhdGEiOiB7CiAgICAiZGVzY3JpcHRpb24iOiAiR2VuZXJhdGVkIGZyb20gQWx0ZXJ5eCBzdGF0aWMgYW5hbHlzaXMuIEluZGVwZW5kZW50IHNlbWFudGljIHZhbGlkYXRpb24gcmVtYWlucyByZXF1aXJlZC4iLAogICAgImRpc3BsYXlOYW1lIjogIjAyX2xvd193ZXN0X3NhbXBsZSIsCiAgICAidHlwZSI6ICJEYXRhZmxvdyIKICB9Cn0=",
+        "payloadType": "InlineBase64"
+      }
+    ]
+  },
+  "description": "Generated from Alteryx static analysis. Independent semantic validation remains required.",
+  "displayName": "02_low_west_sample",
+  "type": "Dataflow"
+}

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from accelerator.api import app
@@ -12,6 +13,51 @@ def test_health_reports_version() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_desktop_session_token_protects_the_embedded_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ACCELERATOR_DESKTOP_TOKEN", "desktop-test-token")
+    client = TestClient(app, base_url="http://localhost")
+
+    assert client.get("/health").status_code == 401
+    assert (
+        client.get(
+            "/health",
+            headers={"x-accelerator-desktop-token": "wrong-token"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.get(
+            "/health",
+            headers={"x-accelerator-desktop-token": "desktop-test-token"},
+        ).status_code
+        == 200
+    )
+
+    bootstrap = client.get(
+        "/",
+        params={"desktop_token": "desktop-test-token"},
+        follow_redirects=False,
+    )
+    assert bootstrap.status_code == 307
+    assert "accelerator-desktop-token=" in bootstrap.headers["set-cookie"]
+    assert client.get("/health").status_code == 200
+
+
+def test_desktop_session_rejects_query_tokens_outside_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ACCELERATOR_DESKTOP_TOKEN", "desktop-test-token")
+
+    response = TestClient(app, base_url="http://localhost").get(
+        "/health",
+        params={"desktop_token": "desktop-test-token"},
+    )
+
+    assert response.status_code == 401
 
 
 def test_preview_returns_shared_discovery_contract(tmp_path: Path) -> None:

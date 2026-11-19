@@ -1,0 +1,16 @@
+{
+  "computeEngineSettings": {
+    "allowFastCopy": false
+  },
+  "connections": [],
+  "formatVersion": "202502",
+  "name": "02_low_west_sample",
+  "queriesMetadata": {
+    "west_sample": {
+      "loadEnabled": false,
+      "queryId": "9a9997c8-a2ac-52ed-8118-aac6cda6087b",
+      "queryName": "west_sample"
+    }
+  },
+  "queryGroups": []
+}

@@ -30,7 +30,7 @@ on:
           - Notebook
           - DataPipeline
       workflow_filter:
-        description: Wildcard for workflow-relative directories
+        description: Workflow folder name or relative-path wildcard
         required: true
         default: "*"
         type: string

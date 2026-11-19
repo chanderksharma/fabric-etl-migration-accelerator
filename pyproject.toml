@@ -31,6 +31,13 @@ dev = [
   "tqdm>=4.67,<5",
   "types-defusedxml>=0.7,<1",
 ]
+desktop = [
+  "pywebview>=6.2.1,<7",
+]
+desktop-build = [
+  "pyinstaller>=6.22.3,<7",
+  "pywebview>=6.2.1,<7",
+]
 
 [project.scripts]
 tool = "accelerator.cli:app"

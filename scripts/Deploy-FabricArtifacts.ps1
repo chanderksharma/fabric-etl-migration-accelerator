@@ -17,7 +17,7 @@
 .PARAMETER Target
     Artifact type to deploy: Both, Bundle, Dataflow, Notebook, or DataPipeline.
 .PARAMETER WorkflowFilter
-    PowerShell wildcard matched against workflow-relative directory paths.
+    PowerShell wildcard matched against a workflow folder name or relative path.
 .PARAMETER ConflictBehavior
     Behavior when an item with the same type and display name exists.
 .PARAMETER DryRun
@@ -130,7 +130,14 @@ function Get-DeploymentCandidates {
             $ResolvedRoot,
             $File.Directory.FullName
         ).Replace('\', '/')
-        if ($RelativeDirectory -notlike $Filter) {
+        $NormalizedFilter = $Filter.Replace('\', '/')
+        $FilterValue = if ($NormalizedFilter.Contains('/')) {
+            $RelativeDirectory
+        }
+        else {
+            [IO.Path]::GetFileName($RelativeDirectory)
+        }
+        if ($FilterValue -notlike $NormalizedFilter) {
             continue
         }
         if (

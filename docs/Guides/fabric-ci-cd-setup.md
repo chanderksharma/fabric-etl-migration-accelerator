@@ -317,7 +317,7 @@ Both providers expose equivalent deployment controls.
 | Deployment ID | `manual` | Correlation text |
 | Artifact root | `generated-fabric-workflows` | Repository-relative directory |
 | Target | `Both` | `Both`, `Bundle`, `Dataflow`, `Notebook`, `DataPipeline` |
-| Workflow filter | `*` | Workflow-directory wildcard |
+| Workflow filter | `*` | Workflow folder name, such as `02_low_west_sample`, or a relative-path wildcard, such as `alteryx-workflows/02_*` |
 | Conflict behavior | `Update` | `Fail`, `Skip`, `Update` |
 | Dry run | `false` | `true`, `false` |
 

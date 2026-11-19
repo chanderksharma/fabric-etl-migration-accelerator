@@ -55,6 +55,23 @@ Open **`http://127.0.0.1:8050`**:
 2. Review discovered and skipped items, then click **Confirm and assess** (runs against an immutable snapshot using four bounded file workers with cooperative cancellation and SQLite WAL recovery).
 3. Use **Portfolio** (and the six-tab workflow drawer or **Technical Details** register — see [Prototype UI Review](docs/Quality/prototype-ui-review.md)) to export JSON/CSV reports, generate Fabric definitions, or download workflow-level deployment ZIP bundles (`generated-fabric-workflows/alteryx-workflows/`, `generated-fabric-workflows/informatica-powercenter/`, and `generated-fabric-workflows/informatica-idmc/`).
 
+### Windows Desktop Utility
+
+Run the same local application in a native Windows WebView2 window:
+
+```powershell
+Set-Location apps\web
+npm run build
+Set-Location ..\..
+uv sync --extra desktop --locked
+uv run --extra desktop tool desktop
+```
+
+Build the portable Windows package with
+[`scripts/Build-Desktop.ps1`](scripts/Build-Desktop.ps1). See
+[Installation and Runtime Modes](docs/Guides/installation.md) for executable,
+data-location, WebView2, deployment-authentication, and security details.
+
 ### Command-Line Interface (CLI)
 
 ```powershell

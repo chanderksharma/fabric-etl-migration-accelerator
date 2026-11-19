@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import textwrap
 from pathlib import Path
 
@@ -166,6 +167,53 @@ def test_deployment_workflow_is_dev_only_and_idempotent() -> None:
     assert "Invoke-FabricAlm.ps1" in workflow
     assert "SyncDevelopmentToGit" in workflow
     assert "production" not in workflow.casefold()
+
+
+@pytest.mark.parametrize(
+    "workflow_filter",
+    ["02_low_west_sample", r"alteryx-workflows\02_low_west_sample", "alteryx-workflows/02_*"],
+)
+def test_deployment_script_matches_workflow_name_or_relative_path(
+    workflow_filter: str,
+) -> None:
+    executable = shutil.which("pwsh")
+    if executable is None:
+        pytest.skip("PowerShell 7 is required to exercise deployment filtering")
+    source = ARTIFACT_ROOT / "alteryx-workflows" / "02_low_west_sample"
+    state_root = ROOT / ".accelerator"
+    state_root.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="filter-test-", dir=state_root) as directory:
+        artifact_root = Path(directory) / "artifacts"
+        destination = artifact_root / "alteryx-workflows" / source.name
+        shutil.copytree(source, destination)
+
+        result = subprocess.run(
+            [
+                executable,
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-File",
+                str(ROOT / "scripts" / "Deploy-FabricArtifacts.ps1"),
+                "-ArtifactRoot",
+                str(artifact_root),
+                "-Target",
+                "Dataflow",
+                "-WorkflowFilter",
+                workflow_filter,
+                "-DryRun",
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+
+    response = json.loads(result.stdout)
+    assert response["DisplayName"] == "02_low_west_sample"
+    assert response["Target"] == "Dataflow"
+    assert response["Action"] == "WouldDeploy"
 
 
 def test_fabric_alm_promotion_is_manual_and_environment_gated() -> None:

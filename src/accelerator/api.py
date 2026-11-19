@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, TypeAdapter
 from starlette.concurrency import run_in_threadpool
@@ -81,12 +81,39 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost
 app.state.csrf_token = secrets.token_urlsafe(32)
 application = AssessmentApplication()
 MAX_BROWSER_UPLOAD_BYTES = 100 * 1024 * 1024
+DESKTOP_TOKEN_COOKIE = "accelerator-desktop-token"
 
 
 @app.middleware("http")
 async def local_origin_guard(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
+    desktop_token = os.getenv("ACCELERATOR_DESKTOP_TOKEN", "").strip()
+    if desktop_token:
+        header_token = request.headers.get("x-accelerator-desktop-token", "")
+        cookie_token = request.cookies.get(DESKTOP_TOKEN_COOKIE, "")
+        query_token = request.query_params.get("desktop_token")
+        if query_token is not None:
+            if (
+                request.method != "GET"
+                or request.url.path != "/"
+                or not secrets.compare_digest(query_token.encode(), desktop_token.encode())
+            ):
+                return Response("Desktop session token is invalid", status_code=401)
+            bootstrap_response = RedirectResponse("/", status_code=307)
+            bootstrap_response.set_cookie(
+                DESKTOP_TOKEN_COOKIE,
+                desktop_token,
+                httponly=True,
+                samesite="strict",
+                path="/",
+            )
+            return bootstrap_response
+        if not (
+            secrets.compare_digest(header_token.encode(), desktop_token.encode())
+            or secrets.compare_digest(cookie_token.encode(), desktop_token.encode())
+        ):
+            return Response("Desktop session token is required", status_code=401)
     origin = request.headers.get("origin")
     if origin:
         if origin != f"{request.url.scheme}://{request.headers.get('host')}":

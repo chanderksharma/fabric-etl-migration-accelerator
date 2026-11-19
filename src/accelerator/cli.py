@@ -60,6 +60,27 @@ def serve(port: Annotated[int, typer.Option(min=1024, max=65535)] = 8050) -> Non
     uvicorn.run("accelerator.api:app", host="127.0.0.1", port=port)
 
 
+@app.command()
+def desktop(
+    debug: Annotated[
+        bool,
+        typer.Option(help="Enable the embedded WebView developer tools"),
+    ] = False,
+    smoke_test: Annotated[
+        bool,
+        typer.Option("--smoke-test", hidden=True, help="Verify startup without opening a window"),
+    ] = False,
+) -> None:
+    """Open the accelerator as a native Windows desktop utility."""
+    from accelerator.desktop import launch_desktop
+
+    try:
+        launch_desktop(debug=debug, smoke_test=smoke_test)
+    except (FileNotFoundError, OSError, RuntimeError, TimeoutError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+
+
 @app.command("generate")
 def generate_artifacts(
     run_id: Annotated[str, typer.Argument(help="Completed local run ID")],

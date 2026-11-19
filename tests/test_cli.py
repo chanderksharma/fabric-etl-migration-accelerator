@@ -21,6 +21,13 @@ def test_preview_subcommand_returns_discovery_summary(tmp_path: Path) -> None:
     assert body["workflows"][0]["display_path"] == "sample.yxmd"
 
 
+def test_desktop_subcommand_is_available() -> None:
+    result = CliRunner().invoke(app, ["desktop", "--help"])
+
+    assert result.exit_code == 0
+    assert "native Windows desktop utility" in result.stdout
+
+
 def test_generate_command_persists_fabric_definitions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
