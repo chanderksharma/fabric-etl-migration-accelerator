@@ -13,25 +13,26 @@ Both providers call
 The script deploys generated Dataflow Gen2, Fabric Notebook, and Data Pipeline
 definition envelopes from `generated-fabric-workflows`.
 
-GitHub Actions can also use
-[`scripts/Invoke-FabricAlm.ps1`](../../scripts/Invoke-FabricAlm.ps1) to commit
-the authoritative Development workspace to Git and manually promote adjacent
-Fabric Deployment Pipeline stages.
+Both providers use
+[`scripts/Invoke-FabricAlm.ps1`](../../scripts/Invoke-FabricAlm.ps1) for
+reviewed adjacent-stage promotion. GitHub Actions also uses it to commit the
+authoritative Development workspace to Git.
 
 ## Deployment model
 
 | Capability | GitHub Actions | GitLab CI |
 | --- | --- | --- |
-| Configuration file | `.github/workflows/deploy-fabric-artifacts.yml` | `.gitlab-ci.yml` |
+| Configuration file | `.github/workflows/*.yml` | `.gitlab-ci.yml` + `.gitlab/ci/*.yml` |
 | Manual trigger | Workflow dispatch | New pipeline |
 | API trigger | GitHub workflow dispatch API | GitLab Pipelines API |
 | Runner | Self-hosted Windows X64 | Runner tagged `fabric-deploy-windows` |
 | Shell | PowerShell 7 | PowerShell 7 |
-| Environment | `dev` | `dev` |
+| Environment | `dev`, `test`, `prod` | `dev`, `test`, `prod` |
 | Serialization | Workspace concurrency group | Workspace resource group |
 | Dry run | Supported | Supported |
+| Create/reuse Deployment Pipeline | Manual GitHub workflow | `FABRIC_OPERATION=CreatePipeline` |
 | Fabric workspace to Git | Optional, repository-variable gated | Not configured |
-| Test and Production promotion | Manual GitHub workflow | Not configured |
+| Test and Production promotion | Manual GitHub workflow | Planned job + manual protected deployment job |
 
 > [!IMPORTANT]
 > A successful definition deployment does not approve semantic parity, bind
@@ -409,11 +410,17 @@ CLI login.
 
 ## GitLab CI setup
 
-GitLab remains a Development-only deployment path in this foundation. Native
-Fabric Git synchronization and Test/Production promotion are implemented in
-the GitHub workflows.
+GitLab supports Development artifact deployment, Deployment Pipeline
+provisioning, and governed Test/Production promotion. The root
+[`.gitlab-ci.yml`](../../.gitlab-ci.yml) defines shared manual inputs and
+includes:
 
-The pipeline is [`.gitlab-ci.yml`](../../.gitlab-ci.yml).
+* [Artifact deployment](../../.gitlab/ci/deploy-fabric-artifacts.yml)
+* [Deployment Pipeline creation](../../.gitlab/ci/create-fabric-deployment-pipeline.yml)
+* [Fabric ALM promotion](../../.gitlab/ci/promote-fabric-alm.yml)
+
+`FABRIC_OPERATION` selects `Deploy`, `CreatePipeline`, or `Promote`. `Deploy`
+is the default so accelerator API dispatch remains backward compatible.
 
 ### Configure the runner
 
@@ -437,25 +444,61 @@ In the GitLab project:
 
 | Key | Recommended protection | Environment scope |
 | --- | --- | --- |
-| `AZURE_CLIENT_ID` | Masked; Protected when `main` is protected | `dev` |
-| `AZURE_TENANT_ID` | Masked; Protected when `main` is protected | `dev` |
-| `AZURE_CLIENT_SECRET` | Masked, Hidden, Protected | `dev` |
-| `FABRIC_WORKSPACE_ID` | Protected when `main` is protected | `dev` |
+| `AZURE_CLIENT_ID` | Masked; Protected when `main` is protected | `dev`, `test`, `prod` |
+| `AZURE_TENANT_ID` | Masked; Protected when `main` is protected | `dev`, `test`, `prod` |
+| `AZURE_CLIENT_SECRET` | Optional fallback; Masked, Hidden, Protected | `dev`, `test`, `prod` |
+| `FABRIC_DEPLOYMENT_PIPELINE_ID` | Protected | All or `dev`, `test`, `prod` |
+| `FABRIC_DEV_STAGE_NAME` | Optional | All |
+| `FABRIC_TEST_STAGE_NAME` | Optional | All |
+| `FABRIC_PROD_STAGE_NAME` | Optional | All |
+| `FABRIC_VARIABLE_LIBRARY_NAME` | Optional | All |
+| `FABRIC_DEV_VALUE_SET_NAME` | Optional | All |
+| `FABRIC_TEST_VALUE_SET_NAME` | Optional | All |
+| `FABRIC_PROD_VALUE_SET_NAME` | Optional | All |
+| `FABRIC_DEPLOYMENT_PLAN_ID` | Optional preview item ID | All |
+| `FABRIC_PIPELINE_ADMIN_GROUP_NAME` | Optional configured group mapping | All |
+| `FABRIC_PIPELINE_ADMIN_GROUP_ID` | Optional configured group mapping | All |
 
 If variables are protected, protect the `main` branch so the deployment job
 can receive them.
+
+For OIDC, each job requests `FABRIC_OIDC_TOKEN` with audience
+`$CI_SERVER_URL`. Configure the Entra federated identity issuer as the GitLab
+origin, audience as the same GitLab origin, and subject for the protected
+branch, for example:
+
+```text
+project_path:<group>/<project>:ref_type:branch:ref:main
+```
+
+When `AZURE_CLIENT_SECRET` is absent, the shared job template maps the GitLab
+ID token to `AZURE_FEDERATED_TOKEN`. When the secret exists, the existing
+client-secret path is retained.
+
+Create `dev`, `test`, and `prod` GitLab environments. Protect the target
+environments and configure allowed deployers. Configure deployment approvals
+for `test` and `prod` when supported by the GitLab tier. The promotion job is
+manual even when no approval rule is configured.
 
 ### Run manually
 
 1. Open **Build > Pipelines**.
 2. Select **New pipeline**.
 3. Select `main`.
-4. Set `DRY_RUN` to `true`.
-5. Choose `TARGET`, `WORKFLOW_FILTER`, and `CONFLICT_BEHAVIOR`.
+4. Choose `FABRIC_OPERATION`.
+5. Complete the variables for that operation.
 6. Run the pipeline.
-7. Review the dry-run output.
-8. Use `DRY_RUN=false` only after the service-principal variables and artifacts
-   are verified.
+
+For `Deploy`, select `TARGET`, `WORKFLOW_FILTER`, `CONFLICT_BEHAVIOR`, and
+`DRY_RUN`. For `CreatePipeline`, provide the pipeline name and all three
+existing workspace names; use `DRY_RUN=true` first. The result JSON and dotenv
+outputs are retained for seven days.
+
+For `Promote`, choose the target stage and `Selected` or `All`. Selected mode
+requires exact name/type JSON and `DEPENDENCIES_REVIEWED=true`. The planning
+job runs first and publishes `promotion-plan.json`. Review that artifact, then
+start the manual `promote_fabric_alm` job. GitLab applies the target protected
+environment and any configured deployment approval before execution.
 
 The pipeline accepts manually created Web pipelines and API-created pipelines.
 Push pipelines are ignored.

@@ -1,0 +1,130 @@
+plan_fabric_alm_promotion:
+  extends: .fabric_windows_job
+  stage: plan
+  timeout: 10m
+  rules:
+    - if: '$FABRIC_OPERATION == "Promote" && $PROMOTION_TARGET_STAGE == "Production"'
+      variables:
+        PROMOTION_SOURCE_ENVIRONMENT: test
+        PROMOTION_TARGET_ENVIRONMENT: prod
+        PROMOTION_SOURCE_STAGE_DEFAULT: Test
+        PROMOTION_TARGET_STAGE_DEFAULT: Production
+    - if: '$FABRIC_OPERATION == "Promote" && $PROMOTION_TARGET_STAGE == "Test"'
+      variables:
+        PROMOTION_SOURCE_ENVIRONMENT: dev
+        PROMOTION_TARGET_ENVIRONMENT: test
+        PROMOTION_SOURCE_STAGE_DEFAULT: Development
+        PROMOTION_TARGET_STAGE_DEFAULT: Test
+    - when: never
+  environment:
+    name: $PROMOTION_SOURCE_ENVIRONMENT
+    action: verify
+  script:
+    - |
+      if ($env:PROMOTION_SCOPE -notin @("Selected", "All")) {
+        throw "PROMOTION_SCOPE must be Selected or All"
+      }
+      if ($env:DEPENDENCIES_REVIEWED -notin @("true", "false")) {
+        throw "DEPENDENCIES_REVIEWED must be true or false"
+      }
+      if ($env:USE_PREVIEW_DEPLOYMENT_PLAN -notin @("true", "false")) {
+        throw "USE_PREVIEW_DEPLOYMENT_PLAN must be true or false"
+      }
+      $SourceStage = if ($env:PROMOTION_TARGET_STAGE -eq "Production") {
+        if ($env:FABRIC_TEST_STAGE_NAME) { $env:FABRIC_TEST_STAGE_NAME } else { "Test" }
+      } else {
+        if ($env:FABRIC_DEV_STAGE_NAME) { $env:FABRIC_DEV_STAGE_NAME } else { "Development" }
+      }
+      $TargetStage = if ($env:PROMOTION_TARGET_STAGE -eq "Production") {
+        if ($env:FABRIC_PROD_STAGE_NAME) { $env:FABRIC_PROD_STAGE_NAME } else { "Production" }
+      } else {
+        if ($env:FABRIC_TEST_STAGE_NAME) { $env:FABRIC_TEST_STAGE_NAME } else { "Test" }
+      }
+      $Parameters = @{
+        Operation = "PlanPromotion"
+        DeploymentPipelineId = $env:FABRIC_DEPLOYMENT_PIPELINE_ID
+        SourceStageName = $SourceStage
+        TargetStageName = $TargetStage
+        PromotionScope = $env:PROMOTION_SCOPE
+        SelectedItemsJson = $env:SELECTED_ITEMS
+        DependenciesReviewed = $env:DEPENDENCIES_REVIEWED -eq "true"
+        DeploymentNote = $env:DEPLOYMENT_NOTE
+      }
+      if ($env:FABRIC_VARIABLE_LIBRARY_NAME) {
+        $Parameters.VariableLibraryName = $env:FABRIC_VARIABLE_LIBRARY_NAME
+        $Parameters.ActiveValueSetName = if ($env:PROMOTION_TARGET_STAGE -eq "Production") {
+          if ($env:FABRIC_PROD_VALUE_SET_NAME) { $env:FABRIC_PROD_VALUE_SET_NAME } else { "prod" }
+        } else {
+          if ($env:FABRIC_TEST_VALUE_SET_NAME) { $env:FABRIC_TEST_VALUE_SET_NAME } else { "test" }
+        }
+      }
+      if ($env:USE_PREVIEW_DEPLOYMENT_PLAN -eq "true") {
+        $Parameters.DeploymentPlanId = $env:FABRIC_DEPLOYMENT_PLAN_ID
+        $Parameters.EnablePreviewDeploymentPlan = $true
+      }
+      $PlanJson = (& ./scripts/Invoke-FabricAlm.ps1 @Parameters | Out-String).Trim()
+      if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      $Plan = $PlanJson | ConvertFrom-Json -ErrorAction Stop
+      $CompactPlan = $Plan | ConvertTo-Json -Depth 20 -Compress
+      if ([Text.Encoding]::UTF8.GetByteCount($CompactPlan) -gt 1MB) {
+        throw "Promotion plan exceeds the artifact limit"
+      }
+      $CompactPlan | Set-Content -LiteralPath promotion-plan.json -Encoding utf8
+      $PlanJson
+  artifacts:
+    expire_in: 7 days
+    paths:
+      - promotion-plan.json
+
+promote_fabric_alm:
+  extends: .fabric_windows_job
+  stage: promote
+  timeout: 30m
+  interruptible: false
+  resource_group: "fabric-alm-$FABRIC_DEPLOYMENT_PIPELINE_ID"
+  needs:
+    - job: plan_fabric_alm_promotion
+      artifacts: true
+  rules:
+    - if: '$FABRIC_OPERATION == "Promote" && $PROMOTION_TARGET_STAGE == "Production"'
+      variables:
+        PROMOTION_TARGET_ENVIRONMENT: prod
+    - if: '$FABRIC_OPERATION == "Promote" && $PROMOTION_TARGET_STAGE == "Test"'
+      variables:
+        PROMOTION_TARGET_ENVIRONMENT: test
+    - when: never
+  environment:
+    name: $PROMOTION_TARGET_ENVIRONMENT
+  when: manual
+  allow_failure: false
+  script:
+    - |
+      if (-not (Test-Path -LiteralPath promotion-plan.json -PathType Leaf)) {
+        throw "A successful preflight promotion plan artifact is required"
+      }
+      $ReviewedPlanJson = (Get-Content -LiteralPath promotion-plan.json -Raw).Trim()
+      $ReviewedPlan = $ReviewedPlanJson | ConvertFrom-Json -ErrorAction Stop
+      $Parameters = @{
+        Operation = "Promote"
+        DeploymentPipelineId = $env:FABRIC_DEPLOYMENT_PIPELINE_ID
+        SourceStageName = [string]$ReviewedPlan.SourceStage
+        TargetStageName = [string]$ReviewedPlan.TargetStage
+        PromotionScope = $env:PROMOTION_SCOPE
+        SelectedItemsJson = $env:SELECTED_ITEMS
+        DependenciesReviewed = $env:DEPENDENCIES_REVIEWED -eq "true"
+        ReviewedPlanJson = $ReviewedPlanJson
+        DeploymentNote = $env:DEPLOYMENT_NOTE
+      }
+      if ($env:FABRIC_VARIABLE_LIBRARY_NAME) {
+        $Parameters.VariableLibraryName = $env:FABRIC_VARIABLE_LIBRARY_NAME
+        $Parameters.ActiveValueSetName = if ($env:PROMOTION_TARGET_STAGE -eq "Production") {
+          if ($env:FABRIC_PROD_VALUE_SET_NAME) { $env:FABRIC_PROD_VALUE_SET_NAME } else { "prod" }
+        } else {
+          if ($env:FABRIC_TEST_VALUE_SET_NAME) { $env:FABRIC_TEST_VALUE_SET_NAME } else { "test" }
+        }
+      }
+      if ($env:USE_PREVIEW_DEPLOYMENT_PLAN -eq "true") {
+        $Parameters.DeploymentPlanId = $env:FABRIC_DEPLOYMENT_PLAN_ID
+        $Parameters.EnablePreviewDeploymentPlan = $true
+      }
+      ./scripts/Invoke-FabricAlm.ps1 @Parameters

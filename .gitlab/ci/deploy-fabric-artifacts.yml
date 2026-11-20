@@ -1,0 +1,34 @@
+deploy_fabric_artifacts:
+  extends: .fabric_windows_job
+  stage: deploy
+  timeout: 30m
+  resource_group: "fabric-deploy-$FABRIC_WORKSPACE_ID"
+  environment:
+    name: dev
+  rules:
+    - if: '$FABRIC_OPERATION == "Deploy"'
+    - when: never
+  script:
+    - |
+      if (-not $env:FABRIC_WORKSPACE_ID) {
+        throw "FABRIC_WORKSPACE_ID is required"
+      }
+      if ($env:TARGET -notin @("Both", "Bundle", "Dataflow", "Notebook", "DataPipeline")) {
+        throw "unsupported TARGET: $env:TARGET"
+      }
+      if ($env:CONFLICT_BEHAVIOR -notin @("Fail", "Skip", "Update")) {
+        throw "unsupported CONFLICT_BEHAVIOR: $env:CONFLICT_BEHAVIOR"
+      }
+      if ($env:DRY_RUN -notin @("true", "false")) {
+        throw "DRY_RUN must be true or false"
+      }
+      $Parameters = @{
+        ArtifactRoot = $env:ARTIFACT_ROOT
+        Target = $env:TARGET
+        WorkflowFilter = $env:WORKFLOW_FILTER
+        ConflictBehavior = $env:CONFLICT_BEHAVIOR
+      }
+      if ($env:DRY_RUN -eq "true") {
+        $Parameters.DryRun = $true
+      }
+      ./scripts/Deploy-FabricArtifacts.ps1 @Parameters

@@ -91,6 +91,7 @@ def test_dispatches_existing_gitlab_pipeline(
         variable["key"]: variable["value"]
         for variable in pipeline_call[2]["variables"]
     }
+    assert variables["FABRIC_OPERATION"] == "Deploy"
     assert variables["FABRIC_WORKSPACE_ID"] == "workspace-id"
     assert variables["WORKFLOW_FILTER"] == "alteryx-workflows/orders"
     assert variables["TARGET"] == pipeline_target

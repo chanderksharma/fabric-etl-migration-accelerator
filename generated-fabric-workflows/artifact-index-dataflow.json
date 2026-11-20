@@ -1,23 +1,225 @@
 {
-  "run_id": "7db86b9ba3754be88913b3056a31c1ef",
+  "run_id": "0b82203552fb4b55872b1fc44be8f1f3",
   "target": "dataflow",
-  "artifact_count": 1,
-  "generated_count": 1,
-  "blocked_count": 0,
+  "artifact_count": 15,
+  "generated_count": 11,
+  "blocked_count": 4,
   "artifacts": [
     {
       "position": 0,
-      "workflow": "02_low_west_sample.yxmd",
+      "workflow": "alteryx-workflows\\01_low_clean_orders.yxmd",
       "target": "dataflow",
       "state": "generated_unvalidated",
       "deployable_definition": true,
       "runtime_ready": false,
-      "path": "02_low_west_sample",
+      "path": "alteryx-workflows/01_low_clean_orders",
       "files": [
         "dataflow-mashup.pq",
         "dataflow-queryMetadata.json",
         "dataflow.platform.json",
         "dataflow-create-item.json"
+      ]
+    },
+    {
+      "position": 1,
+      "workflow": "alteryx-workflows\\02_low_west_sample.yxmd",
+      "target": "dataflow",
+      "state": "generated_unvalidated",
+      "deployable_definition": true,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/02_low_west_sample",
+      "files": [
+        "dataflow-mashup.pq",
+        "dataflow-queryMetadata.json",
+        "dataflow.platform.json",
+        "dataflow-create-item.json"
+      ]
+    },
+    {
+      "position": 2,
+      "workflow": "alteryx-workflows\\03_low_unique_customers.yxmd",
+      "target": "dataflow",
+      "state": "generated_unvalidated",
+      "deployable_definition": true,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/03_low_unique_customers",
+      "files": [
+        "dataflow-mashup.pq",
+        "dataflow-queryMetadata.json",
+        "dataflow.platform.json",
+        "dataflow-create-item.json"
+      ]
+    },
+    {
+      "position": 3,
+      "workflow": "alteryx-workflows\\04_low_parse_sku_dates.yxmd",
+      "target": "dataflow",
+      "state": "generated_unvalidated",
+      "deployable_definition": true,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/04_low_parse_sku_dates",
+      "files": [
+        "dataflow-mashup.pq",
+        "dataflow-queryMetadata.json",
+        "dataflow.platform.json",
+        "dataflow-create-item.json"
+      ]
+    },
+    {
+      "position": 4,
+      "workflow": "alteryx-workflows\\05_high_spend_by_tier.yxmd",
+      "target": "dataflow",
+      "state": "generated_unvalidated",
+      "deployable_definition": true,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/05_high_spend_by_tier",
+      "files": [
+        "dataflow-mashup.pq",
+        "dataflow-queryMetadata.json",
+        "dataflow.platform.json",
+        "dataflow-create-item.json"
+      ]
+    },
+    {
+      "position": 5,
+      "workflow": "alteryx-workflows\\06_high_channel_crosstab.yxmd",
+      "target": "dataflow",
+      "state": "generated_unvalidated",
+      "deployable_definition": true,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/06_high_channel_crosstab",
+      "files": [
+        "dataflow-mashup.pq",
+        "dataflow-queryMetadata.json",
+        "dataflow.platform.json",
+        "dataflow-create-item.json"
+      ]
+    },
+    {
+      "position": 6,
+      "workflow": "alteryx-workflows\\07_high_target_variance.yxmd",
+      "target": "dataflow",
+      "state": "generated_unvalidated",
+      "deployable_definition": true,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/07_high_target_variance",
+      "files": [
+        "dataflow-mashup.pq",
+        "dataflow-queryMetadata.json",
+        "dataflow.platform.json",
+        "dataflow-create-item.json"
+      ]
+    },
+    {
+      "position": 7,
+      "workflow": "alteryx-workflows\\08_very_high_customer_attainment.yxmd",
+      "target": "dataflow",
+      "state": "scaffold",
+      "deployable_definition": false,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/08_very_high_customer_attainment",
+      "files": [
+        "dataflow-diagnostics.json",
+        "dataflow-manifest.json"
+      ]
+    },
+    {
+      "position": 8,
+      "workflow": "alteryx-workflows\\09_very_high_batch_reconcile.yxmd",
+      "target": "dataflow",
+      "state": "generated_unvalidated",
+      "deployable_definition": true,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/09_very_high_batch_reconcile",
+      "files": [
+        "dataflow-mashup.pq",
+        "dataflow-queryMetadata.json",
+        "dataflow.platform.json",
+        "dataflow-create-item.json"
+      ]
+    },
+    {
+      "position": 9,
+      "workflow": "alteryx-workflows\\10_very_high_sales_pipeline.yxmd",
+      "target": "dataflow",
+      "state": "generated_unvalidated",
+      "deployable_definition": true,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/10_very_high_sales_pipeline",
+      "files": [
+        "dataflow-mashup.pq",
+        "dataflow-queryMetadata.json",
+        "dataflow.platform.json",
+        "dataflow-create-item.json"
+      ]
+    },
+    {
+      "position": 10,
+      "workflow": "alteryx-workflows\\Broadridge_OCEND_Fabric_Reconstruction.yxmd",
+      "target": "dataflow",
+      "state": "generated_unvalidated",
+      "deployable_definition": true,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/Broadridge_OCEND_Fabric_Reconstruction",
+      "files": [
+        "dataflow-mashup.pq",
+        "dataflow-queryMetadata.json",
+        "dataflow.platform.json",
+        "dataflow-create-item.json"
+      ]
+    },
+    {
+      "position": 11,
+      "workflow": "alteryx-workflows\\my_alteryx-workflow.yxmd",
+      "target": "dataflow",
+      "state": "scaffold",
+      "deployable_definition": false,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/my_alteryx-workflow",
+      "files": [
+        "dataflow-diagnostics.json",
+        "dataflow-manifest.json"
+      ]
+    },
+    {
+      "position": 12,
+      "workflow": "alteryx-workflows\\sample_alteryx_workflow.yxmd",
+      "target": "dataflow",
+      "state": "scaffold",
+      "deployable_definition": false,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/sample_alteryx_workflow",
+      "files": [
+        "dataflow-diagnostics.json",
+        "dataflow-manifest.json"
+      ]
+    },
+    {
+      "position": 13,
+      "workflow": "alteryx-workflows\\sample_container_sequence.yxmd",
+      "target": "dataflow",
+      "state": "generated_unvalidated",
+      "deployable_definition": true,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/sample_container_sequence",
+      "files": [
+        "dataflow-mashup.pq",
+        "dataflow-queryMetadata.json",
+        "dataflow.platform.json",
+        "dataflow-create-item.json"
+      ]
+    },
+    {
+      "position": 14,
+      "workflow": "alteryx-workflows\\sample_merge_append_joins.yxmd",
+      "target": "dataflow",
+      "state": "scaffold",
+      "deployable_definition": false,
+      "runtime_ready": false,
+      "path": "alteryx-workflows/sample_merge_append_joins",
+      "files": [
+        "dataflow-diagnostics.json",
+        "dataflow-manifest.json"
       ]
     }
   ]

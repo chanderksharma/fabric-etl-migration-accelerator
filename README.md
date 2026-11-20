@@ -15,7 +15,7 @@ The **Microsoft Fabric ETL Migration Accelerator** solves these delivery challen
 | **Multi-Source Discovery & Safety** | Recursively inventories Alteryx (`.yxmd`, `.yxmc`, `.yxwz`, `.yxzp`), Informatica PowerCenter (`powrmart.dtd` XML), and Informatica IDMC export ZIPs with archive-bomb, path-traversal, and `defusedxml` protections plus SHA-256 deduplication—never executing untrusted source content. |
 | **Canonical ETL Graph & Effort Model** | Normalizes heterogeneous ETL graphs into a versioned canonical intermediate representation (IR), scoring complexity, wave placement, source/destination registers, and practical residual engineering effort capped at 21 days per workflow. |
 | **Compiler-Grounded Fabric Generation** | Compiles supported DAGs natively into **Dataflow Gen2** (`mashup.pq` + `queryMetadata.json`), **Fabric PySpark Notebooks** (`.ipynb`), and **Fabric Data Pipelines** (`pipeline-content.json`), while isolating unsupported operations as explicit, non-deployable `scaffold` diagnostics. |
-| **Secretless Dev CI/CD Deployment** | Dispatches pre-existing **GitHub Actions** or **GitLab CI** pipelines authenticating via **Microsoft Entra Workload Identity Federation (OIDC)** to create/update Fabric `dev` items idempotently with definition readback and `executeQuery` validation. |
+| **Secretless CI/CD & Governed ALM** | GitHub Actions and GitLab CI authenticate through Microsoft Entra Workload Identity Federation to deploy Development artifacts, provision Fabric Deployment Pipelines, and promote reviewed Selected/All scopes through protected Test and Production environments. |
 
 ![End-to-End Architecture Overview](docs/Architecture/arch-01-end-to-end-accelerator.vsdx.fig.png)
 
@@ -125,7 +125,7 @@ npm audit --audit-level=high
 
 See the [Fabric CI/CD Setup Guide](docs/Guides/fabric-ci-cd-setup.md) and [Deployment Strategy](docs/Release/deployment-strategy.md) for full configuration.
 
-- **GitHub Actions** ([`.github/workflows/deploy-fabric-artifacts.yml`](.github/workflows/deploy-fabric-artifacts.yml)) and **GitLab CI** ([`.gitlab-ci.yml`](.gitlab-ci.yml)) invoke [`scripts/Deploy-FabricArtifacts.ps1`](scripts/Deploy-FabricArtifacts.ps1) in a `dev`-locked environment with per-workspace concurrency serialization.
+- **GitHub Actions** (`.github/workflows/`) and modular **GitLab CI** ([`.gitlab-ci.yml`](.gitlab-ci.yml) + `.gitlab/ci/`) support Development deployment, Deployment Pipeline provisioning, and governed Test/Production promotion. Both use protected environments, serialized Fabric operations, and the shared PowerShell deployment/ALM scripts.
 - **Microsoft Entra OIDC Federation**: Configure `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` with Workload Identity Federation (`id-token: write` / `AZURE_FEDERATED_TOKEN_FILE`); `AZURE_CLIENT_SECRET` is optional fallback only. Supply `FABRIC_WORKSPACE_ID` at dispatch time.
 - **Runner Policy**: Standard CI jobs ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) enforce Ruff, strict mypy, pytest (`>=80%` coverage), Web lint/tests/build, `pip-audit`, `npm audit`, and CodeQL SAST. Jobs default to `["self-hosted", "Windows", "X64"]` for Microsoft EMU compatibility and can target organization runner groups via `vars.CI_RUNNER_LABELS`.
 - **Dispatch-Only Backend Integration**: Configure `GITHUB_AUTH_MODE=github-app` (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_PATH`, `GITHUB_ALLOWED_REPOSITORIES`) or `GITLAB_BASE_URL` / `GITLAB_TOKEN` / `GITLAB_ALLOWED_PROJECTS`. Neither integration mutates repository files or reads external logs.

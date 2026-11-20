@@ -190,6 +190,7 @@ class GitLabDeploymentService:
             body={
                 "ref": dispatch_ref,
                 "variables": [
+                    {"key": "FABRIC_OPERATION", "value": "Deploy"},
                     {"key": "DEPLOYMENT_ID", "value": correlation_id},
                     {"key": "FABRIC_WORKSPACE_ID", "value": workspace_id},
                     {"key": "ARTIFACT_ROOT", "value": "generated-fabric-workflows"},

@@ -241,7 +241,7 @@ def launch_desktop(*, debug: bool = False, smoke_test: bool = False) -> None:
         if smoke_test:
             return
         try:
-            import webview  # type: ignore[import-not-found]
+            import webview
         except ImportError as error:
             raise RuntimeError(
                 "Desktop dependencies are missing. Run uv sync --extra desktop --locked."

@@ -1,20 +1,28 @@
 workflow:
-  name: 'Deploy $TARGET $WORKFLOW_FILTER ($DEPLOYMENT_ID)'
+  name: 'Fabric $FABRIC_OPERATION ($DEPLOYMENT_ID)'
   rules:
     - if: '$CI_PIPELINE_SOURCE == "api"'
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - when: never
 
 stages:
+  - provision
   - deploy
+  - plan
+  - promote
 
 variables:
-  FABRIC_WORKSPACE_ID:
-    value: ""
-    description: Fabric workspace ID
+  FABRIC_OPERATION:
+    value: "Deploy"
+    description: GitLab Fabric operation
+    options: ["Deploy", "CreatePipeline", "Promote"]
   DEPLOYMENT_ID:
     value: "manual"
-    description: Correlation ID supplied by the deployment API
+    description: Correlation ID supplied by the deployment API or operator
+
+  FABRIC_WORKSPACE_ID:
+    value: ""
+    description: Development workspace ID for artifact deployment
   ARTIFACT_ROOT:
     value: "generated-fabric-workflows"
     description: Repository-relative generated artifact root
@@ -24,48 +32,74 @@ variables:
     options: ["Both", "Bundle", "Dataflow", "Notebook", "DataPipeline"]
   WORKFLOW_FILTER:
     value: "*"
-    description: Wildcard for workflow-relative directories
+    description: Workflow folder name or relative-path wildcard
   CONFLICT_BEHAVIOR:
     value: "Update"
     description: Behavior when an item with the same type and name exists
     options: ["Fail", "Skip", "Update"]
-  DRY_RUN:
+
+  PIPELINE_NAME:
+    value: ""
+    description: Fabric deployment pipeline display name
+  PIPELINE_DESCRIPTION:
+    value: "Fabric deployment pipeline managed by the accelerator"
+    description: Description used only when creating a pipeline
+  DEV_WORKSPACE_NAME:
+    value: ""
+    description: Exact existing Development workspace name
+  TEST_WORKSPACE_NAME:
+    value: ""
+    description: Exact existing Test workspace name
+  PROD_WORKSPACE_NAME:
+    value: ""
+    description: Exact existing Production workspace name
+  PIPELINE_ADMIN_GROUP:
+    value: ""
+    description: Configured Entra group name or object ID for pipeline Admin
+
+  PROMOTION_TARGET_STAGE:
+    value: "Test"
+    description: Adjacent Fabric Deployment Pipeline target stage
+    options: ["Test", "Production"]
+  PROMOTION_SCOPE:
+    value: "Selected"
+    description: Selected items by default; All explicitly includes the source stage
+    options: ["Selected", "All"]
+  SELECTED_ITEMS:
+    value: "[]"
+    description: 'JSON array, for example [{"name":"Notebook_1","type":"Notebook"}]'
+  DEPENDENCIES_REVIEWED:
     value: "false"
-    description: Validate and list envelopes without calling Fabric
+    description: Confirm Selected items include dependencies or target dependencies exist
+    options: ["false", "true"]
+  DEPLOYMENT_NOTE:
+    value: "Promote validated accelerator-generated Fabric items"
+    description: Fabric Deployment Pipeline audit note
+  USE_PREVIEW_DEPLOYMENT_PLAN:
+    value: "false"
+    description: Use the configured preview Deployment Plan
     options: ["false", "true"]
 
-deploy_fabric_artifacts:
-  name: Deploy generated definitions
-  stage: deploy
+  DRY_RUN:
+    value: "false"
+    description: Preview the chosen Deploy or CreatePipeline operation
+    options: ["false", "true"]
+
+.fabric_windows_job:
   tags:
     - fabric-deploy-windows
-  timeout: 30m
   interruptible: false
-  resource_group: "fabric-deploy-$FABRIC_WORKSPACE_ID"
-  environment:
-    name: dev
-  script:
+  id_tokens:
+    FABRIC_OIDC_TOKEN:
+      aud: $CI_SERVER_URL
+  before_script:
     - |
       $ErrorActionPreference = "Stop"
-      if (-not $env:FABRIC_WORKSPACE_ID) {
-        throw "FABRIC_WORKSPACE_ID is required"
+      if (-not $env:AZURE_CLIENT_SECRET -and $env:FABRIC_OIDC_TOKEN) {
+        $env:AZURE_FEDERATED_TOKEN = $env:FABRIC_OIDC_TOKEN
       }
-      if ($env:TARGET -notin @("Both", "Bundle", "Dataflow", "Notebook", "DataPipeline")) {
-        throw "unsupported TARGET: $env:TARGET"
-      }
-      if ($env:CONFLICT_BEHAVIOR -notin @("Fail", "Skip", "Update")) {
-        throw "unsupported CONFLICT_BEHAVIOR: $env:CONFLICT_BEHAVIOR"
-      }
-      if ($env:DRY_RUN -notin @("true", "false")) {
-        throw "DRY_RUN must be true or false"
-      }
-      $parameters = @{
-        ArtifactRoot = $env:ARTIFACT_ROOT
-        Target = $env:TARGET
-        WorkflowFilter = $env:WORKFLOW_FILTER
-        ConflictBehavior = $env:CONFLICT_BEHAVIOR
-      }
-      if ($env:DRY_RUN -eq "true") {
-        $parameters.DryRun = $true
-      }
-      ./scripts/Deploy-FabricArtifacts.ps1 @parameters
+
+include:
+  - local: .gitlab/ci/deploy-fabric-artifacts.yml
+  - local: .gitlab/ci/create-fabric-deployment-pipeline.yml
+  - local: .gitlab/ci/promote-fabric-alm.yml

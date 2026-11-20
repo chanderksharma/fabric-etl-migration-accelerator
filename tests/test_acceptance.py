@@ -325,13 +325,32 @@ def test_fabric_alm_script_fails_closed_and_uses_native_alm_apis() -> None:
 
 
 def test_gitlab_pipeline_is_dispatch_only_and_uses_fabric_deployment_script() -> None:
-    pipeline = (ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+    root = (ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+    deploy = (
+        ROOT / ".gitlab" / "ci" / "deploy-fabric-artifacts.yml"
+    ).read_text(encoding="utf-8")
+    create = (
+        ROOT / ".gitlab" / "ci" / "create-fabric-deployment-pipeline.yml"
+    ).read_text(encoding="utf-8")
+    promote = (
+        ROOT / ".gitlab" / "ci" / "promote-fabric-alm.yml"
+    ).read_text(encoding="utf-8")
+    pipeline = "\n".join((root, deploy, create, promote))
 
     assert '$CI_PIPELINE_SOURCE == "api"' in pipeline
     assert '$CI_PIPELINE_SOURCE == "web"' in pipeline
-    assert "name: 'Deploy $TARGET $WORKFLOW_FILTER ($DEPLOYMENT_ID)'" in pipeline
+    assert "name: 'Fabric $FABRIC_OPERATION ($DEPLOYMENT_ID)'" in pipeline
+    assert 'options: ["Deploy", "CreatePipeline", "Promote"]' in pipeline
+    assert "include:" in root
+    assert ".gitlab/ci/deploy-fabric-artifacts.yml" in root
+    assert ".gitlab/ci/create-fabric-deployment-pipeline.yml" in root
+    assert ".gitlab/ci/promote-fabric-alm.yml" in root
     assert "scripts/Deploy-FabricArtifacts.ps1" in pipeline
+    assert "scripts/New-FabricDeploymentPipeline.ps1" in pipeline
+    assert "scripts/Invoke-FabricAlm.ps1" in pipeline
     assert "fabric-deploy-windows" in pipeline
+    assert "FABRIC_OIDC_TOKEN" in pipeline
+    assert "AZURE_FEDERATED_TOKEN" in pipeline
     assert "FABRIC_WORKSPACE_ID" in pipeline
     assert "DEPLOYMENT_ID" in pipeline
     assert "description: Fabric item type to deploy" in pipeline
@@ -347,7 +366,14 @@ def test_gitlab_pipeline_is_dispatch_only_and_uses_fabric_deployment_script() ->
     assert "unsupported TARGET" in pipeline
     assert "unsupported CONFLICT_BEHAVIOR" in pipeline
     assert "DRY_RUN must be true or false" in pipeline
-    assert "production" not in pipeline.casefold()
+    assert "PlanPromotion" in promote
+    assert "ReviewedPlanJson" in promote
+    assert "promotion-plan.json" in promote
+    assert "when: manual" in promote
+    assert "PROMOTION_TARGET_ENVIRONMENT: prod" in promote
+    assert "PROMOTION_TARGET_ENVIRONMENT: test" in promote
+    assert 'if: \'$FABRIC_OPERATION == "CreatePipeline"\'' in create
+    assert 'if: \'$FABRIC_OPERATION == "Deploy"\'' in deploy
 
 
 def test_deployment_script_uses_saved_queries_and_respects_binding_readiness() -> None:

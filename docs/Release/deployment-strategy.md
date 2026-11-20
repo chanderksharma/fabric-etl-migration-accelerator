@@ -22,18 +22,20 @@ competing Git change.
 
 ## Promotion beyond Development
 
-The manually dispatched `.github/workflows/promote-fabric-alm.yml` workflow
-promotes one adjacent stage at a time:
+The manually dispatched GitHub
+`.github/workflows/promote-fabric-alm.yml` workflow and GitLab
+`FABRIC_OPERATION=Promote` jobs promote one adjacent stage at a time:
 
-1. Development to Test through the protected `test` GitHub environment.
-2. Test to Production through the protected `prod` GitHub environment.
+1. Development to Test through the protected `test` environment.
+2. Test to Production through the protected `prod` environment.
 
 Each promotion requires:
 
 1. Bound Fabric workspace connections and Lakehouse/Warehouse destinations.
 2. Verified source-to-target row-count, schema, and business-rule semantic parity.
 3. Environment-scoped Microsoft Entra Workload Identity Federation credentials.
-4. Required GitHub environment reviewers and deployment branch restrictions.
+4. Required GitHub reviewers or GitLab protected-environment deployers and
+   deployment approvals.
 5. A Fabric Deployment Pipeline with assigned adjacent workspaces.
 
 When a Variable Library is configured, promotion selects and verifies the
@@ -47,5 +49,6 @@ Git.
 - **Explicit Workspace Targeting**: `FABRIC_WORKSPACE_ID` is required at dispatch time with per-workspace concurrency serialization.
 - **Native-Only Request Envelopes**: Scaffolds and unparsed workflows never emit `*-create-item.json` files.
 - **Single Writer Per Branch**: Fabric is authoritative after Development bootstrap; external automation does not push competing item definitions to the connected branch.
-- **Manual Promotion**: Test and Production promotion only run through `workflow_dispatch` and protected GitHub environments.
+- **Manual Promotion**: Test and Production promotion use reviewed plans,
+  manual jobs, and protected GitHub or GitLab environments.
 - **Stage-Specific Configuration**: Variable Library active value sets are selected and verified independently in each target workspace.
