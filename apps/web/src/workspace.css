@@ -102,6 +102,114 @@
   flex-direction: column;
   gap: 8px;
 }
+
+.reference-workspace .leadership-metrics {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.reference-workspace .metric-context .metric-link-button {
+  display: block;
+  margin-top: 6px;
+  padding: 0;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+@media (max-width: 1180px) {
+  .reference-workspace .leadership-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .reference-workspace .leadership-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+.reference-workspace .capacity-table-wrap {
+  max-width: 100%;
+}
+.reference-workspace .capacity-table {
+  min-width: 1080px;
+}
+.reference-workspace .spark-billing-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+.reference-workspace .mode-toggle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.reference-workspace .interactive-users-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.reference-workspace .interactive-users-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.reference-workspace .interactive-users-actions input {
+  width: 84px;
+  min-height: 36px;
+  border: 1px solid var(--cp-border-strong);
+  border-radius: 8px;
+  background: var(--cp-surface);
+  color: var(--cp-text);
+  padding: 6px 8px;
+}
+.reference-workspace .spark-controls {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+}
+.reference-workspace .capacity-metrics.five-up {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+@media (max-width: 1060px) {
+  .reference-workspace .capacity-metrics.five-up {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.reference-workspace .capacity-table tbody tr {
+  cursor: default;
+}
+.reference-workspace .capacity-table :is(input:not([type="checkbox"]), select) {
+  width: 100%;
+  min-width: 110px;
+  min-height: 36px;
+  border: 1px solid var(--cp-border-strong);
+  border-radius: 8px;
+  background: var(--cp-surface);
+  color: var(--cp-text);
+  padding: 6px 8px;
+}
+.reference-workspace .cell-note {
+  display: block;
+  max-width: 260px;
+  margin-top: 5px;
+  color: var(--cp-text-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.reference-workspace .muted-row {
+  color: var(--cp-text-muted);
+  background: var(--cp-surface-soft);
+}
+.reference-workspace .assumption-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--cp-text-muted);
+  line-height: 1.5;
+}
 .reference-workspace .output-group h3 { margin: 0; font-size: 14px; }
 .reference-workspace .output-group p {
   margin: 0; color: var(--cp-text-muted); font-size: 12px; line-height: 1.45;

@@ -12,7 +12,7 @@ from xml.etree.ElementTree import Element, tostring
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 
-GRAPH_VERSION = "1.3.0"
+GRAPH_VERSION = "1.4.0"
 
 
 class WorkflowParseError(ValueError):
@@ -26,6 +26,8 @@ class GraphNode:
     name: str
     configuration: dict[str, str]
     disabled: bool
+    engine_entry: str = ""
+    macro: str = ""
     issues: tuple[str, ...] = ()
     label: str = ""
     x: float | None = None
@@ -125,6 +127,8 @@ def parse_graph(path: Path) -> WorkflowGraph:
         plugin = gui.get("Plugin", "") if gui is not None else ""
         if not plugin and engine is not None:
             plugin = engine.get("EngineDll", "")
+        engine_entry = engine.get("EngineDllEntryPoint", "") if engine is not None else ""
+        macro = engine.get("Macro", "") if engine is not None else ""
         config = node.find("Properties/Configuration")
         configuration: dict[str, str] = {}
         issues: list[str] = []
@@ -143,8 +147,8 @@ def parse_graph(path: Path) -> WorkflowGraph:
             for file in config.findall(".//File"):
                 if file.text:
                     sources.add(redact(file.text.strip()))
-        if engine is not None and engine.get("Macro"):
-            dependencies.add(redact(engine.get("Macro", "")))
+        if macro:
+            dependencies.add(redact(macro))
         x, y, width, height = _node_position(node)
         disabled = False
         ancestor: Element | None = node
@@ -180,6 +184,8 @@ def parse_graph(path: Path) -> WorkflowGraph:
                 name=plugin.rsplit(".", 1)[-1].removesuffix("Tool"),
                 configuration=configuration,
                 disabled=disabled,
+                engine_entry=engine_entry,
+                macro=macro,
                 issues=tuple(issues),
                 label=label,
                 x=x,
@@ -264,7 +270,7 @@ def _event_issue(events: Element) -> str | None:
     if enabled is None:
         return "Workflow events have no explicit enabled state"
     value = enabled.get("value", enabled.text or "").strip().casefold()
-    if value == "false" and len(events) == 1:
+    if value in {"false", "true"} and len(events) == 1:
         return None
     if value == "true":
         return "Executable workflow events require redesign"

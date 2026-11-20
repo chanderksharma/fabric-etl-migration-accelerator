@@ -432,6 +432,11 @@ test("generates and displays explicit unvalidated review candidates", async () =
   vi.stubGlobal("fetch", vi.fn()
     .mockResolvedValueOnce({ ok: true, json: async () => completedRun() })
     .mockResolvedValueOnce({
+      ok: true, json: async () => ({
+        scenarios: [], workflows: [], assumptions: [],
+      }),
+    })
+    .mockResolvedValueOnce({
       ok: true, json: async () => [{
         workflow: "orders.yxmd", target: "notebook",
         validation_state: "generated_unvalidated", code: "display(df)", diagnostics: [],

@@ -23,7 +23,7 @@ from accelerator.graph import (
 )
 from accelerator.sources.alteryx import AlteryxSourceAdapter
 
-COMPILER_VERSION = "2.2.0"
+COMPILER_VERSION = "2.3.0"
 Target = Literal["notebook", "dataflow", "pipeline"]
 
 
@@ -1060,8 +1060,17 @@ def _compile_supported_dag(
                 [field.get("field", "") for field in info]
                 for info in list(join_info)
             ]
+            join_mode = _text(node, "JoinMode").casefold()
+            outgoing_anchors = {
+                anchor.casefold()
+                for src, _, anchor in edges
+                if src == node.id and anchor
+            }
+            is_inner_join = join_mode == "inner" or (
+                not join_mode and (not outgoing_anchors or outgoing_anchors == {"join"})
+            )
             if (
-                _text(node, "JoinMode").casefold() != "inner"
+                not is_inner_join
                 or len(key_sets) != 2
                 or any(not keys or any(not key for key in keys) for keys in key_sets)
                 or len(key_sets[0]) != len(key_sets[1])

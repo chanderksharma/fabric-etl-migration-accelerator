@@ -17,6 +17,7 @@ export type Page =
   | "executive-summary"
   | "workflows"
   | "migration-plan"
+  | "capacity-planning"
   | "technical-details";
 
 type SourceMetadata = {
@@ -79,6 +80,11 @@ export type AssessmentResult = {
     data_sources: string[];
     graph_schema_version: string;
     tools?: Array<{ name: string; count: number; support: string }>;
+    capacity_profile?: {
+      model_version: string;
+      counts: Record<string, number>;
+      heavy_steps: number;
+    } | null;
   } & SourceMetadata>;
   failures: string[];
   workflows?: Array<{display_path: string; sha256: string} & SourceMetadata>;
@@ -107,6 +113,7 @@ const pages: Array<{ id: Page; label: string }> = [
   { id: "executive-summary", label: "Portfolio" },
   { id: "workflows", label: "Workflows" },
   { id: "migration-plan", label: "Migration Plan" },
+  { id: "capacity-planning", label: "Capacity Planning" },
   { id: "technical-details", label: "Technical Details" },
 ];
 
@@ -636,6 +643,7 @@ function pageFromHash(): Page {
   const aliases: Record<string, Page> = {
     portfolio: "executive-summary",
     plan: "migration-plan",
+    capacity: "capacity-planning",
     technical: "technical-details",
   };
   const candidate = window.location.hash.slice(1);

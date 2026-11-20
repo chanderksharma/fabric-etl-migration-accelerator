@@ -89,13 +89,33 @@ class PowerCenterSourceAdapter:
 
 def _folder_assets(folder: Element, display_path: str) -> list[EtlAsset]:
     folder_name = folder.get("NAME", "")
-    mappings = {
-        mapping.get("NAME", ""): _mapping_graph(mapping, folder, display_path)
+    folder_reusables = {
+        transform.get("NAME", ""): transform
+        for transform in folder.findall("TRANSFORMATION")
+        if transform.get("NAME")
+    }
+    mapplet_elements = {
+        mapplet.get("NAME", ""): mapplet
+        for mapplet in folder.findall("MAPPLET")
+        if mapplet.get("NAME")
+    }
+    mapping_elements = {
+        mapping.get("NAME", ""): mapping
         for mapping in folder.findall("MAPPING")
+        if mapping.get("NAME")
+    }
+    mappings = {
+        name: _mapping_graph(mapping, folder, display_path)
+        for name, mapping in mapping_elements.items()
     }
     reusable_sessions = {
         session.get("NAME", ""): session.get("MAPPINGNAME", "")
         for session in folder.findall("SESSION")
+    }
+    reusable_session_elements = {
+        session.get("NAME", ""): session
+        for session in folder.findall("SESSION")
+        if session.get("NAME")
     }
     schedules = {
         schedule.get("NAME", ""): EtlSchedule(
@@ -114,6 +134,14 @@ def _folder_assets(folder: Element, display_path: str) -> list[EtlAsset]:
                 for session in workflow.findall("SESSION")
             },
         }
+        session_elements = {
+            **reusable_session_elements,
+            **{
+                session.get("NAME", ""): session
+                for session in workflow.findall("SESSION")
+                if session.get("NAME")
+            },
+        }
         session_variables = _session_variable_assignments(workflow)
         workflow_tasks = _workflow_task_assignments(folder, workflow)
         graph = _workflow_graph(
@@ -125,6 +153,8 @@ def _folder_assets(folder: Element, display_path: str) -> list[EtlAsset]:
         )
         mapping_graphs: list[EtlGraph] = []
         dependencies: list[EtlDependency] = []
+        linked_mappings: list[Element] = []
+        linked_sessions: list[Element] = []
         for task in workflow.findall("TASKINSTANCE"):
             session_name = task.get("TASKNAME", "")
             mapping_name = sessions.get(session_name)
@@ -132,6 +162,9 @@ def _folder_assets(folder: Element, display_path: str) -> list[EtlAsset]:
                 continue
             referenced_mappings.add(mapping_name)
             mapping_graphs.append(mappings[mapping_name])
+            linked_mappings.append(mapping_elements[mapping_name])
+            if session_name in session_elements:
+                linked_sessions.append(session_elements[session_name])
             dependencies.append(
                 EtlDependency(
                     source_native_id=workflow.get("NAME", ""),
@@ -144,6 +177,13 @@ def _folder_assets(folder: Element, display_path: str) -> list[EtlAsset]:
             (schedules[schedule_name],)
             if schedule_name is not None and schedule_name in schedules
             else ()
+        )
+        capacity_meta = _capacity_metadata(
+            linked_mappings,
+            linked_sessions,
+            mapplet_elements,
+            folder_reusables,
+            workflow=workflow,
         )
         assets.append(
             EtlAsset(
@@ -159,11 +199,18 @@ def _folder_assets(folder: Element, display_path: str) -> list[EtlAsset]:
                     path=display_path,
                     object_path=f"{folder_name}/{workflow.get('NAME', '')}",
                 ),
+                metadata={"capacity": capacity_meta},
             )
         )
     for mapping_name, graph in mappings.items():
         if mapping_name in referenced_mappings:
             continue
+        capacity_meta = _capacity_metadata(
+            [mapping_elements[mapping_name]],
+            [],
+            mapplet_elements,
+            folder_reusables,
+        )
         assets.append(
             EtlAsset(
                 native_id=mapping_name,
@@ -175,6 +222,7 @@ def _folder_assets(folder: Element, display_path: str) -> list[EtlAsset]:
                     path=display_path,
                     object_path=f"{folder_name}/{mapping_name}",
                 ),
+                metadata={"capacity": capacity_meta},
             )
         )
     return assets
@@ -227,6 +275,8 @@ def _mapping_graph(mapping: Element, folder: Element, display_path: str) -> EtlG
             if transformation is not None
             else {}
         )
+        if transformation is not None and transformation.get("TEMPLATENAME"):
+            properties["template_name"] = transformation.get("TEMPLATENAME", "")
         fields = (
             transformation.findall("TRANSFORMFIELD")
             if transformation is not None
@@ -429,3 +479,121 @@ def _workflow_graph(
         for link in workflow.findall("WORKFLOWLINK")
     )
     return EtlGraph(kind=GraphKind.ORCHESTRATION, nodes=nodes, edges=edges)
+
+
+def _db_key(value: str | None) -> str:
+    text = (value or "").strip()
+    if text.startswith("$"):
+        text = text[1:]
+    text = text.casefold()
+    if not text or text in {"source", "target"}:
+        return ""
+    return text
+
+
+def _capacity_metadata(
+    mappings: list[Element],
+    sessions: list[Element],
+    mapplets: dict[str, Element],
+    reusables: dict[str, Element],
+    *,
+    workflow: Element | None = None,
+) -> dict[str, JsonValue]:
+    databases: set[str] = set()
+    indirect_instances: set[str] = set()
+    mapplet_steps: list[JsonValue] = []
+
+    for session in sessions:
+        file_types: dict[str, str] = {}
+        for ext in session.findall("SESSIONEXTENSION"):
+            inst = ext.get("SINSTANCENAME", "")
+            for attr in ext.findall(".//ATTRIBUTE"):
+                if attr.get("NAME") == "Source filetype" and inst:
+                    file_types[inst] = attr.get("VALUE", "")
+            conn = ext.find("CONNECTIONREFERENCE") or ext.find(".//CONNECTIONREFERENCE")
+            if conn is None:
+                continue
+            kind = (
+                f"{conn.get('CONNECTIONTYPE', '')} {conn.get('CONNECTIONSUBTYPE', '')}"
+            ).casefold()
+            if "flat" in kind or "xml" in kind:
+                continue
+            key = _db_key(conn.get("VARIABLE") or conn.get("CONNECTIONNAME"))
+            if key and any(
+                token in f"{kind} {key}"
+                for token in ("relational", "odbc", "oracle", "sql", "application")
+            ):
+                databases.add(key)
+        for mapping in mappings:
+            for conn in mapping.findall("CONNECTOR"):
+                source_name = conn.get("FROMINSTANCE", "")
+                if "indirect" in file_types.get(source_name, "").casefold():
+                    indirect_instances.add(conn.get("TOINSTANCE", ""))
+
+    def walk_mapplet(container: Element, depth: int) -> None:
+        if depth > 5:
+            return
+        local_transforms = {
+            item.get("NAME", ""): item
+            for item in container.findall("TRANSFORMATION")
+            if item.get("NAME")
+        }
+        for inst in container.findall("INSTANCE"):
+            trans_type = inst.get("TRANSFORMATION_TYPE", "") or inst.get("TYPE", "")
+            inst_name = inst.get("NAME", "")
+            trans_name = inst.get("TRANSFORMATION_NAME", inst_name)
+            if trans_type.casefold() == "mapplet":
+                nested = mapplets.get(trans_name)
+                if nested is not None:
+                    walk_mapplet(nested, depth + 1)
+                continue
+            if depth == 0:
+                continue
+            definition = local_transforms.get(trans_name) or reusables.get(trans_name)
+            native_type = (
+                definition.get("TYPE", trans_type)
+                if definition is not None
+                else trans_type
+            )
+            template = (
+                definition.get("TEMPLATENAME", "") if definition is not None else ""
+            )
+            groups: set[str] = set()
+            db_key = ""
+            if definition is not None:
+                for field in definition.findall("TRANSFORMFIELD"):
+                    if "INPUT" in (field.get("PORTTYPE") or "").upper():
+                        groups.add(field.get("GROUP") or "IN")
+                for attr in definition.findall("TABLEATTRIBUTE"):
+                    if attr.get("NAME") == "Connection Information":
+                        db_key = _db_key(attr.get("VALUE"))
+                        if db_key:
+                            databases.add(db_key)
+            mapplet_steps.append(
+                {
+                    "operation": native_type.casefold().replace(" ", "_"),
+                    "template_name": template,
+                    "input_groups": len(groups) or 2,
+                }
+            )
+
+    for mapping in mappings:
+        walk_mapplet(mapping, 0)
+
+    command_tasks = 0
+    if workflow is not None:
+        command_tasks = sum(
+            1
+            for task in workflow.findall("TASKINSTANCE")
+            if (task.get("ISENABLED") or "YES").upper() != "NO"
+            and (task.get("TASKTYPE") or "").casefold() == "command"
+        )
+
+    db_values: list[JsonValue] = list(sorted(databases))
+    indirect_values: list[JsonValue] = list(sorted(indirect_instances))
+    return {
+        "databases": db_values,
+        "indirect_instances": indirect_values,
+        "mapplet_steps": mapplet_steps,
+        "command_tasks": command_tasks,
+    }

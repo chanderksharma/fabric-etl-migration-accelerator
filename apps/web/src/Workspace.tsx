@@ -3,6 +3,8 @@ import type { AssessmentResult, Candidate, Page, RunResult } from "./App";
 import type { WorkflowEvidence } from "./evidence-types";
 import { SourceGraph } from "./SourceGraph";
 import { Deployment } from "./workspace-deployment";
+import { CapacityPlanning } from "./workspace-capacity";
+import { useCapacity } from "./use-capacity";
 import { useEvidence } from "./workspace-evidence";
 import {
   evidenceTabs,
@@ -47,6 +49,7 @@ const pages: Array<{id: Page; label: string; icon: string}> = [
   {id: "executive-summary", label: "Portfolio", icon: "portfolio"},
   {id: "workflows", label: "Workflows", icon: "flow"},
   {id: "migration-plan", label: "Migration Plan", icon: "plan"},
+  {id: "capacity-planning", label: "Capacity Planning", icon: "capacity"},
   {id: "technical-details", label: "Technical Details", icon: "gear"},
 ];
 const detailTabs = [
@@ -61,6 +64,7 @@ function Icon({name}: {name: string}) {
       : name === "grid" ? <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>
       : name === "flow" ? <><path d="M4 6h7M4 12h16M13 18h7"/><circle cx="14" cy="6" r="2"/><circle cx="10" cy="18" r="2"/></>
       : name === "plan" ? <><path d="M5 19V9m7 10V5m7 14v-7"/><path d="m4 7 6-4 5 5 5-4"/></>
+      : name === "capacity" ? <><path d="M4 19h16M6 16l3-4 3 2 5-7"/><circle cx="17" cy="7" r="2"/></>
       : name === "moon" ? <path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.5A7 7 0 0 1 12 3Z"/>
       : <><circle cx="12" cy="12" r="3"/><path d="M4 12h3m10 0h3M12 4v3m0 10v3"/><circle cx="12" cy="12" r="9"/></>}
   </svg>;
@@ -81,6 +85,11 @@ function Bars({rows, total}: {rows: Array<{name: string; value: number; color?: 
 export function Workspace(props: Props) {
   const {assessment, page, navigate} = props;
   const items = useMemo(() => assessment?.assessments ?? [], [assessment]);
+  const capacity = useCapacity(
+    props.run?.status === "completed" ? props.runId : null,
+    props.run?.snapshot_id,
+    props.request,
+  );
   const [search, setSearch] = useState("");
   const [complexity, setComplexity] = useState("");
   const [target, setTarget] = useState("");
@@ -234,6 +243,21 @@ export function Workspace(props: Props) {
     ["Source assessment findings", assessment ? findings : null, "Unmapped tool types and parsing failures"],
     ["Estimated remaining effort", assessment ? `${effort.toFixed(1)}d` : null, "Practical completion estimate"],
   ];
+  const optimizedCapacity = capacity.estimate?.scenarios.find(
+    scenario => scenario.name === "Optimized"
+  );
+  const balanceCapacity = capacity.estimate?.scenarios.find(
+    scenario => scenario.name === "Balance"
+  );
+  const peakCapacity = capacity.estimate?.scenarios.find(
+    scenario => scenario.name === "Peak"
+  );
+  const capacityLeadershipValue = capacity.estimate && capacity.estimate.status !== "not_available"
+    ? optimizedCapacity?.recommended_sku ?? "Not available"
+    : "Not available";
+  const capacityContext = capacity.estimate
+    ? `${capacity.estimate.monthly_cu_hours.toFixed(1)} CU-h/mo${capacity.estimate.status === "inputs_required" ? " · Default schedule/rows" : ""}${capacity.estimate.settings.spark_billing_mode === "autoscale" ? " (Spark offloaded to Autoscale)" : ""}`
+    : "Optimized concurrency scenario";
 
   return <div className="shell reference-workspace">
     <aside className="sidebar">
@@ -287,12 +311,26 @@ export function Workspace(props: Props) {
                 : "Assessment required"}
             </span>
           </div>
-          <div className="metric-grid">
+          <div className="metric-grid leadership-metrics">
             {[
               ["Portfolio scope", scope, "ETL assets assessed"],
               ["Native-ready", assessment ? nativeReady : null, "Deployable Dataflow, Notebook or Pipeline route"],
               ["Manual rework", assessment ? manualRework : null, "No native deployable implementation"],
               ["Estimated remaining effort", assessment ? `${effort.toFixed(1)}d` : null, "Maximum 21 days per workflow"],
+              [
+                "Projected F-SKU",
+                capacityLeadershipValue,
+                <>
+                  <span>{capacityContext}</span>
+                  <button
+                    type="button"
+                    className="link-button metric-link-button"
+                    onClick={() => jump("capacity-planning")}
+                  >
+                    Go to Capacity Planning for more details →
+                  </button>
+                </>,
+              ],
             ].map(([label, value, context]) => <div className="metric-card" key={String(label)}>
               <div className="metric-label">{label}</div>
               <div className="metric-value">{value ?? "—"}</div>
@@ -346,7 +384,11 @@ export function Workspace(props: Props) {
                 <div className="focus-item">
                   <div>
                     <strong>Business case · Red</strong>
-                    <span>Cost, capacity, savings and benefit evidence are missing.</span>
+                    <span>
+                      {capacity.estimate
+                        ? "Preliminary capacity evidence exists; cost, savings and pilot validation remain open."
+                        : "Cost, capacity, savings and benefit evidence are missing."}
+                    </span>
                   </div>
                 </div>
                 <div className="focus-item">
@@ -392,7 +434,7 @@ export function Workspace(props: Props) {
                 </div>
                 <div className="focus-item">
                   <div><strong>Business case incomplete</strong><span>No approved cost, benefit, capacity or savings baseline.</span></div>
-                  <button className="link-button" onClick={() => jump("technical-details")}>Evidence</button>
+                  <button className="link-button" onClick={() => jump("capacity-planning")}>Capacity</button>
                 </div>
               </div>
             </Panel>
@@ -409,10 +451,21 @@ export function Workspace(props: Props) {
           </div>
         </section>
 
+        <div hidden={page !== "capacity-planning"}>
+          <CapacityPlanning
+            estimate={capacity.estimate}
+            loading={capacity.loading}
+            saving={capacity.saving}
+            error={capacity.error}
+            runId={props.runId}
+            save={capacity.save}
+          />
+        </div>
+
         <section className={`page ${page === "executive-summary" ? "active" : ""}`} hidden={page !== "executive-summary"} id="portfolio-analysis">
           <div className="page-header"><div><div className="eyebrow">Portfolio analysis</div><h1>Detailed Portfolio Assessment</h1><p>Workflow complexity, target architecture, delivery sequencing and technical evidence supporting the portfolio decision memo.</p></div></div>
           <div className="question-card" id="assessmentNavigation"><div><h2>Assessment navigation</h2><p>Select an assessment area to review the supporting portfolio, workflow, planning or technical evidence.</p></div>
-            <div className="quick-actions"><button onClick={() => jump("workflows")}>Review workflow register</button><button onClick={() => jump("migration-plan")}>Review migration plan</button><button onClick={() => jump("technical-details")}>Review technical evidence</button></div></div>
+            <div className="quick-actions"><button onClick={() => jump("workflows")}>Review workflow register</button><button onClick={() => jump("migration-plan")}>Review migration plan</button><button onClick={() => jump("capacity-planning")}>Review capacity estimate</button><button onClick={() => jump("technical-details")}>Review technical evidence</button></div></div>
           {!assessment && <div className="notice"><strong>No completed assessment.</strong> <button className="link-button" onClick={() => jump("intake")}>Start an assessment</button> to populate these registers. Reference sample counts are not used as real results.</div>}
           <div className="recommendation-banner"><div><h2>Recommended delivery approach</h2><p>Resolve shared dependencies and connection prerequisites before a representative pilot. Validate functional parity, deployment controls and effort assumptions before broader migration.</p></div><span className="recommendation-status">{assessment ? (manualRework || highComplexity ? "Conditional proceed" : "Proceed") : "Assessment required"}</span></div>
           <div className="metric-grid">{metrics.map(([label, value, context]) => <div className="metric-card" key={String(label)}><div className="metric-label">{label}</div><div className="metric-value">{value ?? "—"}</div><div className="metric-context">{context}</div></div>)}</div>
@@ -425,6 +478,42 @@ export function Workspace(props: Props) {
             </div></Panel></div>
           <div className="two-column section-gap"><Panel title="Recommended primary Fabric targets" note="Primary implementation technology recommended for each workflow."><Bars total={items.length} rows={targetRows}/></Panel>
             <Panel title="Assessment evidence inventory" note="Evidence available to support engineering analysis and migration sequencing."><div className="assumption-grid"><div className="assumption"><span>Dependencies</span><strong>{assessment ? dependencies : "—"}</strong></div><div className="assumption"><span>File endpoints</span><strong>{assessment ? endpoints : "—"}</strong></div><div className="assumption"><span>Parse failures</span><strong>{assessment?.failed_count ?? "—"}</strong></div></div></Panel></div>
+          <div className="section-gap">
+            <Panel
+              title="Fabric capacity summary"
+              note={capacity.estimate?.status === "planning_estimate"
+                ? "Preliminary capacity sizing across modeled Alteryx and Informatica workloads."
+                : "Estimated from assessment tool counts and default schedule/rows (Daily, 1,000 rows)."}
+              action={<button className="link-button" onClick={() => jump("capacity-planning")}>Open Capacity Planning →</button>}
+            >
+              {capacity.estimate ? <div className="fact-grid">
+                <div className="fact">
+                  <span>Optimized (staggered)</span>
+                  <strong>{optimizedCapacity ? `${optimizedCapacity.recommended_sku} (${optimizedCapacity.required_cu.toFixed(2)} CUs)` : "—"}</strong>
+                </div>
+                <div className="fact">
+                  <span>Balance / Peak</span>
+                  <strong>{balanceCapacity && peakCapacity ? `${balanceCapacity.recommended_sku} / ${peakCapacity.recommended_sku}` : "—"}</strong>
+                </div>
+                <div className="fact">
+                  <span>Monthly demand</span>
+                  <strong>
+                    {capacity.estimate.monthly_cu_hours.toFixed(1)} CU-h
+                    {capacity.estimate.settings.spark_billing_mode === "autoscale" && (capacity.estimate.autoscale_spark_monthly_cu_hours ?? 0) > 0
+                      ? ` (+${(capacity.estimate.autoscale_spark_monthly_cu_hours ?? 0).toFixed(1)} Autoscale Spark CU-h)`
+                      : ""}
+                  </strong>
+                </div>
+                <div className="fact">
+                  <span>Basis &amp; status</span>
+                  <strong>
+                    {capacity.estimate.status === "planning_estimate" ? "Preliminary" : capacity.estimate.status === "inputs_required" ? "Default assumptions" : "Not available"}
+                    {` · ${capacity.estimate.calibrated_count ?? capacity.estimate.modeled_count} calibrated / ${capacity.estimate.heuristic_count ?? 0} heuristic`}
+                  </strong>
+                </div>
+              </div> : <p>Complete an assessment to view Fabric capacity sizing.</p>}
+            </Panel>
+          </div>
           <div className="section-gap"><Panel title="Migration wave distribution" note="Engine wave allocation and remaining effort; no business priority is inferred." action={<button className="link-button" onClick={() => jump("migration-plan")}>View migration plan →</button>}>
             <div className="portfolio-segments">{waveSummaries.map(wave => <button key={wave.value} className="portfolio-segment" onClick={() => jump("migration-plan", wave.value)}><span>{wave.label} · {wave.effort.toFixed(1)} days</span><strong>{wave.count} workflows</strong></button>)}</div></Panel></div>
           <div className="section-gap"><Panel title="Workflows with highest technical complexity" note="Prioritised by static raw complexity score; this ranking does not represent business criticality." action={<button className="link-button" onClick={() => jump("workflows")}>View workflow register →</button>}>
@@ -550,7 +639,7 @@ export function Workspace(props: Props) {
         </section>
       </div>
     </main>
-    <nav className="mobile-nav" aria-label="Mobile primary navigation">{pages.map(item => <a key={item.id} className={page === item.id ? "active" : ""} href={`#${item.id}`} onClick={() => {setSelected(null); navigate(item.id);}}><Icon name={item.icon}/>{item.id === "intake" ? "Intake" : item.id === "migration-plan" ? "Plan" : item.id === "technical-details" ? "Technical" : item.label}</a>)}</nav>
+    <nav className="mobile-nav" aria-label="Mobile primary navigation">{pages.map(item => <a key={item.id} className={page === item.id ? "active" : ""} href={`#${item.id}`} onClick={() => {setSelected(null); navigate(item.id);}}><Icon name={item.icon}/>{item.id === "intake" ? "Intake" : item.id === "migration-plan" ? "Plan" : item.id === "capacity-planning" ? "Capacity" : item.id === "technical-details" ? "Technical" : item.label}</a>)}</nav>
     {selected && (() => {
       const list = filtered.some(item => item.path === selected.path) ? filtered : items;
       const selectedPos = list.findIndex(item => item.path === selected.path);

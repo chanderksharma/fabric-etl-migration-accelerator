@@ -1,7 +1,7 @@
 ---
 title: Audit Findings Log
 description: Architecture, code, test, and security review disposition log
-ms.date: 2026-11-08
+ms.date: 2026-11-20
 ---
 
 | ID | Source | Severity | Finding | Owner | Due | Disposition |
@@ -13,3 +13,4 @@ ms.date: 2026-11-08
 | AF-05 | Architecture | Major | Six operational ADRs missing | Solution Architect | 2026-11-08 | Resolved in ADR-L09..L14 |
 | AF-06 | Code | Major | Automated SAST and dependency audit in CI | Security Reviewer | 2026-11-15 | Resolved via CodeQL, `pip-audit`, `npm audit`, and Dependabot |
 | AF-07 | Documentation | Minor | External work-tracker decoupling for InnerSource | Program Manager | 2026-11-15 | Resolved; personal ADO references removed |
+| AF-08 | Capacity | Major | Capacity model uses narrow Alteryx-to-Dataflow calibration and unconfirmed operating defaults | Platform Architect | 2026-12-15 | Mitigated; scope exclusions and modeled coverage are explicit, leadership SKU is gated on confirmed inputs, and pilot validation in Fabric Capacity Metrics is required |

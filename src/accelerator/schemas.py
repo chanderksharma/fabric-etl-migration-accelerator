@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict
 
+from accelerator.capacity import CapacityStaticProfile
 from accelerator.domain import InputKind, SkipReason
 from accelerator.etl_ir import AssetType, SourcePlatform
 
@@ -84,6 +85,7 @@ class WorkflowAssessmentResponse(BaseModel):
     asset_type: AssetType = AssetType.WORKFLOW
     native_id: str | None = None
     folder: str | None = None
+    capacity_profile: CapacityStaticProfile | None = None
 
 
 class EstateAssessmentResponse(BaseModel):

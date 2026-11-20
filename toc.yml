@@ -8,6 +8,8 @@
       href: docs/Guides/getting-started.md
     - name: Installation & Runtime Modes
       href: docs/Guides/installation.md
+    - name: Fabric Capacity Planning
+      href: docs/Guides/capacity-planning.md
     - name: Fabric CI/CD Setup (OIDC)
       href: docs/Guides/fabric-ci-cd-setup.md
     - name: Troubleshooting

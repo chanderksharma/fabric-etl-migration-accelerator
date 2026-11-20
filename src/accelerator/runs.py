@@ -29,6 +29,16 @@ from accelerator.assessment import (
     WorkflowAssessment,
     assess_workflow,
 )
+from accelerator.capacity import (
+    CAPACITY_MODEL_VERSION,
+    CapacityPortfolioEstimate,
+    CapacitySettings,
+    CapacityUpdate,
+    CapacityWorkflowInput,
+    build_informatica_capacity_profile,
+    capacity_csv,
+    estimate_capacity,
+)
 from accelerator.discovery import DiscoveryService
 from accelerator.domain import WorkflowCandidate
 from accelerator.effort import remaining_effort_days
@@ -195,7 +205,7 @@ class RunService:
         with self._connection() as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in {0, 1}:
+            if version not in {0, 1, 2}:
                 raise ValueError("Unsupported run database schema version")
             connection.executescript(
                 """
@@ -207,7 +217,17 @@ class RunService:
                     cache_hits INTEGER NOT NULL DEFAULT 0, error TEXT, result TEXT
                 );
                 CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, result TEXT NOT NULL);
-                PRAGMA user_version=1;
+                CREATE TABLE IF NOT EXISTS capacity_inputs (
+                    run_id TEXT NOT NULL,
+                    workflow_path TEXT NOT NULL,
+                    input_json TEXT NOT NULL,
+                    PRIMARY KEY (run_id, workflow_path)
+                );
+                CREATE TABLE IF NOT EXISTS capacity_settings (
+                    run_id TEXT PRIMARY KEY,
+                    settings_json TEXT NOT NULL
+                );
+                PRAGMA user_version=2;
                 """
             )
 
@@ -444,6 +464,91 @@ class RunService:
             )
         return self.get_run(identity)
 
+    def get_capacity(self, identity: str) -> CapacityPortfolioEstimate:
+        """Return the deterministic capacity estimate for a completed run."""
+        run = self.get_run(identity)
+        if run.status != "completed" or run.result is None:
+            raise ValueError("Complete an assessment before estimating capacity")
+        defaults = {
+            assessment.path: CapacityWorkflowInput(workflow_path=assessment.path)
+            for assessment in run.result.assessments
+            if assessment.capacity_profile is not None
+        }
+        with self._connection() as connection:
+            settings_row = connection.execute(
+                "SELECT settings_json FROM capacity_settings WHERE run_id=?",
+                (identity,),
+            ).fetchone()
+            input_rows = connection.execute(
+                "SELECT workflow_path,input_json FROM capacity_inputs WHERE run_id=?",
+                (identity,),
+            ).fetchall()
+            if settings_row is None:
+                settings = CapacitySettings()
+                connection.execute(
+                    "INSERT INTO capacity_settings VALUES (?,?)",
+                    (identity, settings.model_dump_json()),
+                )
+            else:
+                settings = CapacitySettings.model_validate_json(settings_row["settings_json"])
+            persisted = {
+                row["workflow_path"]: CapacityWorkflowInput.model_validate_json(row["input_json"])
+                for row in input_rows
+            }
+            for workflow_path, workflow_input in defaults.items():
+                if workflow_path not in persisted:
+                    connection.execute(
+                        "INSERT INTO capacity_inputs VALUES (?,?,?)",
+                        (identity, workflow_path, workflow_input.model_dump_json()),
+                    )
+        return estimate_capacity(
+            run.result.assessments,
+            {
+                path: persisted.get(path, workflow_input)
+                for path, workflow_input in defaults.items()
+            },
+            settings,
+        )
+
+    def update_capacity(
+        self, identity: str, update: CapacityUpdate
+    ) -> CapacityPortfolioEstimate:
+        """Persist mutable capacity inputs and return the recomputed estimate."""
+        run = self.get_run(identity)
+        if run.status != "completed" or run.result is None:
+            raise ValueError("Complete an assessment before estimating capacity")
+        known_paths = {
+            assessment.path
+            for assessment in run.result.assessments
+            if assessment.capacity_profile is not None
+        }
+        unknown = sorted(
+            workflow.workflow_path
+            for workflow in update.inputs
+            if workflow.workflow_path not in known_paths
+        )
+        if unknown:
+            raise KeyError(f"Unknown capacity workflow: {unknown[0]}")
+        with self._connection() as connection:
+            if update.settings is not None:
+                connection.execute(
+                    """INSERT INTO capacity_settings VALUES (?,?)
+                    ON CONFLICT(run_id) DO UPDATE SET settings_json=excluded.settings_json""",
+                    (identity, update.settings.model_dump_json()),
+                )
+            for workflow in update.inputs:
+                connection.execute(
+                    """INSERT INTO capacity_inputs VALUES (?,?,?)
+                    ON CONFLICT(run_id,workflow_path)
+                    DO UPDATE SET input_json=excluded.input_json""",
+                    (identity, workflow.workflow_path, workflow.model_dump_json()),
+                )
+        return self.get_capacity(identity)
+
+    def export_capacity_csv(self, identity: str) -> str:
+        """Export the current capacity estimate as CSV."""
+        return capacity_csv(self.get_capacity(identity))
+
     def _assess_item(
         self, item: WorkflowCandidateResponse
     ) -> tuple[list[WorkflowAssessmentResponse], str | None, int]:
@@ -461,6 +566,7 @@ class RunService:
                     COMPILER_VERSION,
                     ETL_COMPILER_VERSION,
                     IR_VERSION,
+                    CAPACITY_MODEL_VERSION,
                 ],
             ).encode()
         ).hexdigest()
@@ -492,6 +598,9 @@ class RunService:
                     assessment_response(
                         item.display_path,
                         apply_native_route(package, asset, assessment),
+                        capacity_profile=build_informatica_capacity_profile(
+                            package, asset
+                        ),
                     )
                     for asset, assessment in zip(
                         package.assets,

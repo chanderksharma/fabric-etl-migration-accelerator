@@ -4,6 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from accelerator.assessment import WorkflowParseError, assess_workflow
+from accelerator.capacity import CapacityStaticProfile, build_informatica_capacity_profile
 from accelerator.discovery import DiscoveryService
 from accelerator.etl_assessment import EtlAssessment, assess_package
 from accelerator.etl_generation import apply_native_route
@@ -71,6 +72,9 @@ class AssessmentApplication:
                             assessment_response(
                                 candidate.display_path,
                                 apply_native_route(package, asset, item),
+                                capacity_profile=build_informatica_capacity_profile(
+                                    package, asset
+                                ),
                             )
                             for asset, item in zip(
                                 package.assets,
@@ -98,6 +102,8 @@ class AssessmentApplication:
 def assessment_response(
     display_path: str,
     assessment: EtlAssessment,
+    *,
+    capacity_profile: CapacityStaticProfile | None = None,
 ) -> WorkflowAssessmentResponse:
     asset_path = "/".join(
         part
@@ -135,4 +141,5 @@ def assessment_response(
         asset_type=assessment.asset_type,
         native_id=assessment.native_id,
         folder=assessment.folder,
+        capacity_profile=capacity_profile,
     )

@@ -6,6 +6,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from accelerator.capacity import CapacityStaticProfile, build_capacity_profile
 from accelerator.effort import assessment_effort_days
 from accelerator.etl_ir import AssetType, SourcePlatform
 from accelerator.graph import GRAPH_VERSION
@@ -91,6 +92,7 @@ class WorkflowAssessment:
     asset_type: AssetType = AssetType.WORKFLOW
     native_id: str | None = None
     folder: str | None = None
+    capacity_profile: CapacityStaticProfile | None = None
 
 
 def assess_workflow(path: Path) -> WorkflowAssessment:
@@ -130,6 +132,7 @@ def assess_workflow(path: Path) -> WorkflowAssessment:
         rules_version=RULES_VERSION,
         dependencies=graph.dependencies,
         data_sources=graph.data_sources,
+        capacity_profile=build_capacity_profile(path),
     )
 
 

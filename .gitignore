@@ -16,6 +16,8 @@ htmlcov/
 .accelerator/
 informatica-workflows/
 generated-fabric-workflows/
+fabric-to-alteryx-calculator/
+fabric-to-informatica-calculator/
 docs/customer-docs/
 docs/Planning/memory/
 .agent-workspace/

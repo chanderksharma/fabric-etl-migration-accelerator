@@ -22,6 +22,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from accelerator import __version__
 from accelerator.application import AssessmentApplication
 from accelerator.assessment import REGISTRY_VERSION, RULES_VERSION, registry_entries
+from accelerator.capacity import CapacityPortfolioEstimate, CapacityUpdate
 from accelerator.deployment import DryRunResult, dry_run
 from accelerator.discovery import InputRejectedError, validate_member_path
 from accelerator.evidence import EvidenceResponse
@@ -314,6 +315,57 @@ def get_run(identity: str) -> Run:
         return run_service().get_run(identity)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get(
+    "/api/runs/{identity}/capacity",
+    response_model=CapacityPortfolioEstimate,
+)
+def get_capacity(identity: str) -> CapacityPortfolioEstimate:
+    try:
+        return run_service().get_capacity(identity)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.put(
+    "/api/runs/{identity}/capacity",
+    response_model=CapacityPortfolioEstimate,
+)
+def update_capacity(
+    identity: str, update: CapacityUpdate
+) -> CapacityPortfolioEstimate:
+    try:
+        return run_service().update_capacity(identity, update)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.get("/api/runs/{identity}/capacity/export")
+def export_capacity(
+    identity: str, format: Literal["json", "csv"] = "json"
+) -> Response:
+    try:
+        estimate = run_service().get_capacity(identity)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if format == "csv":
+        return Response(
+            run_service().export_capacity_csv(identity),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="capacity-estimate.csv"'},
+        )
+    return Response(
+        estimate.model_dump_json(indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="capacity-estimate.json"'},
+    )
 
 
 @app.post("/api/runs/{identity}/cancel", response_model=Run)

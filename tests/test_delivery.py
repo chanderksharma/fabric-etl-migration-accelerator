@@ -747,7 +747,7 @@ def test_snapshot_tampering_and_newer_schema_are_rejected(tmp_path: Path) -> Non
     with pytest.raises(ValueError, match="changed"):
         service.create_run(preview.snapshot_id)
     with closing(sqlite3.connect(service.database)) as connection, connection:
-        connection.execute("PRAGMA user_version=2")
+        connection.execute("PRAGMA user_version=3")
     with pytest.raises(ValueError, match="schema"):
         RunService(tmp_path / "state")
 
@@ -1095,6 +1095,27 @@ def test_disabled_workflow_events_do_not_block_generation(tmp_path: Path) -> Non
     candidate = generate_candidate(path, "notebook")
     assert candidate.validation_state == "generated_unvalidated"
     assert not any("events" in value.casefold() for value in candidate.diagnostics)
+
+
+def test_real_designer_workflow_with_empty_enabled_events_and_anchor_join_compiles() -> None:
+    from accelerator.generation import generate_candidate
+
+    workflow = Path(__file__).parents[1] / "alteryx-workflows" / "my_alteryx-workflow.yxmd"
+    dataflow = generate_candidate(workflow, "dataflow")
+    notebook = generate_candidate(workflow, "notebook")
+
+    assert dataflow.deployable
+    assert dataflow.definition_ready
+    assert dataflow.validation_state == "generated_unvalidated"
+    assert "source_queries['1']" in dataflow.required_bindings
+    assert "source_queries['11']" in dataflow.required_bindings
+    assert "Table.NestedJoin" in dataflow.code
+
+    assert notebook.deployable
+    assert notebook.definition_ready
+    assert "source_paths['1']" in notebook.required_bindings
+    assert "source_paths['11']" in notebook.required_bindings
+    assert ".join(" in notebook.code
 
 
 def test_unique_output_anchor_and_date_regex_compile_natively(tmp_path: Path) -> None:

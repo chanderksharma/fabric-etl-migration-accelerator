@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { Workspace } from "./Workspace";
 import type { AssessmentResult, Page } from "./App";
 import type { EvidenceResponse } from "./evidence-types";
+import type { CapacityEstimate } from "./use-capacity";
 
 afterEach(() => {
   cleanup();
@@ -38,6 +39,59 @@ const evidence: EvidenceResponse = {
       {id: "2", name: "Filter", label: "Positive amount", plugin: "Filter", support: "dataflow", disabled: false, x: null, y: null, width: null, height: null, expressions: ["[Amount] > 0"], issues: []},
     ], edges: [{source: "1", target: "2", source_anchor: "Output", target_anchor: "Input"}], findings: [], truncated: false}],
 };
+const capacityEstimate: CapacityEstimate = {
+  model_version: "1.0.0",
+  status: "inputs_required",
+  settings: {
+    model_version: "1.0.0", days_per_month: 31, target_utilization: 0.8,
+    capacity_floor_cu: 0, burst_window_minutes: 5, balance_weight: 0.5,
+    active_users_per_day: 1, average_active_hours_per_user: 2,
+    peak_concurrent_users: 1, cu_per_active_user: 0.3, interactive_peak_factor: 2,
+    seconds_per_complexity_element: 5.2, minimum_seconds_per_output: 39.2,
+    initial_cu_rate: 12, subsequent_cu_rate: 1.5, cu_rate_threshold_seconds: 600,
+    extra_output_overlap: 0, projection_variation: 0.01,
+    seconds_per_heavy_step_per_thousand_rows: 1.26,
+    seconds_per_hundred_rows: 0.000189, calibration_multiplier: 1,
+  },
+  workflow_count: 2, eligible_count: 1, modeled_count: 1, excluded_count: 1,
+  unconfirmed_count: 1, coverage_percent: 50, monthly_cu_hours: 4.1,
+  daily_cu_seconds: 475, background_cu: 0.0055,
+  scenarios: [
+    {name: "Optimized", required_cu: 2.2, recommended_sku: "F4"},
+    {name: "Balance", required_cu: 3.1, recommended_sku: "F4"},
+    {name: "Peak", required_cu: 4.1, recommended_sku: "F8"},
+  ],
+  workflows: [
+    {
+      workflow_path: "orders.yxmd", recommended_target: "Dataflow Gen2",
+      target_components: ["Dataflow Gen2"], model_basis: "calibrated",
+      status: "unconfirmed", exclusion_reason: null,
+      refresh_interval_minutes: 1440, source_rows_per_run: 1000,
+      spark_vcores: 8, notebook_runtime_seconds: null, effective_notebook_runtime_seconds: null,
+      confirmed: false, runs_per_day: 1,
+      complexity_units: 1, duration_driver: "complexity",
+      row_volume_threshold: 34_700_000, query_seconds: 39.2,
+      dataflow_cu_seconds_per_run: 470.2, notebook_cu_seconds_per_run: 0,
+      pipeline_cu_seconds_per_run: 0, cu_seconds_per_run: 470.2,
+      projected_cu_seconds_per_run: 474.9, monthly_cu_hours: 4.1,
+      autoscale_spark_monthly_cu_hours: 0,
+    },
+    {
+      workflow_path: "custom.yxmd", recommended_target: "Manual rework",
+      target_components: [], model_basis: "heuristic",
+      status: "unconfirmed",
+      exclusion_reason: null,
+      refresh_interval_minutes: 1440, source_rows_per_run: 1000,
+      confirmed: false, runs_per_day: 1,
+      complexity_units: 0.06, duration_driver: "minimum", row_volume_threshold: 20_731_198,
+      query_seconds: 39.2, dataflow_cu_seconds_per_run: 470.2,
+      notebook_cu_seconds_per_run: 0, pipeline_cu_seconds_per_run: 0,
+      cu_seconds_per_run: 470.2,
+      projected_cu_seconds_per_run: 474.9, monthly_cu_hours: 4.1,
+    },
+  ],
+  assumptions: ["Validate representative workloads in Fabric Capacity Metrics."],
+};
 
 function Harness({initial = "executive-summary"}: {initial?: Page}) {
   const [page, navigate] = useState<Page>(initial);
@@ -60,8 +114,14 @@ test("includes detailed portfolio analysis in the executive page", () => {
   expect(screen.getByRole("heading", {name: "Intake remains available"})).toBeInTheDocument();
 });
 
-test("provides a portfolio summary with readiness, decisions, actions, and risks", () => {
-  render(<Harness initial="executive-summary"/>);
+test("provides a portfolio summary with readiness, decisions, actions, and risks", async () => {
+  const navigate = vi.fn();
+  const request = vi.fn().mockResolvedValue({json: async () => capacityEstimate});
+  render(<Workspace page="executive-summary" navigate={navigate} assessment={assessment} runId="test-ui"
+    run={{id: "test-ui", snapshot_id: "snapshot-ui", status: "completed", processed: 2, total: 2, cache_hits: 0, error: null, result: assessment}}
+    candidates={[]} generating={false} generate={vi.fn()} theme="light" toggleTheme={vi.fn()} request={request}>
+    <h1>Intake remains available</h1>
+  </Workspace>);
   const summary = document.getElementById("executive-summary");
   if (!summary) throw new Error("Missing executive summary");
   expect(within(summary).getByRole("heading", {name: "Portfolio Migration Summary"})).toBeInTheDocument();
@@ -74,6 +134,147 @@ test("provides a portfolio summary with readiness, decisions, actions, and risks
   expect(within(summary).getByText("Native-ready", {
     selector: ".metric-label",
   }).parentElement).toHaveTextContent("1");
+  expect(await screen.findByRole("heading", {name: "Fabric capacity summary"})).toBeInTheDocument();
+  const projectedCard = within(summary).getByText("Projected F-SKU", {
+    selector: ".metric-label",
+  }).parentElement;
+  expect(projectedCard).toHaveTextContent("F4");
+  expect(projectedCard).not.toHaveTextContent("Balance");
+  expect(projectedCard).not.toHaveTextContent("Peak");
+  fireEvent.click(within(summary).getByRole("button", {name: /Go to Capacity Planning for more details/}));
+  expect(navigate).toHaveBeenCalledWith("capacity-planning");
+  expect(within(summary).queryByText("Modeled coverage")).not.toBeInTheDocument();
+  expect(within(summary).queryByText("Capacity confidence")).not.toBeInTheDocument();
+  expect(screen.getByText("F4 (2.20 CUs)")).toBeInTheDocument();
+});
+
+test("edits and persists capacity inputs before presenting a preliminary SKU", async () => {
+  const updated = {
+    ...capacityEstimate,
+    status: "planning_estimate" as const,
+    unconfirmed_count: 0,
+    workflows: capacityEstimate.workflows.map(item =>
+      item.workflow_path === "orders.yxmd"
+        ? {...item, confirmed: true, source_rows_per_run: 50000, status: "estimated" as const}
+        : item
+    ),
+  };
+  const request = vi.fn()
+    .mockResolvedValueOnce({json: async () => capacityEstimate})
+    .mockResolvedValueOnce({json: async () => updated});
+  render(<Workspace page="capacity-planning" navigate={vi.fn()} assessment={assessment}
+    runId="test-ui" candidates={[]} generating={false} generate={vi.fn()}
+    run={{id: "test-ui", snapshot_id: "snapshot-ui", status: "completed", processed: 2,
+      total: 2, cache_hits: 0, error: null, result: assessment}}
+    theme="light" toggleTheme={vi.fn()} request={request}>
+    <h1>Intake</h1>
+  </Workspace>);
+
+  expect(await screen.findByRole("heading", {name: "Fabric Capacity Estimate"}))
+    .toBeInTheDocument();
+  expect(screen.getByRole("heading", {name: "Preliminary recommendation: F4"}))
+    .toBeInTheDocument();
+  expect(screen.getByText("Default assumptions")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Source rows for orders.yxmd"), {
+    target: {value: "50000"},
+  });
+  fireEvent.click(screen.getByRole("button", {name: "Save and recalculate"}));
+
+  await act(async () => {
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+  const [, updateRequest] = request.mock.calls[1] as [string, RequestInit];
+  expect(JSON.parse(String(updateRequest.body))).toMatchObject({
+    inputs: [
+      {workflow_path: "orders.yxmd", source_rows_per_run: 50000, confirmed: true},
+      {workflow_path: "custom.yxmd", source_rows_per_run: 1000, confirmed: true},
+    ],
+  });
+});
+
+test("toggles Spark Notebook billing between F-SKU and Autoscale Billing for Spark", async () => {
+  const mixedEstimate: CapacityEstimate = {
+    ...capacityEstimate,
+    settings: {...capacityEstimate.settings, spark_billing_mode: "capacity"},
+    workflows: [
+      {
+        ...capacityEstimate.workflows[0],
+        workflow_path: "mixed.yxmd",
+        recommended_target: "Mixed Fabric solution",
+        target_components: ["Dataflow Gen2", "Fabric Notebook", "Fabric Pipeline"],
+        model_basis: "heuristic",
+        spark_vcores: 8,
+        notebook_runtime_seconds: null,
+        effective_notebook_runtime_seconds: 60,
+        dataflow_cu_seconds_per_run: 470.2,
+        notebook_cu_seconds_per_run: 240.0,
+        pipeline_cu_seconds_per_run: 40.0,
+        cu_seconds_per_run: 750.2,
+        projected_cu_seconds_per_run: 757.7,
+        monthly_cu_hours: 6.5,
+        autoscale_spark_monthly_cu_hours: 0,
+      },
+    ],
+  };
+  const autoscaleEstimate: CapacityEstimate = {
+    ...mixedEstimate,
+    status: "planning_estimate",
+    unconfirmed_count: 0,
+    settings: {...mixedEstimate.settings, spark_billing_mode: "autoscale"},
+    monthly_cu_hours: 4.4,
+    autoscale_spark_monthly_cu_hours: 2.1,
+  };
+  const request = vi.fn()
+    .mockResolvedValueOnce({json: async () => mixedEstimate})
+    .mockResolvedValueOnce({json: async () => autoscaleEstimate});
+  render(<Workspace page="capacity-planning" navigate={vi.fn()} assessment={assessment}
+    runId="test-ui" candidates={[]} generating={false} generate={vi.fn()}
+    run={{id: "test-ui", snapshot_id: "snapshot-ui", status: "completed", processed: 2,
+      total: 2, cache_hits: 0, error: null, result: assessment}}
+    theme="light" toggleTheme={vi.fn()} request={request}>
+    <h1>Intake</h1>
+  </Workspace>);
+
+  expect(await screen.findByText(/DF 470 · NB 240 · PL 40/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("radio", {name: "Autoscale Billing for Spark"}));
+
+  expect(await screen.findByText("Autoscale Spark demand")).toBeInTheDocument();
+  const [, toggleRequest] = request.mock.calls[1] as [string, RequestInit];
+  expect(JSON.parse(String(toggleRequest.body))).toMatchObject({
+    settings: {spark_billing_mode: "autoscale"},
+  });
+});
+
+test("defaults interactive users to 1 and recalculates when updated to 0", async () => {
+  const etlOnly = {
+    ...capacityEstimate,
+    status: "planning_estimate" as const,
+    unconfirmed_count: 0,
+    settings: {...capacityEstimate.settings, active_users_per_day: 0, peak_concurrent_users: 0},
+    scenarios: [{name: "Optimized" as const, required_cu: 1.58, recommended_sku: "F2"}],
+  };
+  const request = vi.fn()
+    .mockResolvedValueOnce({json: async () => capacityEstimate})
+    .mockResolvedValueOnce({json: async () => etlOnly});
+  render(<Workspace page="capacity-planning" navigate={vi.fn()} assessment={assessment}
+    runId="test-ui" candidates={[]} generating={false} generate={vi.fn()}
+    run={{id: "test-ui", snapshot_id: "snapshot-ui", status: "completed", processed: 2,
+      total: 2, cache_hits: 0, error: null, result: assessment}}
+    theme="light" toggleTheme={vi.fn()} request={request}>
+    <h1>Intake</h1>
+  </Workspace>);
+
+  const usersInput = await screen.findByLabelText("Interactive users");
+  expect(usersInput).toHaveValue(1);
+  fireEvent.change(usersInput, {target: {value: "0"}});
+  fireEvent.click(screen.getByRole("button", {name: "Update"}));
+
+  expect(await screen.findByRole("heading", {name: "Preliminary recommendation: F2"}))
+    .toBeInTheDocument();
+  const [, updateRequest] = request.mock.calls[1] as [string, RequestInit];
+  expect(JSON.parse(String(updateRequest.body))).toMatchObject({
+    settings: {active_users_per_day: 0, peak_concurrent_users: 0},
+  });
 });
 
 test("filters the workflow register and restores it with clear filters", () => {
