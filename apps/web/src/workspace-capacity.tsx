@@ -16,13 +16,18 @@ function compactNumber(value: number): string {
   }).format(value);
 }
 
-function componentSummary(item: CapacityWorkflow): string {
+function componentSummary(
+  item: CapacityWorkflow,
+  billingMode: "capacity" | "autoscale",
+): string {
   const parts: string[] = [];
   if (item.dataflow_cu_seconds_per_run) {
     parts.push(`DF ${item.dataflow_cu_seconds_per_run.toFixed(0)}`);
   }
   if (item.notebook_cu_seconds_per_run) {
-    parts.push(`NB ${item.notebook_cu_seconds_per_run.toFixed(0)}`);
+    parts.push(
+      `NB ${item.notebook_cu_seconds_per_run.toFixed(0)}${billingMode === "autoscale" ? " (Autoscale)" : ""}`
+    );
   }
   if (item.pipeline_cu_seconds_per_run) {
     parts.push(`PL ${item.pipeline_cu_seconds_per_run.toFixed(0)}`);
@@ -170,7 +175,7 @@ export function CapacityPlanning({
             role="radio"
             aria-checked={billingMode === "capacity"}
             className={billingMode === "capacity" ? "active" : "secondary-button"}
-            disabled={saving}
+            disabled={saving || !estimate.eligible_count}
             onClick={() => switchSparkBilling("capacity")}
           >
             Include in F-SKU (Default)
@@ -180,7 +185,7 @@ export function CapacityPlanning({
             role="radio"
             aria-checked={billingMode === "autoscale"}
             className={billingMode === "autoscale" ? "active" : "secondary-button"}
-            disabled={saving}
+            disabled={saving || !estimate.eligible_count}
             onClick={() => switchSparkBilling("autoscale")}
           >
             Autoscale Billing for Spark
@@ -201,11 +206,17 @@ export function CapacityPlanning({
               min="0"
               value={interactiveUsers}
               onChange={event => setInteractiveUsers(Number(event.target.value))}
+              onKeyDown={event => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  applySettings();
+                }
+              }}
             />
             <button
               type="button"
               className="secondary-button"
-              disabled={saving}
+              disabled={saving || !estimate.eligible_count}
               onClick={applySettings}
             >
               Update
@@ -268,7 +279,7 @@ export function CapacityPlanning({
               {inputs.map(item => {
                 const usesNotebook = item.status !== "excluded"
                   && Boolean(item.target_components?.includes("Fabric Notebook"));
-                const parts = componentSummary(item);
+                const parts = componentSummary(item, billingMode);
                 return <tr key={item.workflow_path} className={item.status === "excluded" ? "muted-row" : ""}>
                   <td>
                     <strong>{item.workflow_path}</strong>

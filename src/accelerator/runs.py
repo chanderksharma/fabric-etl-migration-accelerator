@@ -467,6 +467,11 @@ class RunService:
     def get_capacity(self, identity: str) -> CapacityPortfolioEstimate:
         """Return the deterministic capacity estimate for a completed run."""
         run = self.get_run(identity)
+        return self._estimate_capacity_for_run(identity, run)
+
+    def _estimate_capacity_for_run(
+        self, identity: str, run: Run
+    ) -> CapacityPortfolioEstimate:
         if run.status != "completed" or run.result is None:
             raise ValueError("Complete an assessment before estimating capacity")
         defaults = {
@@ -495,12 +500,16 @@ class RunService:
                 row["workflow_path"]: CapacityWorkflowInput.model_validate_json(row["input_json"])
                 for row in input_rows
             }
-            for workflow_path, workflow_input in defaults.items():
-                if workflow_path not in persisted:
-                    connection.execute(
-                        "INSERT INTO capacity_inputs VALUES (?,?,?)",
-                        (identity, workflow_path, workflow_input.model_dump_json()),
-                    )
+            missing_rows = [
+                (identity, workflow_path, workflow_input.model_dump_json())
+                for workflow_path, workflow_input in defaults.items()
+                if workflow_path not in persisted
+            ]
+            if missing_rows:
+                connection.executemany(
+                    "INSERT INTO capacity_inputs VALUES (?,?,?)",
+                    missing_rows,
+                )
         return estimate_capacity(
             run.result.assessments,
             {
@@ -536,14 +545,17 @@ class RunService:
                     ON CONFLICT(run_id) DO UPDATE SET settings_json=excluded.settings_json""",
                     (identity, update.settings.model_dump_json()),
                 )
-            for workflow in update.inputs:
-                connection.execute(
+            if update.inputs:
+                connection.executemany(
                     """INSERT INTO capacity_inputs VALUES (?,?,?)
                     ON CONFLICT(run_id,workflow_path)
                     DO UPDATE SET input_json=excluded.input_json""",
-                    (identity, workflow.workflow_path, workflow.model_dump_json()),
+                    [
+                        (identity, workflow.workflow_path, workflow.model_dump_json())
+                        for workflow in update.inputs
+                    ],
                 )
-        return self.get_capacity(identity)
+        return self._estimate_capacity_for_run(identity, run)
 
     def export_capacity_csv(self, identity: str) -> str:
         """Export the current capacity estimate as CSV."""

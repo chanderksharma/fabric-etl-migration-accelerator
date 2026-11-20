@@ -487,3 +487,53 @@ test("discards a late generation response after the analyst changes selection", 
   expect(screen.queryByText("stale code")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Browse folder" })).toBeInTheDocument();
 });
+
+test("uses local folder picker without browser upload input when available and falls back on 501", async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers({"content-type": "application/json"}),
+      json: async () => ({path: "C:\\workflows\\alteryx"}),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers({"content-type": "application/json"}),
+      json: async () => ({
+        snapshot_id: "b".repeat(64),
+        workflow_count: 2,
+        skipped_count: 0,
+        total_size_bytes: 2048,
+        workflows: [
+          {display_path: "a.yxmd", sha256: "1", source_platform: "alteryx"},
+          {display_path: "b.yxmd", sha256: "2", source_platform: "alteryx"},
+        ],
+        skipped: [],
+      }),
+    });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<App />);
+  const fileInput = screen.getByLabelText("Choose files") as HTMLInputElement;
+  const inputClickSpy = vi.spyOn(fileInput, "click");
+
+  fireEvent.click(screen.getByRole("radio", { name: /Select folder/i }));
+  fireEvent.click(screen.getByRole("button", { name: "Browse folder" }));
+
+  expect(await screen.findByText("Ready for assessment")).toBeInTheDocument();
+  expect(screen.getByText("1 folder selected")).toBeInTheDocument();
+  expect(screen.getByText("C:\\workflows\\alteryx")).toBeInTheDocument();
+  expect(inputClickSpy).not.toHaveBeenCalled();
+
+  fetchMock.mockResolvedValueOnce({
+    ok: false,
+    status: 501,
+    headers: new Headers({"content-type": "application/json"}),
+    json: async () => ({detail: "Native folder picker is unavailable"}),
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Browse folder" }));
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(inputClickSpy).toHaveBeenCalledTimes(1);
+});

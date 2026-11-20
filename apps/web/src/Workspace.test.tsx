@@ -239,6 +239,7 @@ test("toggles Spark Notebook billing between F-SKU and Autoscale Billing for Spa
   fireEvent.click(screen.getByRole("radio", {name: "Autoscale Billing for Spark"}));
 
   expect(await screen.findByText("Autoscale Spark demand")).toBeInTheDocument();
+  expect(screen.getByText(/DF 470 · NB 240 \(Autoscale\) · PL 40/)).toBeInTheDocument();
   const [, toggleRequest] = request.mock.calls[1] as [string, RequestInit];
   expect(JSON.parse(String(toggleRequest.body))).toMatchObject({
     settings: {spark_billing_mode: "autoscale"},

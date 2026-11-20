@@ -128,3 +128,28 @@ def test_upload_assessment_returns_deterministic_result() -> None:
     body = response.json()
     assert body["workflow_count"] == 1
     assert body["assessments"][0]["recommended_target"] == "Dataflow Gen2"
+
+
+def test_browse_local_folder_returns_picked_path_and_handles_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import accelerator.api as api_module
+
+    client = TestClient(app, base_url="http://localhost")
+
+    monkeypatch.setattr(api_module, "_pick_local_folder", lambda: "C:\\workflows")
+    picked = client.post("/api/snapshots/browse-folder")
+    assert picked.status_code == 200
+    assert picked.json() == {"path": "C:\\workflows"}
+
+    monkeypatch.setattr(api_module, "_pick_local_folder", lambda: None)
+    cancelled = client.post("/api/snapshots/browse-folder")
+    assert cancelled.status_code == 200
+    assert cancelled.json() == {"path": None}
+
+    def fail_picker() -> str | None:
+        raise RuntimeError("Native folder picker is unavailable")
+
+    monkeypatch.setattr(api_module, "_pick_local_folder", fail_picker)
+    unavailable = client.post("/api/snapshots/browse-folder")
+    assert unavailable.status_code == 501

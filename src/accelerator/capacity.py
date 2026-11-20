@@ -13,9 +13,9 @@ from xml.etree import ElementTree as StandardElementTree
 from pydantic import BaseModel, Field, model_validator
 
 from accelerator.etl_ir import AssetType, EtlAsset, EtlNode, EtlPackage, NodeKind, SourcePlatform
-from accelerator.graph import GraphNode, parse_graph
+from accelerator.graph import GraphNode, WorkflowGraph, parse_graph
 
-CAPACITY_MODEL_VERSION = "3.0.0"
+CAPACITY_MODEL_VERSION = "3.1.0"
 DEFAULT_REFRESH_INTERVAL_MINUTES = 1440
 DEFAULT_SOURCE_ROWS_PER_RUN = 1000
 DEFAULT_SPARK_VCORES = 8
@@ -320,16 +320,22 @@ class CapacityUpdate(BaseModel):
     settings: CapacitySettings | None = None
 
 
-def build_capacity_profile(path: Path) -> CapacityStaticProfile:
+def build_capacity_profile(
+    path: Path,
+    *,
+    graph: WorkflowGraph | None = None,
+) -> CapacityStaticProfile:
     """Classify Alteryx source nodes using the reference calculator mapping."""
-    graph = parse_graph(path)
+    resolved_graph = graph if graph is not None else parse_graph(path)
     counts = dict.fromkeys(COUNT_KEYS, 0)
     databases: set[str] = set()
     heavy_steps = 0
     notebook_steps = 0
     pipeline_steps = 0
     total_steps = 0
-    for node in graph.nodes:
+    for node in resolved_graph.nodes:
+        if node.disabled:
+            continue
         bucket = _classify_node(node)
         if bucket == "skip":
             continue
@@ -404,16 +410,10 @@ def build_informatica_capacity_profile(
                     bucket = "xmlfolder"
                 elif bucket == "source":
                     bucket = "folder"
+            heavy_delta, nb_delta = _tally_informatica_bucket(counts, bucket)
             total_steps += 1
-            if bucket in {"code", "api"}:
-                notebook_steps += 1
-            if bucket in {"xmlsource", "xmlfolder"}:
-                counts["source" if bucket == "xmlsource" else "folder"] += 1
-                heavy_steps += 1
-            elif bucket == "heavy":
-                heavy_steps += 1
-            else:
-                counts[bucket] += 1
+            heavy_steps += heavy_delta
+            notebook_steps += nb_delta
             conn_info = node.properties.get("Connection Information")
             if isinstance(conn_info, str):
                 db = _informatica_db_key(conn_info)
@@ -432,16 +432,10 @@ def build_informatica_capacity_profile(
             bucket = _classify_informatica_operation(op, tmpl, groups, is_idmc=is_idmc)
             if bucket == "skip":
                 continue
+            heavy_delta, nb_delta = _tally_informatica_bucket(counts, bucket)
             total_steps += 1
-            if bucket in {"code", "api"}:
-                notebook_steps += 1
-            if bucket in {"xmlsource", "xmlfolder"}:
-                counts["source" if bucket == "xmlsource" else "folder"] += 1
-                heavy_steps += 1
-            elif bucket == "heavy":
-                heavy_steps += 1
-            else:
-                counts[bucket] += 1
+            heavy_steps += heavy_delta
+            notebook_steps += nb_delta
 
     raw_commands = cap_meta.get("command_tasks")
     command_tasks = raw_commands if isinstance(raw_commands, int) else 0
@@ -1053,6 +1047,17 @@ def _informatica_db_key(value: str) -> str:
     if not text or text in {"source", "target"}:
         return ""
     return text
+
+
+def _tally_informatica_bucket(counts: dict[str, int], bucket: str) -> tuple[int, int]:
+    notebook_delta = 1 if bucket in {"code", "api"} else 0
+    if bucket in {"xmlsource", "xmlfolder"}:
+        counts["source" if bucket == "xmlsource" else "folder"] += 1
+        return 1, notebook_delta
+    if bucket == "heavy":
+        return 1, notebook_delta
+    counts[bucket] += 1
+    return 0, notebook_delta
 
 
 def _classify_informatica_node(node: EtlNode, *, is_idmc: bool) -> str:

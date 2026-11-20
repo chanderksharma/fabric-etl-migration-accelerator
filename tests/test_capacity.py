@@ -507,3 +507,49 @@ def test_workbook_four_workflow_golden_parity() -> None:
     assert [s.required_cu for s in estimate.scenarios] == pytest.approx(
         [23.936380494971072, 38.88142801083667, 53.826475526702275]
     )
+
+
+def test_disabled_alteryx_container_tools_are_excluded_from_capacity_profile(
+    tmp_path: Path,
+) -> None:
+    from accelerator.assessment import assess_workflow
+
+    workflow = tmp_path / "disabled.yxmd"
+    workflow.write_text(
+        """
+        <AlteryxDocument>
+          <Nodes>
+            <Node ToolID="1">
+              <GuiSettings Plugin="AlteryxBasePluginsGui.InputData.InputData" />
+              <Properties><Configuration><File>orders.csv</File></Configuration></Properties>
+            </Node>
+            <Node ToolID="2">
+              <GuiSettings Plugin="AlteryxGuiToolkit.ToolContainer.ToolContainer" />
+              <Properties>
+                <Configuration><Disabled value="True" /></Configuration>
+              </Properties>
+              <ChildNodes>
+                <Node ToolID="3">
+                  <GuiSettings Plugin="AlteryxBasePluginsGui.JSONParse.JSONParse" />
+                </Node>
+                <Node ToolID="4">
+                  <GuiSettings Plugin="AlteryxBasePluginsGui.Formula.Formula" />
+                </Node>
+              </ChildNodes>
+            </Node>
+            <Node ToolID="5">
+              <GuiSettings Plugin="AlteryxBasePluginsGui.OutputData.OutputData" />
+            </Node>
+          </Nodes>
+        </AlteryxDocument>
+        """,
+        encoding="utf-8",
+    )
+
+    assessment = assess_workflow(workflow)
+    assert assessment.capacity_profile is not None
+    assert assessment.capacity_profile.counts["source"] == 1
+    assert assessment.capacity_profile.counts["dest"] == 1
+    assert assessment.capacity_profile.counts["calc"] == 0
+    assert assessment.capacity_profile.heavy_steps == 0
+    assert assessment.capacity_profile == build_capacity_profile(workflow)

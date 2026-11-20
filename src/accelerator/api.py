@@ -22,7 +22,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from accelerator import __version__
 from accelerator.application import AssessmentApplication
 from accelerator.assessment import REGISTRY_VERSION, RULES_VERSION, registry_entries
-from accelerator.capacity import CapacityPortfolioEstimate, CapacityUpdate
+from accelerator.capacity import CapacityPortfolioEstimate, CapacityUpdate, capacity_csv
 from accelerator.deployment import DryRunResult, dry_run
 from accelerator.discovery import InputRejectedError, validate_member_path
 from accelerator.evidence import EvidenceResponse
@@ -228,6 +228,38 @@ class LocalSelection(BaseModel):
     path: str = Field(min_length=1)
 
 
+class FolderSelectionResponse(BaseModel):
+    path: str | None = None
+
+
+_DIALOG_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="folder-dialog")
+
+
+def _pick_local_folder() -> str | None:
+    import tkinter as tk
+    from tkinter import filedialog
+
+    try:
+        root = tk.Tk()
+    except tk.TclError as error:
+        raise RuntimeError("Native folder picker is unavailable") from error
+    try:
+        root.withdraw()
+        root.attributes("-topmost", True)
+        root.lift()
+        root.focus_force()
+        selected = filedialog.askdirectory(
+            parent=root,
+            title="Select workflow folder",
+            mustexist=True,
+        )
+    except tk.TclError as error:
+        raise RuntimeError("Native folder picker is unavailable") from error
+    finally:
+        root.destroy()
+    return selected or None
+
+
 class Confirmation(BaseModel):
     snapshot_id: str = Field(pattern=r"^[a-f0-9]{64}$")
 
@@ -270,6 +302,19 @@ def tool_registry() -> dict[str, object]:
         "rules_version": RULES_VERSION,
         "entries": registry_entries(),
     }
+
+
+@app.post("/api/snapshots/browse-folder", response_model=FolderSelectionResponse)
+async def browse_local_folder() -> FolderSelectionResponse:
+    try:
+        loop = asyncio.get_running_loop()
+        selected = await loop.run_in_executor(_DIALOG_EXECUTOR, _pick_local_folder)
+    except (ImportError, RuntimeError, OSError) as error:
+        raise HTTPException(
+            status_code=501,
+            detail="Native folder picker is unavailable in this environment",
+        ) from error
+    return FolderSelectionResponse(path=selected)
 
 
 @app.post("/api/snapshots/local", response_model=SnapshotPreview)
@@ -357,7 +402,7 @@ def export_capacity(
         raise HTTPException(status_code=409, detail=str(error)) from error
     if format == "csv":
         return Response(
-            run_service().export_capacity_csv(identity),
+            capacity_csv(estimate),
             media_type="text/csv",
             headers={"Content-Disposition": 'attachment; filename="capacity-estimate.csv"'},
         )

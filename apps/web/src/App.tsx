@@ -123,6 +123,7 @@ export function App() {
   const [sourceType, setSourceType] = useState<SourceType>("alteryx");
   const [selectedMode, setSelectedMode] = useState<BrowseMode>("files");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewSummary | null>(null);
   const [processing, setProcessing] = useState(false);
   const [assessing, setAssessing] = useState(false);
@@ -138,6 +139,7 @@ export function App() {
   const pendingDrop = useRef<File[] | null>(null);
   const droppedPaths = useRef(new Map<File, string>());
   const inputRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const input = inputRef.current;
@@ -151,6 +153,7 @@ export function App() {
     }
     input.value = "";
     setSelectedFiles(pendingDrop.current ?? []);
+    setSelectedFolderPath(null);
     pendingDrop.current = null;
     setPreview(null);
     setError(null);
@@ -209,6 +212,12 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (preview) {
+      previewRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    }
+  }, [preview]);
+
+  useEffect(() => {
     if (window.location.hash !== `#${activePage}`) {
       window.location.hash = activePage;
     }
@@ -229,6 +238,7 @@ export function App() {
     setRun(null);
     setCandidates([]);
     setSelectedFiles([]);
+    setSelectedFolderPath(null);
     pendingDrop.current = null;
     droppedPaths.current.clear();
     setPreview(null);
@@ -301,6 +311,40 @@ export function App() {
     }
   }
 
+  function validateSummaryPlatform(summary: PreviewSummary) {
+    const wrongType = summary.workflows.some((workflow) => {
+      const platform = workflow.source_platform ?? "alteryx";
+      return sourceType === "alteryx"
+        ? platform !== "alteryx"
+        : !platform.startsWith("informatica_");
+    });
+    if (wrongType) {
+      throw new Error(
+        `The selection contains ${sourceType === "alteryx" ? "Informatica" : "Alteryx"} `
+        + `assets. Start a separate ${sourceType === "alteryx" ? "Informatica" : "Alteryx"} assessment.`,
+      );
+    }
+  }
+
+  async function parsePreviewResponse(response: Response): Promise<PreviewSummary> {
+    if (!response.ok) {
+      const contentType = response.headers.get("content-type") ?? "";
+      const failure = contentType.includes("application/json")
+        ? ((await response.json()) as { detail?: unknown })
+        : { detail: await response.text() };
+      throw new Error(
+        typeof failure.detail === "string" && failure.detail.trim()
+          ? failure.detail
+          : response.status >= 500
+            ? "The local processing service is unavailable. Start the API and try again."
+            : "The selected input could not be processed",
+      );
+    }
+    const summary: PreviewSummary = await response.json();
+    validateSummaryPlatform(summary);
+    return summary;
+  }
+
   async function reviewFiles(files: File[], mode: BrowseMode) {
     if (files.length === 0) return;
     setProcessing(true);
@@ -313,32 +357,7 @@ export function App() {
         method: "POST",
         body: uploadBody(files, mode),
       });
-      if (!response.ok) {
-        const contentType = response.headers.get("content-type") ?? "";
-        const failure = contentType.includes("application/json")
-          ? ((await response.json()) as { detail?: unknown })
-          : { detail: await response.text() };
-        throw new Error(
-          typeof failure.detail === "string" && failure.detail.trim()
-            ? failure.detail
-            : response.status >= 500
-              ? "The local processing service is unavailable. Start the API and try again."
-              : "The selected input could not be processed",
-        );
-      }
-      const summary: PreviewSummary = await response.json();
-      const wrongType = summary.workflows.some((workflow) => {
-        const platform = workflow.source_platform ?? "alteryx";
-        return sourceType === "alteryx"
-          ? platform !== "alteryx"
-          : !platform.startsWith("informatica_");
-      });
-      if (wrongType) {
-        throw new Error(
-          `The selection contains ${sourceType === "alteryx" ? "Informatica" : "Alteryx"} `
-          + `assets. Start a separate ${sourceType === "alteryx" ? "Informatica" : "Alteryx"} assessment.`,
-        );
-      }
+      const summary = await parsePreviewResponse(response);
       if (isCurrent(epoch, identity)) setPreview(summary);
     } catch (caught) {
       if (isCurrent(epoch, identity)) {
@@ -346,6 +365,59 @@ export function App() {
       }
     } finally {
       if (isCurrent(epoch, identity)) setProcessing(false);
+    }
+  }
+
+  async function reviewLocalFolder(folderPath: string) {
+    clearSelection();
+    setSelectedFolderPath(folderPath);
+    setProcessing(true);
+    setError(null);
+    setPreview(null);
+    const epoch = selectionEpoch.current;
+    const identity = activeRunId.current;
+    try {
+      const response = await apiRequest("/api/snapshots/local", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: folderPath }),
+      });
+      const summary = await parsePreviewResponse(response);
+      if (isCurrent(epoch, identity)) setPreview(summary);
+    } catch (caught) {
+      if (isCurrent(epoch, identity)) {
+        setError(caught instanceof Error ? caught.message : "The selected folder could not be processed");
+      }
+    } finally {
+      if (isCurrent(epoch, identity)) setProcessing(false);
+    }
+  }
+
+  async function browseInput() {
+    if (processing || assessing) return;
+    if (selectedMode !== "folder") {
+      inputRef.current?.click();
+      return;
+    }
+    setError(null);
+    try {
+      const response = await apiRequest("/api/snapshots/browse-folder", {
+        method: "POST",
+      });
+      const picked: { path?: string | null } = await response.json();
+      if (picked.path) {
+        await reviewLocalFolder(picked.path);
+      }
+    } catch (caught) {
+      if (
+        caught instanceof Error
+        && "status" in caught
+        && [404, 405, 501].includes(Number((caught as { status?: unknown }).status))
+      ) {
+        inputRef.current?.click();
+        return;
+      }
+      setError(caught instanceof Error ? caught.message : "Could not open folder picker");
     }
   }
 
@@ -527,21 +599,27 @@ export function App() {
               onChange={chooseFiles}
               aria-label={`Choose ${browseLabel}`}
             />
-            <button type="button" onClick={() => inputRef.current?.click()}>
+            <button type="button" onClick={() => void browseInput()} disabled={processing || assessing}>
               Browse {browseLabel}
             </button>
             <div className="selectionSummary" role="status" aria-live="polite">
               {processing
                 ? "Reviewing selection…"
+                : selectedFolderPath
+                ? "1 folder selected"
                 : selectedFiles.length === 0
                 ? "No items selected"
                 : `${selectedFiles.length} item${selectedFiles.length === 1 ? "" : "s"} selected`}
             </div>
-            {selectedFiles.length > 0 && (
+            {(selectedFiles.length > 0 || selectedFolderPath) && (
               <ul className="selectedFiles" aria-label="Selected items">
-                {selectedFiles.map((file) => (
-                  <li key={`${file.name}-${file.size}-${file.lastModified}`}>{file.name}</li>
-                ))}
+                {selectedFolderPath ? (
+                  <li>{selectedFolderPath}</li>
+                ) : (
+                  selectedFiles.map((file) => (
+                    <li key={`${file.name}-${file.size}-${file.lastModified}`}>{file.name}</li>
+                  ))
+                )}
               </ul>
             )}
           </div>
@@ -549,10 +627,20 @@ export function App() {
           {error && <div className="errorMessage" role="alert">{error}</div>}
 
           {preview && (
-            <section className="previewCard" aria-labelledby="preview-title">
-              <div>
-                <p className="eyebrow">PRE-RUN SUMMARY</p>
-                <h2 id="preview-title">Ready for assessment</h2>
+            <section ref={previewRef} className="previewCard" aria-labelledby="preview-title">
+              <div className="previewHeader">
+                <div>
+                  <p className="eyebrow">PRE-RUN SUMMARY</p>
+                  <h2 id="preview-title">Ready for assessment</h2>
+                </div>
+                <button
+                  type="button"
+                  className="confirmButton"
+                  disabled={assessing || preview.workflow_count === 0}
+                  onClick={confirmAssessment}
+                >
+                  {assessing ? "Assessing…" : "Confirm and assess"}
+                </button>
               </div>
               <div className="previewMetrics">
                 <div><strong>{preview.workflow_count}</strong><span>Workflows found</span></div>
@@ -563,7 +651,7 @@ export function App() {
                 </div>
               </div>
               {preview.skipped.length > 0 && (
-                <details>
+                <details className="previewSkipped">
                   <summary>Review skipped items</summary>
                   <ul>
                     {preview.skipped.map((item) => (
@@ -574,18 +662,10 @@ export function App() {
                   </ul>
                 </details>
               )}
-              <button
-                type="button"
-                className="confirmButton"
-                disabled={assessing || preview.workflow_count === 0}
-                onClick={confirmAssessment}
-              >
-                {assessing ? "Assessing…" : "Confirm and assess"}
-              </button>
             </section>
           )}
 
-          {assessment && selectedFiles.length === 0 && !preview && (
+          {assessment && selectedFiles.length === 0 && !selectedFolderPath && !preview && (
             <div className="notice">
               <strong>Active assessment loaded ({assessment.workflow_count} workflow{assessment.workflow_count === 1 ? "" : "s"}).</strong>{" "}
               Select new files above to start a fresh run, or{" "}
@@ -603,7 +683,7 @@ export function App() {
             </div>
           )}
 
-          {assessment && (selectedFiles.length > 0 || Boolean(preview)) && (
+          {assessment && (selectedFiles.length > 0 || Boolean(selectedFolderPath) || Boolean(preview)) && (
             <section className="assessmentResults" aria-labelledby="assessment-title">
               <p className="eyebrow">ASSESSMENT COMPLETE</p>
               <h2 id="assessment-title">

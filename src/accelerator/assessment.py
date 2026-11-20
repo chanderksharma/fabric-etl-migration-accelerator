@@ -132,7 +132,7 @@ def assess_workflow(path: Path) -> WorkflowAssessment:
         rules_version=RULES_VERSION,
         dependencies=graph.dependencies,
         data_sources=graph.data_sources,
-        capacity_profile=build_capacity_profile(path),
+        capacity_profile=build_capacity_profile(path, graph=graph),
     )
 
 
