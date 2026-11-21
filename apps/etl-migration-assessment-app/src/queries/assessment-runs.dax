@@ -1,0 +1,21 @@
+EVALUATE
+TOPN(
+    50,
+    CALCULATETABLE(
+        SUMMARIZECOLUMNS(
+            'AssessmentRun'[RunId],
+            'AssessmentRun'[RunLabel],
+            'AssessmentRun'[StartedAtUtc],
+            'AssessmentRun'[CompletedAtUtc],
+            'AssessmentRun'[Status],
+            'AssessmentRun'[WorkflowCount],
+            'AssessmentRun'[FailedCount],
+            'AssessmentRun'[SkippedCount],
+            'AssessmentRun'[RulesVersion]
+        ),
+        'AssessmentRun'[Status] = "completed"
+    ),
+    'AssessmentRun'[CompletedAtUtc], DESC,
+    'AssessmentRun'[RunId], DESC
+)
+ORDER BY 'AssessmentRun'[CompletedAtUtc] DESC, 'AssessmentRun'[RunId] DESC

@@ -70,6 +70,6 @@ replace validation in the Fabric-managed runtime.
 
 ## Next Steps
 
-- Review [Installation & Container Setup](installation.md) for local, CLI, and Docker loopback deployment options.
+- Review [Installation & Runtime Modes](installation.md) for one-step FEMA Fabric workspace deployment as well as local, CLI, Windows desktop, and Docker loopback options.
 - Follow [Fabric CI/CD Setup](fabric-ci-cd-setup.md) to configure secretless Microsoft Entra OIDC deployment via GitHub Actions or GitLab CI.
 - Read [`CONTRIBUTING.md`](../../CONTRIBUTING.md) before adding new Alteryx tools or Informatica transformations.

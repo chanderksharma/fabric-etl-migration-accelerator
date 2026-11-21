@@ -1,0 +1,72 @@
+{
+  "version": "1.0.0",
+  "deploymentOrder": [
+    {
+      "step": 1,
+      "key": "folder",
+      "itemType": "Folder",
+      "defaultDisplayName": "FEMA",
+      "description": "Workspace folder organizing all Fabric ETL Migration Accelerator items."
+    },
+    {
+      "step": 2,
+      "key": "lakehouse",
+      "itemType": "Lakehouse",
+      "defaultDisplayName": "ETL_Migration_Assessment_Lakehouse",
+      "description": "Governed Lakehouse storing staged ETL intake files and normalized assessment Delta tables."
+    },
+    {
+      "step": 3,
+      "key": "environment",
+      "itemType": "Environment",
+      "defaultDisplayName": "ETL_Migration_Assessment_Env",
+      "runtimeVersion": "2.0",
+      "description": "Fabric Runtime 2.0 (Python 3.13) environment with the ETL Migration Accelerator wheel."
+    },
+    {
+      "step": 4,
+      "key": "notebook",
+      "itemType": "Notebook",
+      "defaultDisplayName": "ETL Migration Assessment",
+      "source": "notebooks/fabric-portfolio-assessment.ipynb",
+      "description": "Deterministic portfolio assessment and Lakehouse Delta persistence notebook."
+    },
+    {
+      "step": 5,
+      "key": "schemaBootstrap",
+      "itemType": "NotebookJob",
+      "targetKey": "notebook",
+      "parameters": {
+        "INITIALIZE_SCHEMA_ONLY": true,
+        "PERSIST_DELTA_TABLES": false,
+        "CONFIRM_ASSESSMENT": false,
+        "WRITE_REPORTS": false
+      },
+      "description": "Idempotently initializes the eight empty etl_* Delta tables on first deployment."
+    },
+    {
+      "step": 6,
+      "key": "semanticModel",
+      "itemType": "SemanticModel",
+      "defaultDisplayName": "ETL Migration Assessment Model",
+      "source": "powerbi/ETL Migration Assessment Model.SemanticModel",
+      "description": "Direct Lake semantic model over the normalized assessment Delta tables."
+    },
+    {
+      "step": 7,
+      "key": "report",
+      "itemType": "Report",
+      "defaultDisplayName": "ETL Migration Assessment",
+      "source": "powerbi/ETL Migration Assessment.Report",
+      "description": "Six-page Power BI analytical report bound to the Direct Lake semantic model."
+    },
+    {
+      "step": 8,
+      "key": "fabricApp",
+      "itemType": "FabricApp",
+      "defaultDisplayName": "fema-etl-migration-app",
+      "source": "apps/etl-migration-assessment-app",
+      "description": "Authenticated Fabric analyst web application and User Data Functions."
+    }
+  ]
+}

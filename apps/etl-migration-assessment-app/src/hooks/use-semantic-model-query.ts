@@ -5,10 +5,12 @@
 // </copyright>
 //-----------------------------------------------------------------------
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { SemanticModelQueryResult } from "@microsoft/rayfin-connector-fabric-semanticmodel";
+import { useAssessmentRunContext } from "@/hooks/assessment-run.context";
 import type { SemanticModelConnectors } from "@/lib/connectors";
 import { getRayfinClient } from "@/lib/rayfin-client";
+import { scopeAssessmentRunQuery } from "@/lib/assessment-run-scope";
 import { cachedQuery, cachePrefixKeyFor, clearCachedQueries, type CachedQueryResult } from "@/lib/query-cache";
 
 import { SemanticModelQueryError, toThrownQueryResult } from "@/lib/semantic-model-errors";
@@ -130,12 +132,17 @@ export function useSemanticModelQuery(
     options: UseSemanticModelQueryOptions,
 ): UseSemanticModelQueryResult {
     const { connection, query, bypassCache } = options;
+    const { activeRunId, revision } = useAssessmentRunContext();
+    const scopedQuery = useMemo(
+        () => scopeAssessmentRunQuery(query, activeRunId),
+        [activeRunId, query],
+    );
     const [data, setData] = useState<CachedQueryResult<SemanticModelQueryResult> | undefined>();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<Error | undefined>();
     const requestIdRef = useRef(0);
 
-    const canExecute = Boolean(connection && query);
+    const canExecute = Boolean(connection && scopedQuery);
 
     const execute = useCallback(
         async (forceRefresh = false) => {
@@ -156,7 +163,7 @@ export function useSemanticModelQuery(
             const skipCache = Boolean(bypassCache) || forceRefresh;
 
             try {
-                const result = await querySemanticModel(connection, query, skipCache);
+                const result = await querySemanticModel(connection, scopedQuery, skipCache);
 
                 if (!isLatestRequest()) return;
 
@@ -175,15 +182,16 @@ export function useSemanticModelQuery(
                 }
             }
         },
-        [connection, query, bypassCache, canExecute],
+        [connection, scopedQuery, bypassCache, canExecute],
     );
 
     useEffect(() => {
+        void revision;
         void execute(); // eslint-disable-line react-hooks/set-state-in-effect
         return () => {
             requestIdRef.current += 1;
         };
-    }, [execute]);
+    }, [execute, revision]);
 
     const refetch = useCallback(() => execute(true), [execute]);
 

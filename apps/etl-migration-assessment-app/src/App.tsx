@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   BarChart3,
   ClipboardList,
+  History,
   FileUp,
   Gauge,
   GitPullRequestArrow,
@@ -13,6 +14,8 @@ import {
 } from "lucide-react";
 
 import { useThemeContext } from "@/hooks/theme.context";
+import { useAssessmentRunContext } from "@/hooks/assessment-run.context";
+import { AssessmentRunProvider } from "@/hooks/use-assessment-run";
 import { IntakeRunPage } from "@/pages/intake-run.page";
 import { DeploymentPage } from "@/pages/deployment.page";
 import { MigrationPage } from "@/pages/migration.page";
@@ -34,9 +37,19 @@ const navigation = [
 ] as const;
 
 function App() {
+  return (
+    <AssessmentRunProvider>
+      <AppShell />
+    </AssessmentRunProvider>
+  );
+}
+
+function AppShell() {
   const [page, setPage] = useState<PageKey>("portfolio");
   const [deploymentWorkflowPath, setDeploymentWorkflowPath] = useState<string>();
   const { isDark, toggleTheme } = useThemeContext();
+  const { activeRunId, runs, isLoading: runsLoading, error: runsError, selectRun } =
+    useAssessmentRunContext();
   const reportUrl = import.meta.env.VITE_REPORT_URL as string | undefined;
 
   return (
@@ -50,6 +63,24 @@ function App() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            <label className="relative flex min-w-0 items-center gap-2" title={runsError?.message}>
+              <History className="icon-size-200 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="sr-only">Assessment run</span>
+              <select
+                className="max-w-72 rounded-lg border bg-background px-3 py-2 text-200 font-semibold focus:outline-none focus:ring-2 focus:ring-ring"
+                aria-label="Assessment run"
+                value={activeRunId ?? ""}
+                disabled={runsLoading}
+                onChange={(event) => selectRun(event.target.value || null)}
+              >
+                <option value="">Latest completed run</option>
+                {runs.map((run) => (
+                  <option key={run.runId} value={run.runId}>
+                    {formatRunOption(run.runLabel, run.completedAtUtc, run.workflowCount)}
+                  </option>
+                ))}
+              </select>
+            </label>
             {reportUrl && (
               <a
                 className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-200 font-semibold hover:bg-hover focus:outline-none focus:ring-2 focus:ring-ring"
@@ -119,6 +150,17 @@ function App() {
       </div>
     </div>
   );
+}
+
+function formatRunOption(label: string, completedAtUtc: string, workflowCount: number): string {
+  const completed = new Date(completedAtUtc);
+  const timestamp = Number.isNaN(completed.getTime())
+    ? completedAtUtc
+    : new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(completed);
+  return `${label} · ${timestamp} · ${workflowCount} workflows`;
 }
 
 export default App;

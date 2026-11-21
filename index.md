@@ -10,7 +10,7 @@ This InnerSource IP Collection provides deterministic multi-source ETL estate di
 
 - **[Repository Overview (`README.md`)](README.md)** — Full functional scope, compiler boundaries, quick-start commands, core team, and InnerSource visibility scope.
 - **[Getting Started](docs/Guides/getting-started.md)** — 5-minute synthetic walkthrough using the React portfolio workbench and Typer CLI.
-- **[Installation & Runtime Modes](docs/Guides/installation.md)** — Workstation setup, CLI-only mode, and loopback Docker container instructions.
+- **[Installation & Runtime Modes](docs/Guides/installation.md)** — Workstation setup, CLI-only mode, loopback Docker container, and one-step FEMA Fabric workspace deployment (Lakehouse, Runtime 2.0 Environment, Notebook, Direct Lake Power BI report, and Fabric analyst app).
 - **[Fabric CI/CD Setup](docs/Guides/fabric-ci-cd-setup.md)** — Secretless Microsoft Entra Workload Identity Federation (OIDC) deployment via GitHub Actions and GitLab CI.
 - **[System Architecture](docs/Architecture/system-architecture.md)** & **[ADR-001](docs/Architecture/ADR-001-etl-source-adapters.md)** — Canonical ETL IR, target routing rules, and security boundaries.
 - **[Threat Model](docs/Security/threat-model.md)** & **[Security Policy](SECURITY.md)** — STRIDE threat analysis, archive/XML safety caps, and SDL CI enforcement.

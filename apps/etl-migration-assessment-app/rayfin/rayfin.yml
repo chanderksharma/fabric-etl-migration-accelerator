@@ -9,7 +9,7 @@ services:
     allowedRedirectUris:
       - http://localhost:5173
       - http://127.0.0.1:5173
-      - https://neat-fern-bb534f54ab-canadacentral.webapp.fabricapps.net
+      - https://risen-star-f0305b73f3-canadacentral.webapp.fabricapps.net
   data:
     enabled: false
   storage:

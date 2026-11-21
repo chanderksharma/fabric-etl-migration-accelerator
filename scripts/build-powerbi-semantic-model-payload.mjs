@@ -26,6 +26,16 @@ for (const filePath of await listFiles(sourceDir)) {
   content = content
     .replaceAll(workspaceToken, options.workspaceId)
     .replaceAll(lakehouseToken, options.lakehouseId);
+  if (relativePath.startsWith("definition/tables/") && relativePath.endsWith(".tmdl")) {
+    if (options.noSchema) {
+      content = content.replace(/^\t*schemaName:\s*\S+\r?\n/gm, "");
+    } else if (options.schemaName) {
+      content = content.replace(
+        /^(\t*schemaName:\s*)\S+/gm,
+        `$1${options.schemaName}`,
+      );
+    }
+  }
   if (content.includes(workspaceToken) || content.includes(lakehouseToken)) {
     throw new Error(`Unresolved deployment token in ${relativePath}`);
   }
@@ -37,7 +47,7 @@ for (const filePath of await listFiles(sourceDir)) {
 }
 
 const payload = {
-  displayName: "ETL Migration Assessment Model",
+  displayName: options.displayName || "ETL Migration Assessment Model",
   description:
     "Direct Lake semantic model for governed ETL migration assessment analytics.",
   definition: {
@@ -48,22 +58,35 @@ const payload = {
 
 await writeFile(path.resolve(options.out), `${JSON.stringify(payload, null, 2)}\n`, {
   encoding: "utf8",
-  flag: "wx",
+  flag: options.force ? "w" : "wx",
 });
 console.log(`Created semantic model payload with ${parts.length} parts.`);
 
 function parseOptions(args) {
-  const result = {};
-  for (let index = 0; index < args.length; index += 2) {
+  const result = { force: false, noSchema: false };
+  for (let index = 0; index < args.length; index += 1) {
     const name = args[index];
+    if (name === "--force") {
+      result.force = true;
+      continue;
+    }
+    if (name === "--no-schema") {
+      result.noSchema = true;
+      continue;
+    }
     const value = args[index + 1];
     if (!name?.startsWith("--") || value === undefined) {
       throw new Error(`Invalid argument sequence near ${name ?? "<end>"}`);
     }
+    index += 1;
     if (name === "--workspace-id") {
       result.workspaceId = value;
     } else if (name === "--lakehouse-id") {
       result.lakehouseId = value;
+    } else if (name === "--schema-name") {
+      result.schemaName = value;
+    } else if (name === "--display-name") {
+      result.displayName = value;
     } else if (name === "--out") {
       result.out = value;
     } else {

@@ -5,11 +5,13 @@
 // </copyright>
 //-----------------------------------------------------------------------
 
+import { createElement, type ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { ConnectorsError } from "@microsoft/rayfin-connectors";
 import { NetworkError, SdkError, type WorkloadFailure } from "@microsoft/rayfin-lib";
 import type { QueryError, SemanticModelQueryResult } from "@microsoft/rayfin-connector-fabric-semanticmodel";
+import { AssessmentRunContext } from "@/hooks/assessment-run.context";
 import { useSemanticModelQuery, clearQueryCache } from "@/hooks/use-semantic-model-query";
 import { clearCachedQueries, configureQueryCache } from "@/lib/query-cache";
 import { isThrottlingError } from "@/lib/semantic-model-errors";
@@ -127,6 +129,37 @@ describe("useSemanticModelQuery", () => {
         await waitFor(() => expect(result.current.isLoading).toBe(false));
 
         expect(mockExecuteQuery).toHaveBeenCalledWith({ query: "EVALUATE ROW()" });
+    });
+
+    it("scopes latest-run DAX to the retained assessment run selected by the user", async () => {
+        mockExecuteQuery.mockResolvedValue(successResult());
+        const runId = "8f50f18a-ae85-4be6-9224-35f4f4ce526b";
+        const query = `EVALUATE CALCULATETABLE(ROW("Count", 1), 'AssessmentRun'[IsLatestCompletedRun] = TRUE())`;
+        const wrapper = ({ children }: { children: ReactNode }) => createElement(
+            AssessmentRunContext.Provider,
+            {
+                value: {
+                    activeRunId: runId,
+                    runs: [],
+                    isLoading: false,
+                    revision: 0,
+                    selectRun: vi.fn(),
+                    refreshRuns: vi.fn(),
+                },
+            },
+            children,
+        );
+
+        const { result } = renderHook(
+            () => useSemanticModelQuery({ connection: "model", query }),
+            { wrapper },
+        );
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        expect(mockExecuteQuery).toHaveBeenCalledWith({
+            query: expect.stringContaining(`'AssessmentRun'[RunId] = "${runId}"`),
+        });
+        expect(mockExecuteQuery.mock.calls[0][0].query).not.toContain("IsLatestCompletedRun");
     });
 
     it.each([

@@ -11,13 +11,32 @@ $script:FabricApiBaseUri = 'https://api.fabric.microsoft.com/v1'
 function Get-FabricAccessToken {
     <#
     .SYNOPSIS
-        Acquires a Fabric token using explicit federation, a client secret, or GitHub OIDC.
+        Acquires a Fabric token using explicit federation, a client secret, GitHub OIDC, or optional Azure CLI fallback.
     .OUTPUTS
         System.String access token.
     #>
     [CmdletBinding()]
     [OutputType([string])]
-    param()
+    param(
+        [Parameter(Mandatory = $false)]
+        [switch]$AllowAzCliFallback,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$UseAzCli,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Resource = 'https://api.fabric.microsoft.com'
+    )
+
+    $NormalizedResource = $Resource.TrimEnd('/')
+    if ($UseAzCli) {
+        $Token = (& az account get-access-token --resource $NormalizedResource --query accessToken -o tsv)
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($Token)) {
+            throw 'Failed to acquire an access token via Azure CLI. Run "az login" first.'
+        }
+        return $Token.Trim()
+    }
 
     $RequiredNames = @('AZURE_CLIENT_ID', 'AZURE_TENANT_ID')
     $MissingNames = @(
@@ -27,6 +46,12 @@ function Get-FabricAccessToken {
         }
     )
     if ($MissingNames.Count -gt 0) {
+        if ($AllowAzCliFallback -and (Get-Command az -ErrorAction SilentlyContinue)) {
+            $Token = (& az account get-access-token --resource $NormalizedResource --query accessToken -o tsv)
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($Token)) {
+                return $Token.Trim()
+            }
+        }
         throw "Missing environment variables: $($MissingNames -join ', ')"
     }
 
@@ -54,7 +79,7 @@ function Get-FabricAccessToken {
 
     $TokenBody = @{
         client_id  = $env:AZURE_CLIENT_ID
-        scope      = 'https://api.fabric.microsoft.com/.default'
+        scope      = "$NormalizedResource/.default"
         grant_type = 'client_credentials'
     }
     if (-not [string]::IsNullOrWhiteSpace($FederatedToken)) {
@@ -105,7 +130,10 @@ function Invoke-FabricRequest {
         [string]$Body,
 
         [Parameter(Mandatory = $false)]
-        [switch]$FetchResult
+        [switch]$FetchResult,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$NoLroPoll
     )
 
     $Headers = @{
@@ -155,7 +183,7 @@ function Invoke-FabricRequest {
         throw "Fabric request failed ($($Response.StatusCode)): $($Response.Content)"
     }
 
-    if ($Response.StatusCode -eq 202) {
+    if ($Response.StatusCode -eq 202 -and -not $NoLroPoll) {
         $Location = [string]($Response.Headers.Location | Select-Object -First 1)
         $OperationId = [string](
             $Response.Headers.'x-ms-operation-id' | Select-Object -First 1
@@ -210,7 +238,103 @@ function Invoke-FabricRequest {
     return $Response.Content | ConvertFrom-Json
 }
 
+function Invoke-FabricFileUpload {
+    <#
+    .SYNOPSIS
+        Uploads a binary or multipart file to a Fabric REST endpoint with retry handling.
+    .OUTPUTS
+        Parsed JSON response or null.
+    #>
+    [CmdletBinding()]
+    [OutputType([object])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Uri,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$FilePath,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Token,
+
+        [Parameter(Mandatory = $true)]
+        [ValidatePattern('^[a-z0-9-]+$')]
+        [string]$SkillName,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('OctetStream', 'MultipartForm')]
+        [string]$Mode = 'OctetStream',
+
+        [Parameter(Mandatory = $false)]
+        [string]$FormFieldName = 'file'
+    )
+
+    if (-not (Test-Path -LiteralPath $FilePath -PathType Leaf)) {
+        throw "Upload file does not exist: $FilePath"
+    }
+
+    $Headers = @{
+        Authorization       = "Bearer $Token"
+        'x-ms-fabric-skill' = $SkillName
+    }
+    $Response = $null
+    for ($RequestAttempt = 0; $RequestAttempt -lt 6; $RequestAttempt++) {
+        if ($Mode -eq 'MultipartForm') {
+            $Arguments = @{
+                Method             = 'Post'
+                Uri                = $Uri
+                Headers            = $Headers
+                Form               = @{ $FormFieldName = (Get-Item -LiteralPath $FilePath) }
+                SkipHttpErrorCheck = $true
+                MaximumRedirection = 0
+            }
+        }
+        else {
+            $Bytes = [IO.File]::ReadAllBytes($FilePath)
+            $Arguments = @{
+                Method             = 'Post'
+                Uri                = $Uri
+                Headers            = ($Headers + @{ 'Content-Type' = 'application/octet-stream' })
+                Body               = $Bytes
+                SkipHttpErrorCheck = $true
+                MaximumRedirection = 0
+            }
+        }
+
+        $Response = Invoke-WebRequest @Arguments
+        if ($Response.StatusCode -notin @(429, 503)) {
+            break
+        }
+        if ($RequestAttempt -eq 5) {
+            break
+        }
+        $ThrottleText = [string](
+            $Response.Headers.'Retry-After' | Select-Object -First 1
+        )
+        $ThrottleDelay = if (
+            $ThrottleText -match '^\d+$' -and [int]$ThrottleText -gt 0
+        ) {
+            [int]$ThrottleText
+        }
+        else {
+            5
+        }
+        Start-Sleep -Seconds $ThrottleDelay
+    }
+    if ($Response.StatusCode -lt 200 -or $Response.StatusCode -ge 300) {
+        throw "Fabric file upload failed ($($Response.StatusCode)): $($Response.Content)"
+    }
+    if ([string]::IsNullOrWhiteSpace($Response.Content)) {
+        return $null
+    }
+    return $Response.Content | ConvertFrom-Json
+}
+
 Export-ModuleMember -Function @(
     'Get-FabricAccessToken'
     'Invoke-FabricRequest'
+    'Invoke-FabricFileUpload'
 )

@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   uploadWorkflow: vi.fn(),
   startAssessment: vi.fn(),
   getAssessmentStatus: vi.fn(),
-  clearQueryCache: vi.fn(),
+  refreshRuns: vi.fn(),
 }));
 
 vi.mock("@/lib/rayfin-client", () => ({
@@ -20,8 +20,10 @@ vi.mock("@/lib/rayfin-client", () => ({
   }),
 }));
 
-vi.mock("@/hooks/use-semantic-model-query", () => ({
-  clearQueryCache: mocks.clearQueryCache,
+vi.mock("@/hooks/assessment-run.context", () => ({
+  useAssessmentRunContext: () => ({
+    refreshRuns: mocks.refreshRuns,
+  }),
 }));
 
 describe("IntakeRunPage", () => {
@@ -30,14 +32,14 @@ describe("IntakeRunPage", () => {
     mocks.uploadWorkflow.mockReset();
     mocks.startAssessment.mockReset();
     mocks.getAssessmentStatus.mockReset();
-    mocks.clearQueryCache.mockReset();
+    mocks.refreshRuns.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("uses a fresh intake folder per upload batch and invalidates cached queries when a run completes", async () => {
+  it("uses a fresh intake folder per upload batch and selects the latest completed run", async () => {
     mocks.uploadWorkflow
       .mockRejectedValueOnce(new Error("Transient upload failure"))
       .mockResolvedValueOnce({ fileName: "flow.yxmd", inputPath: "app-intake/run-2", size: 12 });
@@ -69,7 +71,7 @@ describe("IntakeRunPage", () => {
     await waitFor(() => expect(mocks.startAssessment).toHaveBeenCalledTimes(1));
 
     await vi.advanceTimersByTimeAsync(3_100);
-    await waitFor(() => expect(mocks.clearQueryCache).toHaveBeenCalledWith("assessmentmodel"));
+    await waitFor(() => expect(mocks.refreshRuns).toHaveBeenCalledWith({ selectLatest: true }));
     expect(screen.getByText("Completed")).toBeInTheDocument();
   });
 

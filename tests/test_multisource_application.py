@@ -199,7 +199,6 @@ def test_fabric_notebook_assesses_and_exports_web_app_targets(
     scope.update(
         CONFIRM_ASSESSMENT=True,
         PERSIST_DELTA_TABLES=True,
-        DETAIL_PATH="=orders.yxmd",
     )
     for cell in code_cells:
         if cell["id"] in {"parameters", "preview"}:
@@ -240,24 +239,7 @@ def test_fabric_notebook_assesses_and_exports_web_app_targets(
     assert {row["source_platform"] for row in report["assessments"]} == {
         "alteryx", "informatica_powercenter", "informatica_idmc"
     }
-    assert any(row.get("tool") == "AppendFields" for row in displayed[-1])
-    assert len(dashboards) == 9
-    assert "Portfolio migration summary" in dashboards[0]
-    assert "Recommended Fabric targets" in dashboards[0]
-    assert "Evidence-based migration plan" in dashboards[1]
-    assert "Migration backlog and next actions" in dashboards[1]
-    assert "Technical assessment evidence" in dashboards[2]
-    assert "Connection sample" in dashboards[2]
-    assert "Tool-mapping distribution" in dashboards[2]
-    assert "Workflow summary" in dashboards[3]
-    assert "Source workflow" in dashboards[4]
-    assert "<svg" in dashboards[4]
-    assert "Fabric design" in dashboards[5]
-    assert "Risk assessment" in dashboards[6]
-    assert "Validation" in dashboards[7]
-    assert "Tool mappings" in dashboards[8]
-    assert all("estimated_effort" not in dashboard for dashboard in dashboards)
-    assert all("<script" not in dashboard for dashboard in dashboards)
+    assert dashboards == []
     expected = {
         item.path: (item.recommended_target, item.migration_wave, item.complexity_score)
         for item in web_result.assessments

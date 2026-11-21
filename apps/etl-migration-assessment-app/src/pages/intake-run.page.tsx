@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, FileUp, LoaderCircle, Play, RefreshCw, XCircle } from "lucide-react";
 
-import { clearQueryCache } from "@/hooks/use-semantic-model-query";
+import { useAssessmentRunContext } from "@/hooks/assessment-run.context";
 import { getRayfinClient } from "@/lib/rayfin-client";
 import { PageFrame } from "@/pages/portfolio.page";
 
@@ -13,6 +13,7 @@ interface UploadedFile {
 const terminalStatuses = new Set(["Completed", "Failed", "Cancelled", "Deduped"]);
 
 export function IntakeRunPage() {
+  const { refreshRuns } = useAssessmentRunContext();
   const [files, setFiles] = useState<File[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [inputPath, setInputPath] = useState("");
@@ -40,7 +41,7 @@ export function IntakeRunPage() {
         consecutiveErrors = 0;
         setJobStatus(status.status);
         if (status.status === "Completed") {
-          clearQueryCache("assessmentmodel");
+          await refreshRuns({ selectLatest: true });
         } else if (status.status === "Failed" || status.status === "Cancelled") {
           const reason = formatFailureReason(status.failureReason);
           if (reason) setError(reason);
@@ -64,7 +65,7 @@ export function IntakeRunPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [jobInstanceId, jobStatus]);
+  }, [jobInstanceId, jobStatus, refreshRuns]);
 
   const upload = async () => {
     setError("");

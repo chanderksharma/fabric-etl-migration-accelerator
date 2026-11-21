@@ -91,6 +91,35 @@ docker run --rm -p 127.0.0.1:8050:8050 -v fabric-etl-state:/data fabric-etl-acce
 
 > **Important:** Bind the analyst service strictly to `127.0.0.1`. Host/origin validation and CSRF session tokens protect mutating endpoints; UNC paths, symlinks, and reparse points are rejected.
 
+### Fabric Workspace Deployment (FEMA)
+
+Deploy the full Fabric-native analytics and intake stack into a Microsoft Fabric workspace with one idempotent pass. The installer creates or reuses a `FEMA` workspace folder (configurable with `-FolderName`) and places the Lakehouse, Fabric Runtime 2.0 Environment with the accelerator wheel, [portfolio assessment notebook](notebooks/fabric-portfolio-assessment.ipynb), eight initialized `etl_*` Delta tables, Direct Lake semantic model, six-page Power BI report, and [Fabric analyst app](apps/etl-migration-assessment-app/) inside it.
+
+Validate local payloads without changing Fabric:
+
+```powershell
+pwsh -NoProfile -File scripts\Deploy-AcceleratorWorkspace.ps1 `
+  -WorkspaceName "<workspace-name>" `
+  -DryRun
+```
+
+Deploy or upgrade an existing capacity-backed workspace using Azure CLI authentication (`az login` and `npx rayfin login`):
+
+```powershell
+pwsh -NoProfile -File scripts\Deploy-AcceleratorWorkspace.ps1 `
+  -WorkspaceName "<workspace-name>" `
+  -UseAzCli
+```
+
+To build a self-contained bundle for the in-Fabric [`Deploy_FEMA.ipynb`](notebooks/Deploy_FEMA.ipynb) installer:
+
+```powershell
+uv build --wheel
+node scripts\build-fema-bundle.mjs --require-wheel
+```
+
+See [Installation and Runtime Modes](docs/Guides/installation.md) for workspace cleanup notes, `-CreateWorkspace` options, and manual component setup.
+
 ### Local Development & Verification
 
 ```powershell
@@ -104,6 +133,10 @@ npm run lint
 npm test
 npm run build
 npm audit --audit-level=high
+
+Set-Location ..\etl-migration-assessment-app
+npm run lint
+npm test
 ```
 
 ---

@@ -91,20 +91,9 @@ uses the same compiler-backed target routing as the analyst web app.
    it to the directory containing `manifest.json` and `Explore`.
 3. Run **Preview the input** and review candidates and skips. Set
    `CONFIRM_ASSESSMENT = True` in the configuration cell and rerun it before
-   running **Assess and review portfolio**. Use `SOURCE_FILTER`,
-   `WORKFLOW_SEARCH`, and `DETAIL_PATH` to inspect results. Rerun the
-   configuration and workflow register cells after changing those filters.
-   The workflow register cell renders a responsive portfolio dashboard with
-   summary cards, complexity, target, wave and source distributions, and a
-   ranked high-complexity workflow table before the full Fabric data grid.
-   Run **Migration plan** for wave cards, target distributions, next actions
-   and exit evidence. Run **Technical details** for redacted evidence metrics,
-   tool mappings, findings, dependencies and a bounded connection sample.
-   Run the workflow cells after Technical details. Each web-UI subtab has a
-   separate cell: **Workflow summary**, **Source workflow**, **Fabric design**,
-   **Risk assessment**, **Validation**, and **Tool mappings**. Set
-   `DETAIL_PATH` to an exact register path and rerun these cells to inspect a
-   different workflow.
+   running **Assess and review portfolio**. Set `PERSIST_DELTA_TABLES = True`
+   and run **Persist normalized assessment tables** to write the eight `etl_*`
+   Delta tables consumed by the Power BI report and Fabric analyst app.
 4. To save reports, set `WRITE_REPORTS = True`, rerun the configuration cell,
    and run **Export reports**. Reports go to a new run folder under
    `REPORT_FOLDER`. Keep the report folder outside the selected input.
@@ -238,6 +227,65 @@ The intake flow accepts `.yxmd`, `.yxmc`, `.yxwz`, `.yxzp`, `.xml`, `.json`,
 and `.zip` files up to 3 MiB each. Files are staged under
 `Files/app-intake/<run-folder>` before the app starts the assessment notebook
 with persistence enabled.
+
+## One-step FEMA Fabric workspace deployment
+
+To provision or upgrade the entire Fabric stack in a single idempotent pass
+(creating or reusing a `FEMA` workspace folder and placing the Lakehouse,
+Runtime 2.0 Environment with the accelerator wheel, Assessment Notebook,
+initialized `etl_*` Delta tables, Direct Lake Semantic Model, Power BI Report,
+and optionally the Fabric Analyst App inside it), use the unified workspace
+installer or the in-Fabric deployment notebook.
+
+### Option A: PowerShell workspace installer (local workstation or CI)
+
+Validate all local payloads without mutating Fabric:
+
+```powershell
+pwsh -NoProfile -File scripts\Deploy-AcceleratorWorkspace.ps1 `
+  -WorkspaceName "<workspace-name>" `
+  -DryRun
+```
+
+Deploy or upgrade using your Azure CLI sign-in (`az login`):
+
+```powershell
+pwsh -NoProfile -File scripts\Deploy-AcceleratorWorkspace.ps1 `
+  -WorkspaceName "<workspace-name>" `
+  -UseAzCli
+```
+
+Re-running the script updates the Environment libraries, Notebook, Semantic
+Model, Report, and Fabric App in place while preserving existing Lakehouse
+Delta tables and retained assessment runs. Pass `-FolderName "<path>"` to
+change the target folder (or `-FolderName ""` for workspace root),
+`-CreateWorkspace -CapacityId <guid>` to create a new capacity-backed workspace,
+or `-SkipFabricApp` to deploy only the Lakehouse, Spark, and Power BI items.
+
+> [!NOTE]
+> If you clean up a workspace by deleting its items before redeploying, wait
+> one to two minutes for Fabric to release the deleted display names. If you
+> deleted the Fabric App item, remove the local
+> `apps/etl-migration-assessment-app/rayfin/.deployments.json` and `rayfin/.env`
+> files before re-running so `npx rayfin up` provisions a fresh item cleanly.
+
+### Option B: In-Fabric deployment notebook (FEMA pattern)
+
+1. Build a self-contained deployment bundle on an approved workstation:
+
+   ```powershell
+   uv build --wheel
+   node scripts\build-fema-bundle.mjs --require-wheel
+   ```
+
+2. Upload `dist\fema-deployment-bundle\` into a Fabric Lakehouse under
+   `Files\fema-deployment-bundle\`.
+3. Import [Deploy_FEMA.ipynb](../../notebooks/Deploy_FEMA.ipynb)
+   into the target Fabric workspace, attach the Lakehouse, set
+   `CONFIRM_DEPLOY = True`, and run all cells.
+4. Use the printed `FABRIC_WORKSPACE_ID`, `FABRIC_LAKEHOUSE_ID`,
+   `FABRIC_NOTEBOOK_ID`, `FABRIC_SEMANTIC_MODEL_ID`, and `VITE_REPORT_URL` values
+   if you subsequently deploy the Fabric Analyst App with `npx rayfin up`.
 
 ## Option 1: Local Workstation Setup (Recommended)
 
