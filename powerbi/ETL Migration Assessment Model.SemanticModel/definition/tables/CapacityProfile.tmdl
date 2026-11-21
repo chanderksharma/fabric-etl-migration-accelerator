@@ -1,0 +1,83 @@
+/// Bounded static capacity-profile metrics by workflow and run (no effort estimates or raw expressions).
+table CapacityProfile
+
+	column RunId
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: RunId
+
+	column WorkflowKey
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: WorkflowKey
+
+	/// Alteryx or Informatica capacity profile classification.
+	column ProfileKind
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ProfileKind
+
+	/// Comma-separated recommended Fabric target components.
+	column TargetComponents
+		dataType: string
+		summarizeBy: none
+		sourceColumn: TargetComponents
+
+	/// Weighted static complexity units used by the calibrated capacity curve.
+	column ComplexityUnits
+		dataType: double
+		formatString: #,##0.00
+		summarizeBy: none
+		sourceColumn: ComplexityUnits
+
+	/// Destination output step count used for Dataflow overlap calculations.
+	column DestCount
+		dataType: int64
+		formatString: #,##0
+		summarizeBy: none
+		sourceColumn: DestCount
+
+	/// Heavy transformation step count used for row-volume scaling.
+	column HeavySteps
+		dataType: int64
+		formatString: #,##0
+		summarizeBy: none
+		sourceColumn: HeavySteps
+
+	/// Notebook-bound step count used in heuristic Spark runtime estimates.
+	column NotebookSteps
+		dataType: int64
+		formatString: #,##0
+		summarizeBy: none
+		sourceColumn: NotebookSteps
+
+	/// Pipeline-bound orchestration step count.
+	column PipelineSteps
+		dataType: int64
+		formatString: #,##0
+		summarizeBy: none
+		sourceColumn: PipelineSteps
+
+	/// Total active non-container workflow steps.
+	column TotalSteps
+		dataType: int64
+		formatString: #,##0
+		summarizeBy: none
+		sourceColumn: TotalSteps
+
+	/// Whether a PowerCenter workflow delegates work to a linked session mapping.
+	column CoveredByLinkedMapping
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: CoveredByLinkedMapping
+
+	partition CapacityProfile = entity
+		mode: directLake
+		source
+			entityName: etl_capacity_profile
+			schemaName: dbo
+			expressionSource: 'DirectLake - ETL Migration Assessment Model'

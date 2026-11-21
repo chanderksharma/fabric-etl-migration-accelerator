@@ -1,0 +1,34 @@
+/// Bounded dependency references requiring migration review.
+table Dependency
+
+	/// Number of dependency references in the current filter context.
+	measure Dependencies = COUNTROWS(Dependency)
+		formatString: #,##0
+		displayFolder: Technical Evidence
+
+	column RunId
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: RunId
+
+	column WorkflowKey
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: WorkflowKey
+
+	/// Redacted source dependency reference.
+	column DependencyReference
+		dataType: string
+		summarizeBy: none
+		sourceColumn: DependencyReference
+
+	partition Dependency = entity
+		mode: directLake
+		source
+			entityName: etl_dependency
+			schemaName: dbo
+			expressionSource: 'DirectLake - ETL Migration Assessment Model'

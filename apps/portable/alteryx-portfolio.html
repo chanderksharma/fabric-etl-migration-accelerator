@@ -1,0 +1,1783 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <title>ETL Portfolio Assessor</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", Aptos, Calibri, system-ui, sans-serif;
+      color: #242424;
+      background: #f7f4ef;
+      --surface: #fff;
+      --chrome: #fcfbf8;
+      --border: #dedede;
+      --muted: #5c5c5c;
+      --accent: #b11f4b;
+      --accent-soft: #f8edf1;
+      --text: #242424;
+      --soft: #f5f5f5;
+      --accent-fg: #fff;
+      --link: #005fa7;
+    }
+    :root[data-theme=dark] { color-scheme: dark; color: #eee; background: #343231; --text: #eee; --surface: #292929; --chrome: #312f2e; --border: #555; --muted: #c8c8c8; --accent: #ff94ac; --accent-soft: #472e37; --soft: #373737; --accent-fg: #1a1a1a; --link: #8bc6ff; }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; }
+    .shell { display: grid; grid-template-columns: 252px minmax(0, 1fr); min-height: 100vh; }
+    .sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 1.5rem; padding: 1.5rem 1rem; background: var(--chrome); border-right: 1px solid var(--border); }
+    .brand { display: flex; align-items: center; gap: .75rem; }
+    .brand-mark { display: grid; place-items: center; width: 2.4rem; height: 2.4rem; flex: none; border-radius: .625rem; background: var(--accent); color: var(--accent-fg); font-weight: 800; }
+    .brand strong, .brand small { display: block; }
+    .nav { display: flex; flex-direction: column; gap: .375rem; }
+    .nav button { display: flex; align-items: center; gap: .625rem; text-align: left; border-color: transparent; background: transparent; color: var(--muted); }
+    .nav button:hover { background: var(--soft); color: var(--text); }
+    .nav button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+    .scope { margin-top: auto; padding: .875rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
+    .scope p { margin: .3rem 0 0; color: var(--muted); font-size: .85rem; }
+    .topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; min-height: 68px; padding: .75rem clamp(1rem, 3vw, 2rem); border-bottom: 1px solid var(--border); background: var(--chrome); font-size: .85rem; }
+    .topbar span { color: var(--muted); }
+    .topbar .crumb { color: var(--link); }
+    .theme { display: grid; place-items: center; width: 2.375rem; height: 2.375rem; padding: 0; border-color: var(--border); }
+    .icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .content { max-width: 90rem; margin: auto; padding: clamp(1rem, 3vw, 2rem); }
+    h1 { margin: .25em 0; font-size: clamp(1.65rem, 3vw, 2.25rem); letter-spacing: -.025em; }
+    h2 { margin: 0 0 .75rem; font-size: 1.25rem; }
+    p { line-height: 1.5; }
+    .page-header { margin-bottom: 1.5rem; }
+    .page-header p { color: var(--muted); margin: .5rem 0 0; max-width: 48rem; }
+    .eyebrow { color: var(--accent); font-size: .75rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .panel, dl > div { padding: 1.25rem; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); box-shadow: 0 1px 2px var(--border); }
+    .controls { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+    .controls > div { min-width: 0; max-width: 100%; }
+    label { display: block; font-weight: 650; margin-bottom: .35rem; }
+    input, select, button { font: inherit; max-width: 100%; }
+    input[type=file] { min-width: 0; width: 100%; }
+    button, select { padding: .5rem .75rem; border-radius: .625rem; border: 1px solid #919191; background: var(--surface); color: inherit; }
+    button { cursor: pointer; font-weight: 650; }
+    .primary, .primary:hover { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+    button:disabled { background: var(--soft); border-color: var(--border); color: var(--muted); cursor: default; }
+    :focus-visible { outline: 3px solid #0078d4; outline-offset: 3px; }
+    dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .875rem; margin: 0 0 1.25rem; }
+    dt { color: var(--muted); font-size: .9rem; }
+    dd { margin: .25rem 0 0; font-size: 1.75rem; font-weight: 750; }
+    .table { overflow-x: auto; margin-top: 1rem; }
+    table { border-collapse: collapse; width: 100%; text-align: left; }
+    caption { text-align: left; margin-bottom: .5rem; color: var(--muted); }
+    th, td { padding: .65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    thead { background: var(--soft); }
+    #rows tr:hover { background: var(--soft); }
+    tbody th, td, li { overflow-wrap: anywhere; }
+    summary { cursor: pointer; }
+    ul { padding-inline-start: 1.3rem; }
+    small { color: var(--muted); }
+    #status { color: var(--muted); margin: 0; font-size: .9rem; }
+    #status:not(:empty) { margin-top: .75rem; }
+    .choices { border: 0; padding: 0; margin: 0 0 1rem; min-width: 0; }
+    .choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .875rem; }
+    .choice { position: relative; }
+    .choice input, .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+    .choice label { display: grid; justify-items: start; gap: .3rem; height: 100%; margin: 0; padding: 1rem 1.125rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); cursor: pointer; }
+    .choice input:checked + label { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-soft); }
+    .choice input:focus-visible + label { outline: 3px solid var(--link); outline-offset: 3px; }
+    .choice small { font-weight: 400; }
+    .choice-icon { display: grid; place-items: center; height: 2.125rem; min-width: 2.125rem; padding-inline: .35rem; margin-bottom: .35rem; border-radius: .55rem; background: var(--accent-soft); color: var(--accent); font-size: .85rem; font-weight: 800; }
+    .drop-zone { border: 1px dashed #919191; background: var(--surface); border-radius: 1rem; text-align: center; padding: 1.5rem 1rem; }
+    .drop-zone strong { display: block; font-size: 1.05rem; }
+    .drop-zone p { margin: .25rem 0 1rem; color: var(--muted); }
+    .drop-zone[data-dragging] { border-color: var(--accent); background: var(--accent-soft); }
+    .selection-actions { justify-content: flex-end; margin-top: .875rem; }
+    .formats { color: var(--muted); font-size: .85rem; margin-top: .875rem; }
+    .portfolio-banner { border-left: 4px solid var(--accent); margin-bottom: 1rem; }
+    .portfolio-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .portfolio-grid .panel { margin: 0; }
+    .portfolio-grid { margin-bottom: 1rem; }
+    .metric-count { display: grid; grid-template-columns: minmax(6rem, 9.5rem) minmax(1rem, 1fr) 2rem; align-items: center; gap: .75rem; margin: .6rem 0; font-size: .875rem; }
+    .metric-count meter { width: 100%; accent-color: var(--accent); }
+    .page-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+    .section-gap { margin-top: 1rem; }
+    .focus-list { display: grid; gap: .65rem; }
+    .focus-list > div, .fact { padding: .8rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--soft); }
+    .focus-list strong, .fact strong, .fact small { display: block; }
+    .fact strong { margin-top: .25rem; }
+    .fact-grid, .wave-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .75rem; }
+    .wave-card { display: grid; gap: .65rem; text-align: left; padding: 1rem; border-color: var(--border); border-radius: 1rem; }
+    .wave-card:hover, .wave-card[aria-pressed=true] { border-color: var(--accent); }
+    .wave-card[aria-pressed=true] { background: var(--accent-soft); }
+    .wave-card small { font-weight: 400; }
+    .register-controls { display: flex; flex-wrap: wrap; gap: .4rem; margin-block: 1rem; }
+    .register-controls button { border-color: var(--border); }
+    .register-controls button[aria-pressed=true] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+    .tag { display: inline-block; padding: .2rem .5rem; border-radius: 999px; background: var(--soft); font-size: .82rem; font-weight: 650; }
+    .tag[data-band=High], .tag[data-band=Medium] { background: var(--accent-soft); color: var(--accent); }
+    #rows th { min-width: 13rem; }
+    .workflow-path { display: block; font-size: .75rem; font-weight: 400; margin-top: .2rem; }
+    .pagination { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .75rem; }
+    .mobile-text { display: none; }
+    .panel + .panel { margin-top: 1rem; }
+    #evidence-register, #detail-panel { overflow-x: auto; }
+    .graph { margin: 0 0 1.25rem; }
+    .graph figcaption { margin-top: .5rem; color: var(--muted); font-size: .9rem; }
+    .graph-viewport { max-height: 28rem; overflow: auto; border: 1px solid var(--border); border-radius: .625rem; background: var(--chrome); }
+    .graph svg { display: block; margin-inline: auto; font-family: Aptos, "Segoe UI", sans-serif; }
+    .graph .connector { fill: none; stroke: #687485; stroke-width: 1.5; }
+    .graph .arrow { fill: #687485; }
+    .graph rect { fill: var(--surface); stroke: #919191; }
+    .graph .mapped rect { fill: var(--soft); stroke: var(--link); }
+    .graph .manual rect { fill: var(--accent-soft); stroke: var(--accent); stroke-dasharray: 4 2; }
+    .graph text { fill: var(--text); font-size: 15px; text-anchor: middle; }
+    .graph .graph-note { fill: var(--muted); font-size: 12px; }
+    .link-button { padding: .2rem; border: 0; color: var(--accent); text-align: left; text-decoration: underline; }
+    input[type=search] { padding: .5rem; border: 1px solid #919191; border-radius: .625rem; }
+    dialog { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(52rem, 100%); max-width: 100%; height: 100%; max-height: 100%; padding: 1.25rem; border: 0; border-left: 1px solid var(--border); color: inherit; background: var(--surface); }
+    dialog::backdrop { background: #24242466; }
+    dialog h2 { overflow-wrap: anywhere; }
+    [role=tablist] { display: flex; flex-wrap: wrap; gap: .3rem; margin-block: 1rem; }
+    [role=tab][aria-selected=true] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+    @media (max-width: 900px) {
+      .shell { grid-template-columns: minmax(0, 1fr); }
+      .sidebar { position: fixed; inset: auto 0 0; z-index: 1; height: auto; padding: .375rem .375rem max(.375rem, env(safe-area-inset-bottom)); border: 0; border-top: 1px solid var(--border); }
+      .nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .25rem; }
+      .nav button { flex-direction: column; justify-content: center; gap: .3rem; min-height: 3.5rem; padding: .25rem .1rem; font-size: .7rem; }
+      .brand, .scope, .desktop-text { display: none; }
+      .mobile-text { display: inline; }
+      .content { padding-bottom: 5.75rem; }
+    }
+    @media (max-width: 600px) {
+      .source-choices, .portfolio-grid { grid-template-columns: minmax(0, 1fr); }
+      .page-header h1 { font-size: 2rem; }
+    }
+  </style>
+</head>
+<body>
+<svg width="0" height="0" class="visually-hidden" aria-hidden="true">
+  <symbol id="icon-intake" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M5 15v5h14v-5"/></symbol>
+  <symbol id="icon-portfolio" viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11M8 20v-8h8v8m-4-4v4"/></symbol>
+  <symbol id="icon-workflows" viewBox="0 0 24 24"><path d="M5 7h14M5 12h14M5 17h14"/><circle cx="9" cy="7" r="2" fill="var(--chrome)"/><circle cx="15" cy="12" r="2" fill="var(--chrome)"/><circle cx="11" cy="17" r="2" fill="var(--chrome)"/></symbol>
+  <symbol id="icon-plan" viewBox="0 0 24 24"><path d="M5 20v-6m7 6v-8m7 8v-9M4 10l5-5 5 4 6-5"/></symbol>
+  <symbol id="icon-technical" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 4v2m8 6h-2m-6 8v-2m-8-6h2"/></symbol>
+  <symbol id="icon-theme" viewBox="0 0 24 24"><path d="M20 15A9 9 0 0 1 9 4a8 8 0 1 0 11 11Z"/></symbol>
+</svg>
+<div class="shell">
+<aside class="sidebar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">F</span>
+    <div><strong>ETL Fabric Accelerator</strong><small>Offline ETL Portfolio Assessor</small></div>
+  </div>
+  <nav class="nav" aria-label="Primary">
+    <button type="button" data-page="intake" data-label="New Assessment" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#icon-intake"/></svg><span class="desktop-text">New Assessment</span><span class="mobile-text">Intake</span></button>
+    <button type="button" data-page="portfolio" data-label="Portfolio"><svg class="icon" aria-hidden="true"><use href="#icon-portfolio"/></svg>Portfolio</button>
+    <button type="button" data-page="workflows" data-label="Workflows"><svg class="icon" aria-hidden="true"><use href="#icon-workflows"/></svg>Workflows</button>
+    <button type="button" data-page="migration-plan" data-label="Migration Plan"><svg class="icon" aria-hidden="true"><use href="#icon-plan"/></svg><span class="desktop-text">Migration Plan</span><span class="mobile-text">Plan</span></button>
+    <button type="button" data-page="technical-details" data-label="Technical Details"><svg class="icon" aria-hidden="true"><use href="#icon-technical"/></svg><span class="desktop-text">Technical Details</span><span class="mobile-text">Technical</span></button>
+  </nav>
+  <div class="scope"><strong>Assessment scope</strong><p id="scope">No assessment loaded. Select local exports to start.</p></div>
+</aside>
+<main>
+  <header class="topbar">
+    <div><span class="crumb">Migration assessment</span> / <strong id="current-page">New Assessment</strong></div>
+    <button type="button" class="theme" id="theme" aria-label="Dark theme" aria-pressed="false" title="Switch color theme"><svg class="icon" aria-hidden="true"><use href="#icon-theme"/></svg></button>
+  </header>
+  <div class="content">
+    <noscript><p>JavaScript must be enabled in your approved browser to assess workflows.</p></noscript>
+    <section id="intake" aria-labelledby="intake-title">
+      <header class="page-header">
+        <div class="eyebrow">New assessment</div>
+        <h1 id="intake-title" tabindex="-1">Choose your ETL workflow type and source</h1>
+        <p>Select local exports to assess migration complexity and delivery waves. Your files stay on this device.</p>
+      </header>
+      <fieldset class="choices">
+        <legend class="visually-hidden">Workflow type</legend>
+        <div class="choice-grid source-choices">
+          <div class="choice"><input type="radio" name="source-choice" id="intake-alteryx" checked><label for="intake-alteryx"><span class="choice-icon" aria-hidden="true">A</span><strong>Alteryx</strong><small>Designer workflows, macros, and analytic apps</small></label></div>
+          <div class="choice"><input type="radio" name="source-choice" id="intake-informatica"><label for="intake-informatica"><span class="choice-icon" aria-hidden="true">I</span><strong>Informatica</strong><small>PowerCenter repository XML and extracted IDMC exports</small></label></div>
+        </div>
+      </fieldset>
+      <fieldset class="choices">
+        <legend class="visually-hidden">Input mode</legend>
+        <div class="choice-grid">
+          <div class="choice"><input type="radio" name="input-mode" id="mode-files" checked><label for="mode-files"><span class="choice-icon" aria-hidden="true">+</span><strong>Select file(s)</strong><small id="file-types">.yxmd, .yxmc, or .yxwz</small></label></div>
+          <div class="choice"><input type="radio" name="input-mode" id="mode-folder"><label for="mode-folder"><span class="choice-icon" aria-hidden="true">DIR</span><strong>Select folder</strong><small id="folder-types">Scan an Alteryx estate recursively</small></label></div>
+        </div>
+      </fieldset>
+      <div class="drop-zone" id="drop-zone">
+        <strong id="browse-heading">Browse or drag and drop</strong>
+        <p id="intake-hint">Choose Alteryx workflow files. Inputs stay on this device.</p>
+        <input id="files" type="file" accept=".yxmd,.yxmc,.yxwz,.xml" multiple hidden>
+        <input id="idmc-folder" type="file" webkitdirectory multiple hidden>
+        <button id="browse" class="primary" type="button">Browse files</button>
+        <p id="status" role="status">No items selected.</p>
+      </div>
+      <div class="controls selection-actions">
+          <button id="clear-inputs" type="button" disabled>Clear selection</button>
+          <button id="assess" class="primary" type="button" disabled>Assess portfolio</button>
+      </div>
+      <details class="formats"><summary>Supported formats and limits</summary><p>Extract ZIP and YXZP archives first. Select the IDMC folder that directly contains <code>manifest.json</code>. Limits: 1,000 input files, 10 MiB per file read, and 100 MiB total. You can combine standalone files with a folder in one batch.</p></details>
+      <details id="issues" class="panel" hidden><summary id="issue-summary"></summary><ul id="issue-list"></ul></details>
+    </section>
+    <section id="portfolio" aria-labelledby="portfolio-title" hidden>
+      <header class="page-header">
+        <div class="eyebrow">Executive overview</div>
+        <h1 id="portfolio-title" tabindex="-1">Portfolio Migration Summary</h1>
+        <p>Review assessment scope, technical complexity, and migration wave counts.</p>
+      </header>
+      <p class="panel" id="portfolio-empty">No assessment results yet. Use New Assessment to select local exports.</p>
+      <div id="portfolio-results" hidden>
+        <div class="panel portfolio-banner"><h2>Leadership recommendation</h2><p id="portfolio-decision"></p><p id="portfolio-run-summary" aria-live="polite"></p>
+          <div class="page-actions"><button type="button" class="primary" data-page="workflows">Review workflows</button><button type="button" data-page="migration-plan">Open migration plan</button></div>
+        </div>
+        <h2>Leadership scorecard</h2>
+        <dl id="totals"></dl>
+        <div class="portfolio-grid">
+          <div class="panel"><h2>Technical complexity</h2><div id="complexity-dist"></div></div>
+          <div class="panel"><h2>Immediate migration priorities</h2><div id="portfolio-priorities" class="focus-list"></div></div>
+          <div class="panel"><h2>Recommended Fabric targets</h2><div id="target-dist"></div></div>
+          <div class="panel"><h2>Assessment evidence inventory</h2><div id="portfolio-evidence" class="fact-grid"></div></div>
+        </div>
+        <div class="panel"><h2>Workflows with highest technical complexity</h2><div class="table" id="portfolio-top" tabindex="0" role="region" aria-label="Highest complexity workflows"></div></div>
+        <div class="panel">
+          <h2>Assessment confidence and outputs</h2>
+          <p>Static assessments and target suggestions support triage. They do not prove convertibility or resolve macro dependencies.</p>
+          <p><small id="versions"></small></p>
+          <div class="controls">
+            <button type="button" id="export-json">Export assessment JSON</button>
+            <button id="review-issues" type="button" data-page="intake" hidden>Review skipped or rejected files</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Compare with Python assessment</h2>
+          <p>Import <code>assessment.json</code> from the Python app’s Portfolio export. A matched Python target takes precedence while the offline recommendation remains visible. This does not run the compiler or validate Fabric here.</p>
+          <div class="controls">
+            <div><label for="python-report">Python assessment JSON</label><input id="python-report" type="file" accept=".json,application/json"></div>
+            <button type="button" id="clear-comparison" disabled>Clear comparison</button>
+            <button type="button" id="export-comparison" disabled>Export comparison CSV</button>
+          </div>
+          <p id="comparison-status" role="status">No Python report loaded. Offline recommendations require confirmation.</p>
+        </div>
+      </div>
+    </section>
+    <section id="workflows" aria-labelledby="workflows-title" hidden>
+      <header class="page-header">
+        <div class="eyebrow">Workflow assessment</div>
+        <h1 id="workflows-title" tabindex="-1">Workflow Assessment Register</h1>
+        <p>Search and filter the workflow-level assessment, then open the source graph, design guidance, risks, and validation notes.</p>
+        <div class="page-actions"><button id="export" type="button" data-needs-results disabled>Export full portfolio CSV</button><button class="primary" type="button" data-page="migration-plan">Migration Plan</button></div>
+      </header>
+      <p class="panel" id="workflows-empty">No workflows to show. Run an assessment first.</p>
+      <div class="panel" id="workflow-results" hidden>
+        <h2>Workflow register</h2>
+        <div class="controls" role="search" aria-label="Workflow filters">
+          <div><label for="workflow-search">Search workflows</label><input id="workflow-search" type="search"></div>
+          <div><label for="platform">Source</label><select id="platform"><option value="">All sources</option><option>Alteryx</option><option>PowerCenter</option><option>IDMC</option></select></div>
+          <div><label for="band">Complexity</label><select id="band"><option value="">All levels</option><option>Low</option><option>Medium</option><option>High</option></select></div>
+          <div><label for="readiness-filter">Readiness</label><select id="readiness-filter"><option value="">All readiness levels</option><option>Review required</option><option>Confirm design</option><option>Pilot candidate</option></select></div>
+          <div><label for="target">Suggested target</label><select id="target"><option value="">All targets</option><option>Dataflow Gen2</option><option>Fabric Notebook</option><option>Fabric Pipeline</option><option>Mixed Fabric solution</option><option>Manual rework</option></select></div>
+          <div>
+            <label for="wave">Migration wave</label>
+            <select id="wave">
+              <option value="">All waves</option>
+              <option>Wave 1</option><option>Wave 2</option><option>Pilot</option><option>Redesign</option>
+            </select>
+          </div>
+          <button id="clear-filters" type="button">Clear filters</button>
+        </div>
+        <div class="pagination"><button id="workflow-prev" type="button">Previous</button><span id="workflow-page"></span><button id="workflow-next" type="button">Next</button></div>
+        <div class="table" tabindex="0" role="region" aria-label="Workflow results">
+          <table>
+            <caption id="row-count"></caption>
+            <thead><tr>
+              <th scope="col">Workflow or asset</th><th scope="col">Source</th><th scope="col">Tools</th><th scope="col">Connections</th>
+              <th scope="col">Complexity</th><th scope="col">Recommended target</th><th scope="col">Offline wave</th>
+              <th scope="col">Readiness and comparison</th>
+            </tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    <section id="migration-plan" aria-labelledby="migration-plan-title" hidden>
+      <header class="page-header"><div class="eyebrow">Delivery sequencing</div><h1 id="migration-plan-title" tabindex="-1">Evidence-Based Migration Plan</h1><p>Review static wave assignments, suggested targets, and next steps.</p>
+        <div class="page-actions"><button id="export-plan" type="button" data-needs-results disabled>Export migration plan CSV</button><button class="primary" type="button" data-page="technical-details">Technical Details</button></div>
+      </header>
+      <p class="panel" data-empty>No assessment results yet. Use New Assessment first.</p>
+      <div data-results hidden>
+        <div class="wave-grid" id="plan-waves" role="group" aria-label="Filter backlog by migration wave"></div>
+        <div class="portfolio-grid section-gap">
+          <div class="panel"><h2>Fabric target distribution by wave</h2><div id="plan-targets" class="fact-grid"></div></div>
+          <div class="panel"><h2>Planning basis and assumptions</h2><ul><li>Wave placement reflects technical complexity and suggested targets.</li><li>Business priority and operating schedules are not inferred.</li><li>Validate the sequence in a representative pilot.</li></ul></div>
+        </div>
+        <div class="panel"><h2>Migration backlog and sequencing rationale</h2><div id="plan-backlog" class="table" tabindex="0" role="region" aria-label="Migration backlog"></div></div>
+      </div>
+    </section>
+    <section id="technical-details" aria-labelledby="technical-details-title" hidden>
+      <header class="page-header"><div class="eyebrow">Source evidence</div><h1 id="technical-details-title" tabindex="-1">Technical Assessment Evidence</h1><p>Inspect tool mappings, canvas connections, and static findings. Source values and expressions are not displayed.</p>
+        <div class="page-actions"><button id="export-technical" type="button" data-needs-results disabled>Export technical summary CSV</button><button class="primary" type="button" data-page="workflows">Workflows</button></div>
+      </header>
+      <p class="panel" data-empty>No technical evidence loaded. Use New Assessment first.</p>
+      <div data-results hidden>
+        <div id="technical-metrics" class="fact-grid section-gap"></div>
+        <div class="portfolio-grid">
+          <div class="panel"><h2>Fabric tool-mapping distribution</h2><div id="technical-mapping"></div></div>
+          <div class="panel"><h2>Assessment scope and coverage</h2><p>Evidence is static. Raw expressions and endpoints are omitted. Source-connection and tool-position samples are limited to 200 per workflow.</p><small>Original configuration and validation are still required.</small></div>
+        </div>
+        <div class="panel">
+          <h2>Evidence register</h2>
+          <div id="register-controls" class="register-controls" role="group" aria-label="Technical evidence registers"></div>
+          <div class="controls">
+            <div><label for="evidence-search">Search technical evidence</label><input id="evidence-search" type="search"></div>
+            <div><label for="evidence-workflow">Workflow</label><select id="evidence-workflow"></select></div>
+            <button id="clear-evidence" type="button">Clear filters</button>
+            <button id="open-evidence" type="button" disabled>Open workflow details</button>
+            <button id="export-register" type="button">Export current register</button>
+          </div>
+          <div id="evidence-register" class="table" role="region" aria-label="Technical evidence results" tabindex="0"></div>
+          <div class="pagination"><button id="evidence-prev" type="button">Previous</button><span id="evidence-page"></span><button id="evidence-next" type="button">Next</button></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+</div>
+<dialog id="workflow-detail" aria-labelledby="detail-title">
+  <button type="button" id="close-detail" autofocus>Close workflow details</button>
+  <h2 id="detail-title"></h2>
+  <div role="tablist" aria-label="Workflow details">
+    <button type="button" id="tab-summary" role="tab" data-detail="summary" aria-controls="detail-panel">Summary</button>
+    <button type="button" id="tab-flow" role="tab" data-detail="flow" aria-controls="detail-panel">Source Workflow</button>
+    <button type="button" id="tab-design" role="tab" data-detail="design" aria-controls="detail-panel">Fabric Design</button>
+    <button type="button" id="tab-risk" role="tab" data-detail="risk" aria-controls="detail-panel">Risk Assessment</button>
+    <button type="button" id="tab-validation" role="tab" data-detail="validation" aria-controls="detail-panel">Validation</button>
+  </div>
+  <div id="detail-panel" role="tabpanel" tabindex="0"></div>
+</dialog>
+<script>
+  "use strict";
+
+  const MAX_FILE = 10 * 1024 ** 2;
+  const MAX_BATCH = 100 * 1024 ** 2;
+  const MAX_FILES = 1000;
+  const RULES_VERSION = "1.4.0";
+  const registryVersions = { Alteryx: "2026.11.3", PowerCenter: "2026.11.3", IDMC: "2026.11.1" };
+  const reportPlatforms = new Map([
+    ["alteryx", "Alteryx"], ["informatica_powercenter", "PowerCenter"], ["informatica_idmc", "IDMC"],
+  ]);
+  const reportAssetTypes = new Map([
+    ["workflow", "Workflow"], ["mapping", "Mapping"], ["mapping_task", "Mapping task"], ["taskflow", "Taskflow"],
+  ]);
+  // Static triage registry from accelerator.assessment, not the compiler's support matrix.
+  const registry = new Map(Object.entries({
+    dataflow: "alteryxselect appendfields autofield crosstab datetime dbfileinput dbfileoutput inputdata outputdata select filter formula join union sort summarize sample unique recordid regex textinput transpose",
+    notebook: "python rtool spatial predictive multirowformula",
+    pipeline: "download dynamicinput runcommand email detour controlcontainer",
+    neutral: "toolcontainer comment explorerbox browse",
+  }).flatMap(([support, names]) => names.split(" ").map(name => [name, support])));
+  const annotations = new Set([
+    "AlteryxGuiToolkit.ToolContainer.ToolContainer",
+    "AlteryxGuiToolkit.TextBox.TextBox",
+    "AlteryxGuiToolkit.Questions.Tab.Tab",
+    "AlteryxGuiToolkit.Questions.Label.Label",
+    "AlteryxGuiToolkit.Questions.LabelGroup.LabelGroup",
+  ]);
+  const targets = [
+    ["dataflow", "Dataflow Gen2"], ["notebook", "Fabric Notebook"], ["pipeline", "Fabric Pipeline"],
+  ];
+  const weights = { neutral: 0, dataflow: 1, pipeline: 2, notebook: 3, manual: 6 };
+  const TARGET_RULES_VERSION = "1.0.0";
+  const informaticaDataflowOps = new Set("source source_qualifier xml_source_qualifier filter expression router aggregator custom_transformation target".split(" "));
+  const alteryxComputeOps = new Set("alteryxselect appendfields datetime dbfileinput filter inputdata textinput formula join multirowformula recordid regex sample select sort summarize transpose union unique crosstab autofield outputdata dbfileoutput browse".split(" "));
+  const pipelineTasks = new Set(["mapping_task", "mappingtask", "session", "assignment"]);
+  const informaticaOperations = new Map(Object.entries({
+    dataflow: "aggregator expression filter joiner lookup router sequence_generator sorter source source_qualifier target union update_strategy xml_source_qualifier",
+    notebook: "advanced custom_transformation java python script",
+    pipeline: "assignment command decision email mapping_task mappingtask session taskflow workflow worklet",
+    neutral: "annotation container end start",
+  }).flatMap(([support, names]) => names.split(" ").map(name => [name, support])));
+  const supportNames = new Map([...targets, ["neutral", "Context only"], ["manual", "Manual review"]]);
+  const waveActions = new Map([
+    ["Wave 1", "Confirm bindings and establish a repeatable migration pattern."],
+    ["Wave 2", "Apply the validated pattern and test representative data."],
+    ["Pilot", "Prove complex transformations and cross-engine orchestration."],
+    ["Redesign", "Resolve unsupported tools and agree a replacement design."],
+  ]);
+  const MAX_EVIDENCE_ROWS = 200;
+  const MAX_ASSETS = 1000;
+
+  class InputError extends Error {}
+
+  function supportFor(plugin) {
+    if (annotations.has(plugin)) return "neutral";
+    const [family, group, name, ...extra] = plugin.toLowerCase().split(".");
+    if (family !== "alteryxbasepluginsgui" || !name || group !== name || extra.length) return "manual";
+    return registry.get(name.replace(/tool$/, "")) ?? "manual";
+  }
+
+  function toolName(plugin) {
+    if (!/^[\w.-]{1,256}$/.test(plugin)) return "(unknown tool)";
+    return plugin.split(".").at(-1).replace(/Tool$/, "") || "(unknown tool)";
+  }
+
+  function decode(buffer) {
+    const [first, second] = new Uint8Array(buffer, 0, Math.min(2, buffer.byteLength));
+    const encoding = (first === 0xff && second === 0xfe) || (first === 0x3c && second === 0)
+      ? "utf-16le"
+      : (first === 0xfe && second === 0xff) || (first === 0 && second === 0x3c)
+        ? "utf-16be" : "utf-8";
+    try {
+      return new TextDecoder(encoding, { fatal: true }).decode(buffer);
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+      throw new InputError("Unsupported text encoding. Use UTF-8 or UTF-16 XML.");
+    }
+  }
+
+  function child(parent, name) {
+    return parent && Array.from(parent.children).find(element => element.localName === name);
+  }
+
+  function disabled(node) {
+    const config = child(child(node, "Properties"), "Configuration");
+    return [["Disabled", "true"], ["Disable", "true"], ["Enabled", "false"]].some(([name, value]) => {
+      const flag = child(config, name);
+      return flag && (flag.getAttribute("value") ?? flag.firstChild?.nodeValue ?? "").trim().toLowerCase() === value;
+    });
+  }
+
+  function parseXml(xml, rootName) {
+    if (/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(xml)) {
+      throw new InputError("DTD and entity declarations are not allowed.");
+    }
+    const root = new DOMParser().parseFromString(xml, "application/xml").documentElement;
+    if (root.localName === "parsererror" || root.getElementsByTagNameNS("*", "parsererror").length) {
+      throw new InputError("Malformed XML.");
+    }
+    if (root.localName !== rootName) throw new InputError(`Expected a ${rootName} root.`);
+    return root;
+  }
+
+  function parseGraph(xml) {
+    const root = parseXml(xml, "AlteryxDocument");
+    const nodes = new Map();
+    const connections = [];
+    let eventReview = false;
+    let elementCount = 0;
+    const walk = (element, depth, inConfig, inheritedOff) => {
+      if (++elementCount > 100_000 || depth > 64) throw new InputError("XML exceeds depth or element limits.");
+      const name = element.localName;
+      const off = inheritedOff || (name === "Node" && disabled(element));
+      if (!inConfig && name === "Node") {
+        const id = element.getAttribute("ToolID");
+        if (!id || nodes.has(id)) throw new InputError("Missing or duplicate ToolID.");
+        const plugin = child(element, "GuiSettings")?.getAttribute("Plugin")
+          || child(element, "EngineSettings")?.getAttribute("EngineDll") || "";
+        const config = child(child(element, "Properties"), "Configuration");
+        const operation = toolName(plugin).toLowerCase();
+        const regexExpression = child(config, "RegExExpression");
+        const regexPattern = (regexExpression?.textContent || regexExpression?.getAttribute("value") || "")
+          .trim().replace(/^\(\?i\)/, "");
+        const regexOutputs = child(config, "ParseComplex")?.children.length;
+        nodes.set(id, {
+          off, support: supportFor(plugin), name: toolName(plugin), operation, outgoing: [], incoming: 0,
+          needsNotebook: ["appendfields", "transpose"].includes(operation) ||
+            (operation === "regex" && (regexPattern !== "([A-Z]+)-([0-9]+)" || regexOutputs !== 2)),
+          macro: Boolean(child(element, "EngineSettings")?.getAttribute("Macro")),
+          files: config?.getElementsByTagNameNS("*", "File").length ?? 0,
+          expressions: config?.getElementsByTagNameNS("*", "Expression").length ?? 0,
+        });
+      } else if (!inConfig && name === "Connection") {
+        connections.push([
+          child(element, "Origin")?.getAttribute("ToolID"),
+          child(element, "Destination")?.getAttribute("ToolID"),
+        ]);
+      } else if (!inConfig && name === "Events") {
+        const enabled = child(element, "Enabled");
+        const state = (enabled?.getAttribute("value") ?? enabled?.firstChild?.nodeValue ?? "").trim().toLowerCase();
+        eventReview ||= element.children.length !== 1 || !["true", "false"].includes(state);
+      }
+      for (const descendant of element.children) walk(descendant, depth + 1, inConfig || name === "Configuration", off);
+    };
+    walk(root, 0, false, false);
+    return finishGraph(nodes, connections, { eventReview });
+  }
+
+  function finishGraph(nodes, connections, evidence = {}) {
+    const { eventReview = false, mergePorts = false, kind = "workflow" } = evidence;
+    let activeConnections = 0;
+    const links = [];
+    const pairs = new Map();
+    for (const [source, target] of connections) {
+      const from = nodes.get(source);
+      const to = nodes.get(target);
+      if (!from || !to) throw new InputError("Connection references a missing or unknown ToolID.");
+      if (mergePorts) {
+        if (!pairs.has(source)) pairs.set(source, new Set());
+        if (pairs.get(source).has(target)) continue;
+        pairs.get(source).add(target);
+      }
+      from.outgoing.push(to);
+      to.incoming++;
+      to.upstreamCount = (to.upstreamCount ?? 0) + 1;
+      if (!from.off && !to.off) {
+        activeConnections++;
+        if (links.length < MAX_EVIDENCE_ROWS) links.push([from, to]);
+      }
+    }
+    const ready = Array.from(nodes.values()).filter(node => node.incoming === 0);
+    for (let index = 0; index < ready.length; index++) {
+      for (const to of ready[index].outgoing) if (--to.incoming === 0) ready.push(to);
+    }
+    if (ready.length !== nodes.size) throw new InputError("Workflow graph contains a cycle.");
+    const active = Array.from(nodes.values()).filter(node => !node.off);
+    return { active, activeConnections, kind, links, disabledCount: nodes.size - active.length, eventReview,
+      macroReferences: Array.from(nodes.values()).some(node => node.macro) };
+  }
+
+  function assess(path, xml) {
+    return assessGraphs(path, "Alteryx", "Workflow", [parseGraph(xml)]);
+  }
+
+  function staticReadiness(row) {
+    const { evidence } = row;
+    const blockers = [];
+    const checks = [];
+    if (!row.tools) blockers.push("No active components were found.");
+    if (row.manual.length) blockers.push(`${row.manual.length} component type(s) need manual mapping review.`);
+    if (row.tools && !row.manual.length && row.offlineRouting.target === "Manual rework") {
+      blockers.push("Review the offline routing finding before choosing a Fabric target.");
+    }
+    if (evidence.macros || evidence.dependencies) checks.push("Resolve referenced macros or Informatica dependencies.");
+    if (evidence.expressions) checks.push("Check expression behavior on representative data.");
+    if (evidence.fileRefs) checks.push("Confirm file references and source/target bindings.");
+    if (row.offlineRouting.target === "Mixed Fabric solution") checks.push("Confirm the split between compute and orchestration.");
+    if (row.band === "High") checks.push("Validate high-complexity behavior in a pilot.");
+    if (evidence.findings.some(finding => /missing from the export|no referenced mapping ID|workflow events/i.test(finding))) {
+      blockers.push("Review missing references or possible workflow side effects.");
+    }
+    return {
+      label: blockers.length ? "Review required" : checks.length ? "Confirm design" : "Pilot candidate",
+      reasons: [...blockers, ...checks],
+    };
+  }
+
+  function offlineRoute(row, graphs) {
+    const suggest = (target, reason) => ({ target, reason });
+    const manual = reason => suggest("Manual rework", reason);
+    if (!row.tools) return manual("No active components were found.");
+    if (row.platform === "Alteryx") {
+      const graph = graphs[0];
+      const stages = graph.active.filter(node => node.support !== "neutral" || node.operation === "browse");
+      if (graph.macroReferences || graph.disabledCount || graph.eventReview) {
+        return manual("Macro references, disabled branches, or events need independent design review.");
+      }
+      if (!stages.length || stages.some(node => !alteryxComputeOps.has(node.operation))) {
+        return manual("The workflow contains components outside the offline Dataflow and Notebook routing rules.");
+      }
+      if (stages.some(node => node.needsNotebook)) {
+        return suggest("Fabric Notebook", "Append Fields, Transpose, or a regex outside the supported Dataflow pattern favors Notebook. Verify the operation configuration.");
+      }
+      if (row.target === "Mixed Fabric solution" && row.manual.length) {
+        return suggest("Mixed Fabric solution", "Both Dataflow and Notebook tool types are present alongside manual mappings. Confirm whether both engines are needed.");
+      }
+      return suggest("Dataflow Gen2", "Active tool types fit the Dataflow routing subset. Expressions and bindings still need validation.");
+    }
+
+    const mappings = graphs.filter(graph => graph.kind === "mapping");
+    const orchestration = graphs.find(graph => graph.kind === "orchestration");
+    const tasks = orchestration?.active.filter(node => !["start", "end", "decision"].includes(node.operation)) ?? [];
+    const supportedOrchestration = tasks.length > 0 && tasks.every(node => pipelineTasks.has(node.operation));
+    if (!mappings.length) {
+      if (row.platform === "IDMC" && row.assetType === "Taskflow" && supportedOrchestration) {
+        return suggest("Fabric Pipeline", "The taskflow contains supported orchestration steps. Verify referenced mapping tasks and taskflow conditions.");
+      }
+      return manual("No linked mapping or supported taskflow was found. Review the export and its dependencies.");
+    }
+    if (mappings.some(graph => !graph.active.some(node => node.operation === "target"))) {
+      return manual("At least one mapping has no target component.");
+    }
+    const needsNotebook = mappings.some(graph => graph.active.some(node =>
+      !informaticaDataflowOps.has(node.operation) || node.dataflowBlocked ||
+      (node.operation !== "source" && node.upstreamCount !== 1)));
+    if (mappings.length > 1 && supportedOrchestration) {
+      return suggest("Mixed Fabric solution", `Multiple linked mappings require orchestration. Review ${needsNotebook ? "Notebook" : "Dataflow Gen2"} with a Fabric Pipeline.`);
+    }
+    if (mappings.length === 1 && supportedOrchestration && tasks.length > 1 && !needsNotebook) {
+      return suggest("Mixed Fabric solution", "The mapping fits the Dataflow routing subset, and additional tasks may require a Fabric Pipeline.");
+    }
+    const route = needsNotebook
+      ? suggest("Fabric Notebook", "Some mapping operations or inputs fall outside the Dataflow routing subset. Custom bindings or rewrites may be required.")
+      : suggest("Dataflow Gen2", "Mapping operations fit the Dataflow routing subset; a single session does not require a separate Pipeline.");
+    if ((orchestration && (!supportedOrchestration || tasks.length > 1)) || row.evidence.findings.some(f => f.includes("missing from the export"))) {
+      route.reason += " Review orchestration and unresolved dependencies separately.";
+    }
+    return route;
+  }
+
+  function assessGraphs(path, platform, assetType, graphs, dependencies = 0, extraFindings = []) {
+    const support = new Set();
+    const manual = new Set();
+    let activeConnections = 0;
+    let disabledCount = 0;
+    let eventReview = false;
+    let score = dependencies * 2;
+    let manualCount = 0;
+    const inventory = new Map();
+    const positions = new Map();
+    let macros = 0;
+    let fileRefs = 0;
+    let expressions = 0;
+    const nodes = [];
+    const links = [];
+    let toolCount = 0;
+    for (const graph of graphs) {
+      activeConnections += graph.activeConnections;
+      disabledCount += graph.disabledCount;
+      eventReview ||= graph.eventReview;
+      positions.clear();
+      for (const node of graph.active) {
+        positions.set(node, ++toolCount);
+        if (nodes.length < MAX_EVIDENCE_ROWS) nodes.push([toolCount, node.name, supportNames.get(node.support)]);
+        const key = `${node.support}:${node.name}`;
+        if (!inventory.has(key)) inventory.set(key, { name: node.name, support: node.support, count: 0 });
+        inventory.get(key).count++;
+        macros += Number(node.macro);
+        fileRefs += node.files;
+        expressions += node.expressions;
+        support.add(node.support);
+        score += weights[node.support];
+        if (node.support === "manual") {
+          manual.add(node.name);
+          manualCount++;
+        }
+      }
+      for (const [from, to] of graph.links) {
+        if (links.length < MAX_EVIDENCE_ROWS) links.push([positions.get(from), from.name, positions.get(to), to.name]);
+      }
+    }
+    score += activeConnections;
+    const band = score < 20 ? "Low" : score < 40 ? "Medium" : "High";
+    const components = targets.filter(([type]) => support.has(type));
+    const target = components.length === 0 ? "Manual rework"
+      : components.length === 1 ? components[0][1] : "Mixed Fabric solution";
+    const wave = components.length === 0 ? "Redesign"
+      : components.length > 1 || band === "High" ? "Pilot" : band === "Medium" ? "Wave 2" : "Wave 1";
+    const findings = [...extraFindings];
+    if (!toolCount) findings.push("No active tools found. Confirm the selected file is in scope.");
+    if (dependencies) findings.push(`${dependencies} Informatica dependency reference(s) need migration review.`);
+    if (manualCount) findings.push(`${manualCount} tool instance(s) need a manual mapping or redesign.`);
+    if (macros) findings.push(`${macros} active macro invocation(s) need dependency resolution.`);
+    if (fileRefs) findings.push(`${fileRefs} file reference(s) need binding and access verification.`);
+    if (expressions) findings.push(`${expressions} Expression element(s) need manual parity review.`);
+    if (eventReview) findings.push("Workflow events are configured or ambiguous. Review side effects before any pilot.");
+    const row = {
+      path, platform, assetType, registryVersion: registryVersions[platform],
+      tools: toolCount, connections: activeConnections, score, band, target, wave,
+      manual: Array.from(manual).sort(),
+      evidence: {
+        inventory: Array.from(inventory.values()).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+        nodes, links, disabledCount, macros, fileRefs, expressions, dependencies, findings,
+      },
+    };
+    row.offlineRouting = offlineRoute(row, graphs);
+    return { ...row, readiness: staticReadiness(row) };
+  }
+
+  function informaticaGraph(components, connections, kind = "mapping") {
+    if (components.length + connections.length > 100_000) throw new InputError("Informatica graph exceeds the component or connection limit.");
+    const nodes = new Map();
+    for (const [id, nativeType, expressions = 0, dataflowBlocked = false] of components) {
+      if (!id || nodes.has(id)) throw new InputError("Missing or duplicate Informatica component identifier.");
+      const operation = /^[\w -]{1,128}$/.test(nativeType)
+        ? nativeType.trim().toLowerCase().replaceAll(" ", "_") : "unknown";
+      nodes.set(id, { name: operation.replaceAll("_", " "), operation, dataflowBlocked, support: informaticaOperations.get(operation) ?? "manual",
+        off: false, outgoing: [], incoming: 0, macro: false, files: 0, expressions });
+    }
+    return finishGraph(nodes, connections, { mergePorts: true, kind });
+  }
+
+  function children(parent, name) {
+    return Array.from(parent.children).filter(element => element.localName === name);
+  }
+
+  function assessPowerCenter(path, xml) {
+    // Discard the standard declaration before parsing; never resolve a DTD.
+    const withoutDtd = xml.replace(/<!DOCTYPE\s+POWERMART\s+SYSTEM\s+(?:"powrmart\.dtd"|'powrmart\.dtd')\s*>/i, "");
+    const root = parseXml(withoutDtd, "POWERMART");
+    const pending = [[root, 0]];
+    let elements = 0;
+    while (pending.length) {
+      const [node, depth] = pending.pop();
+      if (++elements > 100_000 || depth > 64) throw new InputError("XML exceeds depth or element limits.");
+      for (const entry of node.children) pending.push([entry, depth + 1]);
+    }
+    const repositories = children(root, "REPOSITORY");
+    if (!repositories.length) throw new InputError("PowerCenter export has no REPOSITORY.");
+    const rows = [];
+    for (const repository of repositories) for (const folder of children(repository, "FOLDER")) {
+      const nameOf = node => node.getAttribute("NAME");
+      const label = name => `${path} / ${[nameOf(folder), name].filter(Boolean).join("/")}`;
+      const get = (node, key) => node.getAttribute(key) ?? "";
+      const reusable = children(folder, "TRANSFORMATION").map(node => [nameOf(node), node]);
+      const mappings = new Map();
+      for (const mapping of children(folder, "MAPPING")) {
+        const name = nameOf(mapping);
+        if (!name || mappings.has(name)) throw new InputError("Missing or duplicate PowerCenter mapping name.");
+        const transforms = new Map([...reusable, ...children(mapping, "TRANSFORMATION").map(node => [nameOf(node), node])]);
+        const components = children(mapping, "INSTANCE").map(instance => {
+          const type = get(instance, "TYPE");
+          const transform = transforms.get(get(instance, "TRANSFORMATION_NAME") || nameOf(instance));
+          const operation = /^(?:SOURCE|TARGET)$/i.test(type) ? type
+            : (transform && get(transform, "TYPE")) || get(instance, "TRANSFORMATION_TYPE") || type;
+          const dataflowBlocked = operation.toLowerCase() === "aggregator"
+            ? !transform?.querySelector("TRANSFORMFIELD[EXPRESSIONTYPE='GROUPBY']")
+            : operation.toLowerCase() === "custom transformation" &&
+              !get(transform?.querySelector("METADATAEXTENSION[NAME='SQL_Query']") ?? instance, "VALUE").trim();
+          return [nameOf(instance), operation, transform ? transform.querySelectorAll("TRANSFORMFIELD[EXPRESSION], GROUP[EXPRESSION], TABLEATTRIBUTE[NAME='Filter Condition']").length : 0, dataflowBlocked];
+        });
+        const links = children(mapping, "CONNECTOR").map(link => [get(link, "FROMINSTANCE"), get(link, "TOINSTANCE")]);
+        mappings.set(name, informaticaGraph(components, links));
+      }
+      const reusableSessions = children(folder, "SESSION").map(node => [nameOf(node), get(node, "MAPPINGNAME")]);
+      const referenced = new Set();
+      for (const workflow of children(folder, "WORKFLOW")) {
+        if (rows.length >= MAX_ASSETS) throw new InputError("PowerCenter export exceeds the assessed asset limit.");
+        const sessions = new Map([...reusableSessions, ...children(workflow, "SESSION").map(node => [nameOf(node), get(node, "MAPPINGNAME")])]);
+        const tasks = children(workflow, "TASKINSTANCE");
+        const components = tasks.map(task => [nameOf(task), get(task, "TASKTYPE")]);
+        const links = children(workflow, "WORKFLOWLINK").map(link => [get(link, "FROMTASK"), get(link, "TOTASK")]);
+        const graphs = [informaticaGraph(components, links, "orchestration")];
+        let missing = 0;
+        let dependencies = 0;
+        for (const task of tasks) {
+          if (get(task, "TASKTYPE").toLowerCase() !== "session") continue;
+          const mapping = sessions.get(get(task, "TASKNAME"));
+          if (!mappings.has(mapping)) {
+            missing++;
+            continue;
+          }
+          dependencies++;
+          referenced.add(mapping);
+          graphs.push(mappings.get(mapping));
+        }
+        if (graphs.reduce((count, graph) => count + graph.active.length + graph.activeConnections, 0) > 100_000) {
+          throw new InputError("PowerCenter workflow and its linked mappings exceed the graph limit.");
+        }
+        const name = nameOf(workflow) ?? "Workflow";
+        rows.push({ ...assessGraphs(label(name), "PowerCenter", "Workflow", graphs, dependencies,
+          missing ? [`${missing} session mapping(s) are missing from the export.`] : []),
+        nativeId: name, assetFolder: nameOf(folder) ?? "" });
+      }
+      for (const [name, graph] of mappings) if (!referenced.has(name)) {
+        if (rows.length >= MAX_ASSETS) throw new InputError("PowerCenter export exceeds the assessed asset limit.");
+        rows.push({ ...assessGraphs(label(name), "PowerCenter", "Mapping", [graph]),
+          nativeId: name, assetFolder: nameOf(folder) ?? "" });
+      }
+    }
+    if (!rows.length) throw new InputError("No PowerCenter workflows or mappings found.");
+    return rows;
+  }
+
+  function safeRelativePath(path) {
+    return typeof path === "string" && path.length <= 2048 && !/[\\:\u0000-\u001f]/.test(path)
+      && path.split("/").every(part => part && part !== "." && part !== "..");
+  }
+
+  function jsonObject(value) {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function classifyExportFolder(folderFiles) {
+    const manifests = folderFiles.filter(file => file.name === "manifest.json");
+    if (manifests.some(file => file.webkitRelativePath.split("/").length === 2)) {
+      return { idmcFiles: folderFiles, workflowFiles: [] };
+    }
+    const workflowFiles = folderFiles.filter(file => /\.(?:yxmd|yxmc|yxwz|xml)$/i.test(file.name));
+    const issue = manifests.length ? "For IDMC, select the subfolder that directly contains manifest.json."
+      : folderFiles.length && !workflowFiles.length
+        ? "No Alteryx workflows, PowerCenter XML files, or IDMC manifest found. Extract export archives before selecting the folder." : "";
+    return { idmcFiles: [], workflowFiles, issue };
+  }
+
+  async function assessIdmc(files, reportIssue) {
+    const parts = new Map();
+    let folderName;
+    for (const file of files) {
+      const path = file.webkitRelativePath;
+      if (!safeRelativePath(path) || !path.includes("/")) throw new InputError("Select the extracted IDMC export folder.");
+      const slash = path.indexOf("/");
+      const folder = path.slice(0, slash);
+      if (folderName !== undefined && folderName !== folder) throw new InputError("Select one extracted IDMC export folder.");
+      folderName = folder;
+      const relative = path.slice(slash + 1);
+      if (parts.has(relative)) throw new InputError("IDMC folder contains a duplicate path.");
+      parts.set(relative, file);
+    }
+    async function readJson(path, missingMessage) {
+      const file = parts.get(path);
+      if (!file) throw new InputError(missingMessage);
+      if (file.size > MAX_FILE) throw new InputError(`${file.name} exceeds the 10 MiB limit.`);
+      let value;
+      try {
+        value = JSON.parse(decode(await file.arrayBuffer()));
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        throw new InputError(`${file.name} is not valid JSON.`);
+      }
+      if (!jsonObject(value)) throw new InputError(`${file.name} must contain a JSON object.`);
+      return value;
+    }
+    const manifest = await readJson("manifest.json", "Select the folder that directly contains manifest.json.");
+    if (!Array.isArray(manifest.assets) || !manifest.assets.length || manifest.assets.length > MAX_ASSETS) {
+      throw new InputError("IDMC manifest must list between 1 and 1,000 assets.");
+    }
+    const rows = [];
+    const seen = new Set();
+    const types = new Map([["DTEMPLATE", "Mapping"], ["MTT", "Mapping task"], ["TASKFLOW", "Taskflow"]]);
+    for (const [index, entry] of manifest.assets.entries()) {
+      try {
+        const relative = jsonObject(entry) && entry.path;
+        if (!safeRelativePath(relative)) throw new InputError("Invalid asset path in manifest.");
+        if (seen.has(relative)) throw new InputError("Duplicate asset path in manifest.");
+        seen.add(relative);
+        const metadata = await readJson(`${relative}/metadata.json`, "Asset metadata.json is missing.");
+        const type = types.get(metadata.type);
+        if (!type) throw new InputError("Unsupported IDMC asset type; expected DTEMPLATE, MTT, or TASKFLOW.");
+        const label = `${folderName} / ${relative}`;
+        const identity = {
+          nativeId: typeof metadata.id === "string" && metadata.id ? metadata.id : relative,
+          assetFolder: typeof metadata.path === "string" ? metadata.path : "",
+        };
+        if (metadata.type === "MTT") {
+          const dependencies = typeof metadata.mappingId === "string" && metadata.mappingId ? 1 : 0;
+          rows.push({ ...assessGraphs(label, "IDMC", type, [informaticaGraph([["task", "mapping_task"]], [], "task")], dependencies,
+            dependencies ? [] : ["Mapping task has no referenced mapping ID in its metadata."]), ...identity });
+          continue;
+        }
+        const content = await readJson(`${relative}/asset.json`, "Asset graph is missing asset.json.");
+        const steps = metadata.type === "TASKFLOW" ? content.steps : content.transformations;
+        const links = content.links ?? [];
+        if (!Array.isArray(steps) || !steps.length || !steps.every(jsonObject)
+          || !Array.isArray(links) || !links.every(jsonObject)) throw new InputError("IDMC asset graph has invalid component or link lists.");
+        if (!steps.every(step => typeof step.id === "string" && typeof step.type === "string")
+          || !links.every(link => typeof link.from === "string" && typeof link.to === "string")) {
+          throw new InputError("IDMC graph identifiers and operation types must be strings.");
+        }
+        rows.push({ ...assessGraphs(label, "IDMC", type, [informaticaGraph(
+          steps.map(step => [step.id, step.type]), links.map(link => [link.from, link.to]),
+          metadata.type === "TASKFLOW" ? "orchestration" : "mapping")]), ...identity });
+      } catch (error) {
+        if (!(error instanceof InputError || error instanceof DOMException)) throw error;
+        reportIssue(`IDMC manifest asset ${index + 1}: ${error instanceof InputError ? error.message : "The browser could not read this asset."}`);
+      }
+    }
+    return rows;
+  }
+
+  async function sha256(buffer) {
+    const hash = await crypto.subtle.digest("SHA-256", buffer);
+    return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function idmcFingerprint(files) {
+    // Match Python discovery's digest of each relative name followed by its file bytes.
+    const entries = files.map(file => [file.webkitRelativePath.slice(file.webkitRelativePath.indexOf("/") + 1), file]);
+    const sortKey = name => name.replaceAll("/", "\\").toLowerCase();
+    entries.sort(([a], [b]) => sortKey(a) < sortKey(b) ? -1 : sortKey(a) > sortKey(b) ? 1 : 0);
+    return sha256(await new Blob(entries.flat()).arrayBuffer());
+  }
+
+  function comparisonKey(platform, type, hash, nativeId = "", folder = "") {
+    return JSON.stringify([platform, type, hash, nativeId, folder]);
+  }
+
+  function comparePythonReport(report, localRows, packageHash) {
+    if (!jsonObject(report) || !Array.isArray(report.assessments) || !Array.isArray(report.workflows)
+      || !report.assessments.length || report.assessments.length > MAX_ASSETS || report.workflows.length > MAX_FILES) {
+      throw new InputError("Expected the Python app’s assessment JSON export with workflow fingerprints (at most 1,000 assessments).");
+    }
+    const digests = new Map();
+    for (const workflow of report.workflows) {
+      if (!jsonObject(workflow) || typeof workflow.display_path !== "string"
+        || typeof workflow.sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(workflow.sha256)) continue;
+      const digest = workflow.sha256.toLowerCase();
+      const previous = digests.get(workflow.display_path);
+      digests.set(workflow.display_path, previous !== undefined && previous !== digest ? null : digest);
+    }
+    const indexes = new Map();
+    const allowedTargets = new Set([...targets.map(([, label]) => label), "Mixed Fabric solution", "Manual rework"]);
+    for (const item of report.assessments) {
+      if (!jsonObject(item) || typeof item.path !== "string" || !allowedTargets.has(item.recommended_target)
+        || !waveActions.has(item.migration_wave)) continue;
+      const platform = reportPlatforms.get(item.source_platform);
+      const type = reportAssetTypes.get(item.asset_type);
+      const isAlteryx = platform === "Alteryx";
+      const separator = item.path.lastIndexOf("!");
+      const hash = digests.get(isAlteryx || separator < 0 ? item.path : item.path.slice(0, separator));
+      if (!platform || !type || !hash || (!isAlteryx && typeof item.native_id !== "string")) continue;
+      const key = comparisonKey(platform, type, hash, isAlteryx ? "" : item.native_id, isAlteryx ? "" : item.folder ?? "");
+      indexes.set(key, indexes.has(key) ? null : item);
+    }
+    const matches = new Map();
+    for (const row of localRows) {
+      const hash = row.platform === "IDMC" ? packageHash : row.sourceHash;
+      if (!hash) continue;
+      const key = comparisonKey(row.platform, row.assetType, hash, row.nativeId, row.assetFolder);
+      const item = indexes.get(key);
+      if (!item || item.rules_version !== RULES_VERSION || item.registry_version !== row.registryVersion
+        || item.tool_count !== row.tools || item.connection_count !== row.connections
+        || item.complexity_score !== row.score || item.complexity_band !== row.band) continue;
+      matches.set(row, { target: item.recommended_target, wave: item.migration_wave });
+    }
+    return { matches, reportCount: report.assessments.length };
+  }
+
+  function csvCell(value) {
+    if (typeof value === "number") return String(value);
+    const safe = /^(?:[\t\r\n]|\s*[=+\-@\uff1d\uff0b\uff0d\uff20])/.test(value) ? "'" + value : value;
+    return '"' + safe.replaceAll('"', '""') + '"';
+  }
+
+  const byId = id => document.getElementById(id);
+  const files = byId("files");
+  const idmcFolder = byId("idmc-folder");
+  const clearInputs = byId("clear-inputs");
+  const browse = byId("browse");
+  const dropZone = byId("drop-zone");
+  const assessButton = byId("assess");
+  const status = byId("status");
+  const wave = byId("wave");
+  const navButtons = Array.from(document.querySelectorAll(".nav [data-page]"));
+  const detail = byId("workflow-detail");
+  const detailTabs = Array.from(detail.querySelectorAll("[role=tab]"));
+  const workflowFilters = ["workflow-search", "platform", "band", "readiness-filter", "target", "wave"].map(byId);
+  const pythonReport = byId("python-report");
+  let results = [];
+  let selectedWorkflow;
+  let pythonMatches = new Map();
+  function recommendedTarget(row) {
+    const python = pythonMatches.get(row);
+    return python
+      ? { target: python.target, source: "Imported Python report" }
+      : { target: row.offlineRouting.target, source: "Offline routing rules" };
+  }
+  let comparisonRevision = 0;
+  const PAGE_SIZE = 25;
+  let workflowPage = 0;
+  let evidencePage = 0;
+  let planWave = "";
+  let evidenceKind = "Tools";
+  const evidenceTypes = new Map([
+    ["Tools", { columns: ["Tool type", "Count", "Suggested mapping"],
+      rows: row => row.evidence.inventory.map(tool => [tool.name, tool.count, supportNames.get(tool.support)]) }],
+    ["Expressions", { columns: ["Expression references"],
+      rows: row => [[row.evidence.expressions]] }],
+    ["Inputs & outputs", { columns: ["File references"],
+      rows: row => [[row.evidence.fileRefs]] }],
+    ["Dependencies", { columns: ["Macro invocations", "Informatica dependency references"],
+      rows: row => [[row.evidence.macros, row.evidence.dependencies]] }],
+    ["Findings", { columns: ["Static finding"], rows: row => row.evidence.findings.map(finding => [finding]) }],
+    ["Connections", { columns: ["From position", "From tool", "To position", "To tool"], rows: row => row.evidence.links }],
+  ]);
+  byId("versions").textContent = `Static assessment rules ${RULES_VERSION}. Registry versions are recorded per source.`;
+
+  function showPage(page) {
+    for (const button of navButtons) {
+      const active = button.dataset.page === page;
+      byId(button.dataset.page).hidden = !active;
+      if (active) {
+        button.setAttribute("aria-current", "page");
+        byId("current-page").textContent = button.dataset.label;
+      } else {
+        button.removeAttribute("aria-current");
+      }
+    }
+    byId(`${page}-title`).focus({ preventScroll: true });
+    document.documentElement.scrollTop = 0;
+  }
+
+  for (const button of document.querySelectorAll("[data-page]")) {
+    button.addEventListener("click", () => {
+      showPage(button.dataset.page);
+      if (button.id === "review-issues") {
+        byId("issues").open = true;
+        byId("issue-summary").focus();
+      }
+    });
+  }
+
+  function updateResultVisibility() {
+    const hasResults = results.length > 0;
+    byId("portfolio-results").hidden = byId("workflow-results").hidden = !hasResults;
+    byId("portfolio-empty").hidden = byId("workflows-empty").hidden = hasResults;
+    for (const empty of document.querySelectorAll("[data-empty]")) empty.hidden = hasResults;
+    for (const panel of document.querySelectorAll("[data-results]")) panel.hidden = !hasResults;
+    for (const button of document.querySelectorAll("[data-needs-results]")) button.disabled = !hasResults;
+    byId("scope").textContent = hasResults
+      ? `${results.length} asset(s) in scope. Static recommendations require validation.`
+      : "No assessment loaded. Select local exports to start.";
+  }
+
+  function element(tag, value) {
+    const node = document.createElement(tag);
+    node.textContent = value;
+    return node;
+  }
+
+  function workflowButton(result, label = result.path) {
+    const open = element("button", label);
+    open.type = "button";
+    open.className = "link-button";
+    open.addEventListener("click", () => openWorkflow(result));
+    return open;
+  }
+
+  function pageRows(prefix, rows, page) {
+    const first = page * PAGE_SIZE;
+    const next = Math.min(first + PAGE_SIZE, rows.length);
+    byId(`${prefix}-prev`).disabled = page === 0;
+    byId(`${prefix}-next`).disabled = next === rows.length;
+    byId(`${prefix}-page`).textContent = rows.length
+      ? `${first + 1}–${next} of ${rows.length}` : "No matching records";
+    return rows.slice(first, next);
+  }
+
+  function renderRows() {
+    const query = byId("workflow-search").value.trim().toLowerCase();
+    const platform = byId("platform").value;
+    const band = byId("band").value;
+    const readiness = byId("readiness-filter").value;
+    const target = byId("target").value;
+    const visible = results.filter(row => (!wave.value || row.wave === wave.value)
+      && (!band || row.band === band) && (!target || recommendedTarget(row).target === target)
+      && (!platform || row.platform === platform)
+      && (!readiness || row.readiness.label === readiness)
+      && row.path.toLowerCase().includes(query));
+    const fragment = document.createDocumentFragment();
+    for (const result of pageRows("workflow", visible, workflowPage)) {
+      const row = document.createElement("tr");
+      const heading = document.createElement("th");
+      heading.scope = "row";
+      const name = result.path.split(/[\\/]/).at(-1);
+      heading.append(workflowButton(result, name));
+      if (name !== result.path) {
+        const path = element("small", result.path);
+        path.className = "workflow-path";
+        heading.append(path);
+      }
+      row.append(heading);
+      const complexity = element("span", `${result.band} (${result.score})`);
+      complexity.className = "tag";
+      complexity.dataset.band = result.band;
+      const guide = document.createElement("div");
+      guide.append(element("strong", result.readiness.label));
+      const python = pythonMatches.get(result);
+      const note = element("small", python
+        ? `Offline target: ${result.offlineRouting.target} · Python wave: ${python.wave}`
+        : result.readiness.reasons[0] ?? "Static assessment only; validate in a pilot.");
+      note.className = "workflow-path";
+      guide.append(note);
+      const recommendation = recommendedTarget(result);
+      const targetCell = document.createElement("div");
+      const source = element("small", recommendation.source);
+      source.className = "workflow-path";
+      targetCell.append(element("strong", recommendation.target), source);
+      for (const value of [result.platform, result.tools, result.connections, complexity,
+        targetCell, result.wave, guide]) {
+        row.append(tableCell(value));
+      }
+      fragment.append(row);
+    }
+    byId("rows").replaceChildren(fragment);
+    byId("row-count").textContent = `Workflow register · ${visible.length} of ${results.length} assets match the filters`;
+  }
+
+  function fact(label, value) {
+    const item = document.createElement("div");
+    item.className = "fact";
+    item.append(element("small", label), element("strong", value));
+    return item;
+  }
+
+  function evidenceTotals() {
+    return results.reduce((totals, row) => {
+      totals.tools += row.tools;
+      totals.connections += row.connections;
+      totals.dependencies += row.evidence.dependencies + row.evidence.macros;
+      totals.files += row.evidence.fileRefs;
+      totals.findings += row.evidence.findings.length;
+      for (const tool of row.evidence.inventory) {
+        const mapping = tool.support === "neutral" ? "Context only"
+          : tool.support === "manual" ? "Manual review" : "Suggested Fabric mapping";
+        totals.mappings.set(mapping, (totals.mappings.get(mapping) ?? 0) + tool.count);
+      }
+      return totals;
+    }, { tools: 0, connections: 0, dependencies: 0, files: 0, findings: 0,
+      mappings: new Map([["Suggested Fabric mapping", 0], ["Manual review", 0], ["Context only", 0]]) });
+  }
+
+  function renderTotals() {
+    const counts = new Map([["Assessed assets", results.length],
+      ["Wave 1", 0], ["Wave 2", 0], ["Pilot", 0], ["Redesign", 0]]);
+    for (const row of results) {
+      counts.set(row.wave, counts.get(row.wave) + 1);
+    }
+    byId("totals").replaceChildren(...Array.from(counts, ([key, value]) => {
+      const group = document.createElement("div");
+      group.append(element("dt", key), element("dd", value));
+      return group;
+    }));
+    renderDistribution("complexity-dist", ["Low", "Medium", "High"], row => row.band);
+    renderDistribution("target-dist", [...targets.map(([, label]) => label), "Mixed Fabric solution", "Manual rework"], row => recommendedTarget(row).target);
+    const summary = evidenceTotals();
+    const flagged = results.filter(row => row.readiness.label === "Review required" || row.band === "High"
+      || recommendedTarget(row).target === "Manual rework").length;
+    byId("portfolio-decision").textContent = flagged
+      ? `Conditional proceed: review ${flagged} high-complexity or flagged asset(s) before a representative pilot.`
+      : "Proceed to a representative pilot. Confirm source bindings and verify results before broader migration.";
+    byId("portfolio-priorities").replaceChildren(
+      fact("Manual mapping and redesign", `${results.filter(row => row.manual.length).length} assets need mapping review`),
+      fact("Dependency review", `${summary.dependencies} macro or dependency references`),
+      fact("Migration pilot", `${counts.get("Pilot")} assets in the pilot wave`));
+    byId("portfolio-evidence").replaceChildren(fact("Dependencies", summary.dependencies),
+      fact("File references", summary.files), fact("Static findings", summary.findings));
+    byId("portfolio-top").replaceChildren(evidenceTable(
+      ["Workflow", "Complexity score", "Recommended target", "Target source", "Offline wave"],
+      results.slice(0, 5).map(row => {
+        const { target, source } = recommendedTarget(row);
+        return [workflowButton(row), row.score, target, source, row.wave];
+      })));
+  }
+
+  function renderDistribution(id, labels, valueOf) {
+    const counts = new Map(labels.map(label => [label, 0]));
+    for (const row of results) {
+      const value = valueOf(row);
+      counts.set(value, counts.get(value) + 1);
+    }
+    renderMeters(id, counts, results.length);
+  }
+
+  function renderMeters(id, counts, total) {
+    byId(id).replaceChildren(...Array.from(counts, ([label, count]) => {
+      const line = document.createElement("div");
+      line.className = "metric-count";
+      const meter = document.createElement("meter");
+      meter.max = Math.max(1, total);
+      meter.value = count;
+      meter.setAttribute("aria-label", label);
+      line.append(element("span", label), meter, element("strong", count));
+      return line;
+    }));
+  }
+
+  function tableCell(value) {
+    const cell = document.createElement("td");
+    if (value instanceof Node) cell.append(value);
+    else cell.textContent = value;
+    return cell;
+  }
+
+  function evidenceTable(headers, rows, caption) {
+    const table = document.createElement("table");
+    const head = table.createTHead().insertRow();
+    for (const header of headers) {
+      const cell = element("th", header);
+      cell.scope = "col";
+      head.append(cell);
+    }
+    if (caption) table.createCaption().textContent = caption;
+    const body = table.createTBody();
+    for (const row of rows) {
+      const tr = body.insertRow();
+      for (const value of row) tr.append(tableCell(value));
+    }
+    return table;
+  }
+
+  function list(values) {
+    const ul = document.createElement("ul");
+    for (const value of values) ul.append(element("li", value));
+    return ul;
+  }
+
+  function assessmentFacts(row) {
+    return [
+      ["Source", row.platform], ["Asset type", row.assetType],
+      ["Active tools", row.tools], ["Active connections", row.connections],
+      ["Disabled tools", row.evidence.disabledCount], ["Complexity", `${row.band} (${row.score})`],
+      ["Recommended target", recommendedTarget(row).target], ["Offline migration wave", row.wave],
+      ["Active macro invocations", row.evidence.macros], ["File references", row.evidence.fileRefs],
+      ["Expression references", row.evidence.expressions], ["Informatica dependency references", row.evidence.dependencies],
+      ["Static findings", row.evidence.findings.length],
+    ];
+  }
+
+  function inventoryTable(row) {
+    return evidenceTable(["Tool type", "Count", "Suggested mapping"],
+      row.evidence.inventory.map(item => [item.name, item.count, supportNames.get(item.support)]), "Active tool inventory");
+  }
+
+  function flowTables(row) {
+    return [
+      evidenceTable(["Tool position", "Tool type", "Suggested mapping"], row.evidence.nodes,
+        `Source tools: showing ${row.evidence.nodes.length} of ${row.tools} active tools in source order`),
+      evidenceTable(["From position", "From tool", "To position", "To tool"], row.evidence.links,
+        `Canvas connections: showing ${row.evidence.links.length} of ${row.connections} active connections`),
+    ];
+  }
+
+  function svgElement(tag, attributes = {}) {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+    return node;
+  }
+
+  function workflowDiagram(row, design = false) {
+    const { nodes, links } = row.evidence;
+    if (!nodes.length) return element("p", "No active tools to draw.");
+    const label = design ? "Suggested Fabric workflow mapping" : "Source workflow graph";
+    const boxes = new Map(nodes.map(([id, name, mapping]) => [id, {
+      id, name, mapping, level: 0, incoming: 0, outgoing: [],
+    }]));
+    const edges = [];
+    for (const [fromId, , toId] of links) {
+      const from = boxes.get(fromId);
+      const to = boxes.get(toId);
+      if (!from || !to) continue;
+      from.outgoing.push(to);
+      to.incoming++;
+      edges.push([from, to]);
+    }
+
+    const ready = Array.from(boxes.values()).filter(node => node.incoming === 0);
+    for (const from of ready) {
+      for (const to of from.outgoing) {
+        to.level = Math.max(to.level, from.level + 1);
+        if (--to.incoming === 0) ready.push(to);
+      }
+    }
+    const levels = [];
+    for (const node of boxes.values()) (levels[node.level] ??= []).push(node);
+    const nodeWidth = 188;
+    const nodeHeight = 58;
+    const columnStep = 208;
+    const rowStep = 116;
+    const width = Math.max(...levels.map(level => level.length)) * columnStep + 78;
+    const height = levels.length * rowStep - 20;
+    for (const [depth, level] of levels.entries()) {
+      level.forEach((node, column) => {
+        node.x = (width - (level.length - 1) * columnStep) / 2 + column * columnStep;
+        node.y = depth * rowStep + 18;
+      });
+    }
+
+    const svg = svgElement("svg", { width, height, viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": label });
+    const marker = svgElement("marker", { id: "workflow-arrow", viewBox: "0 0 8 8", markerWidth: 6,
+      markerHeight: 6, refX: 8, refY: 4, orient: "auto" });
+    marker.append(svgElement("path", { class: "arrow", d: "M0 0 8 4 0 8Z" }));
+    const defs = svgElement("defs");
+    defs.append(marker);
+    svg.append(defs);
+    for (const [index, [from, to]] of edges.entries()) {
+      const start = from.y + nodeHeight;
+      const end = to.y;
+      const lane = 12 + index % 8 * 4;
+      // Route connections that skip a row through the side gutter, not through another tool.
+      const route = to.level === from.level + 1
+        ? `M${from.x} ${start} C${from.x} ${start + 32} ${to.x} ${end - 32} ${to.x} ${end}`
+        : `M${from.x} ${start} V${start + lane} H${lane} V${end - lane} H${to.x} V${end}`;
+      svg.append(svgElement("path", { class: "connector", d: route, "marker-end": "url(#workflow-arrow)" }));
+    }
+    for (const node of boxes.values()) {
+      const note = design ? node.mapping : `Tool position ${node.id}`;
+      const group = svgElement("g", { transform: `translate(${node.x} ${node.y})`,
+        class: !design || note === "Context only" ? "source" : note === "Manual review" ? "manual" : "mapped" });
+      const title = svgElement("title");
+      title.textContent = `${node.name} | ${note}`;
+      const nameText = svgElement("text", { y: 24 });
+      nameText.textContent = node.name.length > 21 ? `${node.name.slice(0, 20)}…` : node.name;
+      const noteText = svgElement("text", { y: 43, class: "graph-note" });
+      noteText.textContent = note;
+      group.append(title, svgElement("rect", { x: -nodeWidth / 2, width: nodeWidth, height: nodeHeight, rx: 9 }),
+        nameText, noteText);
+      svg.append(group);
+    }
+
+    const figure = document.createElement("figure");
+    figure.className = "graph";
+    const viewport = document.createElement("div");
+    viewport.className = "graph-viewport";
+    viewport.tabIndex = 0;
+    viewport.setAttribute("role", "region");
+    viewport.setAttribute("aria-label", `${label} scroll area`);
+    viewport.append(svg);
+    const scope = nodes.length < row.tools || edges.length < row.connections
+      ? ` Showing ${nodes.length} of ${row.tools} active tools and ${edges.length} of ${row.connections} connections.` : "";
+    figure.append(viewport, element("figcaption", (design
+      ? "Suggested mapping of the source flow, not an executable Fabric design."
+      : `Active ${row.platform} components and connections. Layout is derived from connection order.`) + scope));
+    return figure;
+  }
+
+  function showDetail(tab) {
+    for (const button of detailTabs) {
+      button.setAttribute("aria-selected", String(button === tab));
+      button.tabIndex = button === tab ? 0 : -1;
+    }
+    const panel = byId("detail-panel");
+    panel.setAttribute("aria-labelledby", tab.id);
+    const row = selectedWorkflow;
+    let content;
+    switch (tab.dataset.detail) {
+      case "flow":
+        content = [element("h3", "Source workflow graph"), workflowDiagram(row), ...flowTables(row)];
+        break;
+      case "design":
+        content = [element("h3", "Suggested Fabric workflow mapping"),
+          element("p", "The graph shows static component mappings, not generated designs or a Python compiler preview."),
+          recommendationDetails(row), workflowDiagram(row, true), inventoryTable(row)];
+        break;
+      case "risk":
+        content = [element("h3", row.readiness.label), list(row.readiness.reasons.length ? row.readiness.reasons
+          : ["No additional readiness flags. Confirm compatibility in a pilot."]),
+          element("h3", "Static findings"), list(row.evidence.findings.length ? row.evidence.findings
+          : ["No findings from these static checks. Other migration risks may remain."])];
+        break;
+      case "validation":
+        content = [element("p", `Static checks passed: ${row.platform === "IDMC" ? "JSON graph" : "XML"} structure, component identifiers, connection endpoints, and cycle detection.`),
+          element("p", "Runtime validation not performed. No workflow or Fabric artifact was executed."),
+          list(["Confirm source and destination bindings, permissions, and macro dependencies.",
+            "Compare schemas, row counts, null handling, and business rules on representative data.",
+            "Measure run time, throughput, and concurrent load before sizing capacity."])];
+        break;
+      default:
+        content = [recommendationDetails(row), evidenceTable(["Metric", "Value"], assessmentFacts(row), "Workflow assessment")];
+    }
+    panel.replaceChildren(...content);
+  }
+
+  function recommendationDetails(row) {
+    const python = pythonMatches.get(row);
+    const section = document.createElement("section");
+    section.className = "panel";
+    const { target, source } = recommendedTarget(row);
+    section.append(element("h3", "Recommendation and readiness"),
+      element("p", `Recommended target: ${target} (${source}).`),
+      element("p", row.offlineRouting.reason),
+      element("p", `${row.readiness.label}. Assessment only; verify in a pilot.`),
+      ...(row.readiness.reasons.length ? [list(row.readiness.reasons)] : []),
+      evidenceTable(["Basis", "Target", "Wave"], [
+        ["Offline routing rules", row.offlineRouting.target, row.wave],
+        ["Original tool inventory", row.target, row.wave],
+        ...(python ? [["Imported Python report", python.target, python.wave]] : []),
+      ]));
+    if (!python) section.append(element("p", "No fingerprint-matched Python result for this workflow."));
+    return section;
+  }
+
+  function openWorkflow(row) {
+    if (!row) return;
+    selectedWorkflow = row;
+    byId("detail-title").textContent = row.path;
+    showDetail(detailTabs[0]);
+    detail.showModal();
+  }
+
+  detailTabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => showDetail(tab));
+    tab.addEventListener("keydown", event => {
+      const offset = { ArrowLeft: -1, ArrowRight: 1 }[event.key];
+      const next = event.key === "Home" ? 0 : event.key === "End" ? detailTabs.length - 1
+        : offset ? (index + offset + detailTabs.length) % detailTabs.length : undefined;
+      if (next === undefined) return;
+      event.preventDefault();
+      showDetail(detailTabs[next]);
+      detailTabs[next].focus();
+    });
+  });
+  byId("close-detail").addEventListener("click", () => detail.close());
+  detail.addEventListener("close", () => {
+    selectedWorkflow = undefined;
+    byId("detail-panel").replaceChildren();
+    byId("detail-title").textContent = "";
+  });
+
+  function selectedEvidenceWorkflow() {
+    const value = byId("evidence-workflow").value;
+    return value === "" ? undefined : results[Number(value)];
+  }
+
+  function filteredEvidence() {
+    const selected = selectedEvidenceWorkflow();
+    const query = byId("evidence-search").value.trim().toLowerCase();
+    const type = evidenceTypes.get(evidenceKind);
+    const rows = [];
+    for (const result of selected ? [selected] : results) {
+      for (const evidence of type.rows(result)) {
+        const row = [result.path, ...evidence];
+        if (!query || row.some(value => String(value).toLowerCase().includes(query))) rows.push(row);
+      }
+    }
+    return { columns: ["Workflow or asset", ...type.columns], rows };
+  }
+
+  function renderTechnical() {
+    const { columns, rows } = filteredEvidence();
+    byId("evidence-register").replaceChildren(evidenceTable(columns, pageRows("evidence", rows, evidencePage), evidenceKind));
+    byId("open-evidence").disabled = !selectedEvidenceWorkflow();
+    byId("export-register").disabled = !rows.length;
+  }
+
+  function syncPlanWave() {
+    for (const button of byId("plan-waves").querySelectorAll("button")) {
+      button.setAttribute("aria-pressed", String(button.dataset.wave === planWave));
+    }
+    const backlog = results.filter(row => !planWave || row.wave === planWave);
+    byId("plan-backlog").replaceChildren(evidenceTable(
+      ["Workflow or asset", "Offline wave", "Recommended target", "Target source", "Next step"],
+      backlog.map(row => {
+        const { target, source } = recommendedTarget(row);
+        return [workflowButton(row), row.wave, target, source, waveActions.get(row.wave)];
+      }),
+      `${planWave || "All waves"} · ${backlog.length} asset(s)`));
+  }
+
+  function renderPlanningViews() {
+    const waveTotals = new Map(Array.from(waveActions.keys(), key => [key, 0]));
+    for (const row of results) waveTotals.set(row.wave, waveTotals.get(row.wave) + 1);
+    byId("plan-waves").replaceChildren(...Array.from(waveTotals, ([key, count]) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "wave-card";
+      card.dataset.wave = key;
+      card.append(element("strong", key), element("small", waveActions.get(key)),
+        element("span", `${count} assets`));
+      card.addEventListener("click", () => {
+        planWave = planWave === key ? "" : key;
+        syncPlanWave();
+      });
+      return card;
+    }));
+    renderPlanTargets();
+    syncPlanWave();
+    const all = element("option", "All workflows");
+    all.value = "";
+    byId("evidence-workflow").replaceChildren(all, ...results.map((row, index) => {
+      const option = element("option", row.path);
+      option.value = String(index);
+      return option;
+    }));
+    const totals = evidenceTotals();
+    byId("technical-metrics").replaceChildren(fact("Workflows", results.length), fact("Source tools", totals.tools),
+      fact("Connections", totals.connections), fact("Dependencies", totals.dependencies),
+      fact("File references", totals.files), fact("Findings", totals.findings));
+    renderMeters("technical-mapping", totals.mappings, totals.tools);
+    renderTechnical();
+  }
+
+  function renderPlanTargets() {
+    const waveTargets = new Map(Array.from(waveActions.keys(), key => [key, new Set()]));
+    for (const row of results) waveTargets.get(row.wave).add(recommendedTarget(row).target);
+    byId("plan-targets").replaceChildren(...Array.from(waveTargets, ([key, labels]) =>
+      fact(key, Array.from(labels).join(", ") || "No assessed assets")));
+  }
+
+  function selectionChanged() {
+    const count = files.files.length + idmcFolder.files.length;
+    clearInputs.disabled = assessButton.disabled = count === 0;
+    results = [];
+    clearComparison();
+    updateResultVisibility();
+    byId("issues").hidden = byId("review-issues").hidden = true;
+    byId("totals").replaceChildren();
+    byId("rows").replaceChildren();
+    byId("issue-list").replaceChildren();
+    byId("evidence-workflow").replaceChildren();
+    byId("evidence-register").replaceChildren();
+    byId("plan-waves").replaceChildren();
+    planWave = "";
+    workflowPage = evidencePage = 0;
+    byId("evidence-search").value = "";
+    for (const filter of workflowFilters) filter.value = "";
+    status.textContent = count ? `${count} input file(s) selected.` : "No files assessed.";
+  }
+
+  function updateIntake() {
+    const informatica = byId("intake-informatica").checked;
+    const folderMode = byId("mode-folder").checked;
+    byId("file-types").textContent = informatica ? "PowerCenter repository .xml" : ".yxmd, .yxmc, or .yxwz";
+    byId("folder-types").textContent = informatica
+      ? "PowerCenter XML folders or extracted IDMC" : "Scan an Alteryx estate recursively";
+    byId("browse-heading").textContent = folderMode ? "Browse for an export folder" : "Browse or drag and drop";
+    byId("intake-hint").textContent = folderMode
+      ? (informatica ? "For IDMC, choose the extracted folder containing manifest.json." : "Workflow files in subfolders are included.")
+      : (informatica ? "Choose PowerCenter XML exports. Inputs stay on this device." : "Choose Alteryx workflow files. Inputs stay on this device.");
+    browse.textContent = folderMode ? "Browse folder" : "Browse files";
+  }
+
+  for (const control of document.querySelectorAll("input[name=source-choice], input[name=input-mode]")) {
+    control.addEventListener("change", updateIntake);
+  }
+  browse.addEventListener("click", () => (byId("mode-folder").checked ? idmcFolder : files).click());
+  dropZone.addEventListener("dragover", event => {
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    if (!browse.disabled) dropZone.setAttribute("data-dragging", "");
+  });
+  dropZone.addEventListener("dragleave", event => {
+    if (!dropZone.contains(event.relatedTarget)) dropZone.removeAttribute("data-dragging");
+  });
+  dropZone.addEventListener("drop", event => {
+    event.preventDefault();
+    dropZone.removeAttribute("data-dragging");
+    if (browse.disabled || !event.dataTransfer.files.length) return;
+    if (byId("mode-folder").checked || Array.from(event.dataTransfer.items)
+      .some(item => item.webkitGetAsEntry?.()?.isDirectory)) {
+      status.textContent = "Use Browse folder to select a directory, or switch to Select file(s) to drop individual files.";
+      return;
+    }
+    files.files = event.dataTransfer.files;
+    selectionChanged();
+  });
+  byId("theme").addEventListener("click", event => {
+    const dark = document.documentElement.dataset.theme !== "dark";
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    event.currentTarget.setAttribute("aria-pressed", String(dark));
+  });
+  files.addEventListener("change", selectionChanged);
+  idmcFolder.addEventListener("change", selectionChanged);
+  clearInputs.addEventListener("click", () => {
+    files.value = idmcFolder.value = "";
+    selectionChanged();
+  });
+
+  assessButton.addEventListener("click", async () => {
+    const { idmcFiles, workflowFiles, issue } = classifyExportFolder(Array.from(idmcFolder.files));
+    const batch = [...files.files, ...workflowFiles];
+    const inputs = [...batch, ...idmcFiles];
+    if (inputs.length > MAX_FILES || inputs.reduce((sum, file) => sum + file.size, 0) > MAX_BATCH) {
+      status.textContent = "Selection exceeds the portfolio limits. Select fewer files or split the batch.";
+      return;
+    }
+    if (!globalThis.crypto?.subtle) {
+      status.textContent = "Local file hashing is unavailable. Use an approved current browser that supports Web Crypto for local HTML files.";
+      return;
+    }
+    files.disabled = idmcFolder.disabled = browse.disabled = clearInputs.disabled = assessButton.disabled = true;
+    clearComparison();
+    pythonReport.disabled = true;
+    byId("issues").hidden = byId("review-issues").hidden = true;
+    const issues = [];
+    const seen = new Set();
+    const next = [];
+    const addRows = rows => {
+      if (next.length + rows.length > MAX_ASSETS) throw new InputError("Batch exceeds 1,000 assessed assets. Split it into smaller batches.");
+      next.push(...rows);
+    };
+    const recordIssue = message => issues.push(element("li", message));
+    if (issue) recordIssue(`Export folder: ${issue}`);
+    try {
+      for (const [index, file] of batch.entries()) {
+        status.textContent = `Assessing ${index + 1} of ${batch.length}...`;
+        const label = file.webkitRelativePath || file.name;
+        try {
+          if (!/\.(?:yxmd|yxmc|yxwz|xml)$/i.test(file.name)) throw new InputError("Unsupported file type; extract packages before selecting files.");
+          if (file.size > MAX_FILE) throw new InputError("File exceeds the 10 MiB limit.");
+          const content = await file.arrayBuffer();
+          const digest = await sha256(content);
+          if (seen.has(digest)) throw new InputError("Duplicate content; counted once.");
+          const text = decode(content);
+          const rows = /\.xml$/i.test(file.name) ? assessPowerCenter(label, text) : [assess(label, text)];
+          addRows(rows.map(row => ({ ...row, sourceHash: digest })));
+          seen.add(digest);
+        } catch (error) {
+          if (!(error instanceof InputError || error instanceof DOMException)) throw error;
+          recordIssue(`${label}: ${error instanceof InputError ? error.message : "The browser could not read or hash this file."}`);
+        }
+      }
+      if (idmcFiles.length) {
+        status.textContent = "Assessing the extracted IDMC export...";
+        try {
+          addRows(await assessIdmc(idmcFiles, recordIssue));
+        } catch (error) {
+          if (!(error instanceof InputError || error instanceof DOMException)) throw error;
+          recordIssue(`IDMC export: ${error instanceof InputError ? error.message : "The browser could not read the export."}`);
+        }
+      }
+      results = next.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+      renderTotals();
+      renderRows();
+      renderPlanningViews();
+      byId("issue-list").replaceChildren(...issues);
+      byId("issue-summary").textContent = `${issues.length} skipped or rejected input(s)`;
+      byId("issues").hidden = byId("review-issues").hidden = issues.length === 0;
+      byId("issues").open = results.length === 0;
+      updateResultVisibility();
+      status.textContent = `${results.length} assessed; ${issues.length} skipped or rejected.`;
+      byId("portfolio-run-summary").textContent = status.textContent;
+      if (results.length) showPage("portfolio");
+      else showPage("intake");
+    } catch (error) {
+      status.textContent = "Assessment stopped. This utility requires a current browser with local file and cryptography support.";
+      console.error("Offline assessment failed", error.name);
+    } finally {
+      files.disabled = idmcFolder.disabled = browse.disabled = clearInputs.disabled = assessButton.disabled = false;
+      pythonReport.disabled = false;
+    }
+  });
+
+  function clearComparison() {
+    comparisonRevision++;
+    pythonMatches = new Map();
+    pythonReport.value = "";
+    byId("clear-comparison").disabled = byId("export-comparison").disabled = true;
+    byId("comparison-status").textContent = "No Python report loaded. Offline recommendations require confirmation.";
+  }
+
+  byId("clear-comparison").addEventListener("click", () => {
+    clearComparison();
+    refreshTargetViews();
+  });
+  function refreshTargetViews() {
+    renderTotals();
+    resetWorkflowPage();
+    renderPlanTargets();
+    syncPlanWave();
+  }
+  pythonReport.addEventListener("change", async () => {
+    const [file] = pythonReport.files;
+    if (!file) return;
+    const revision = ++comparisonRevision;
+    pythonMatches = new Map();
+    refreshTargetViews();
+    const message = byId("comparison-status");
+    byId("clear-comparison").disabled = false;
+    byId("export-comparison").disabled = true;
+    message.textContent = "Checking report and source fingerprints…";
+    try {
+      if (file.size > MAX_FILE) throw new InputError("Python report exceeds the 10 MiB limit.");
+      const report = JSON.parse(decode(await file.arrayBuffer()));
+      const packageHash = results.some(row => row.platform === "IDMC") && idmcFolder.files.length
+        ? await idmcFingerprint(Array.from(idmcFolder.files)) : undefined;
+      if (revision !== comparisonRevision) return;
+      const { matches, reportCount } = comparePythonReport(report, results, packageHash);
+      pythonMatches = matches;
+      byId("export-comparison").disabled = !matches.size;
+      const changed = Array.from(matches).filter(([row, python]) =>
+        row.offlineRouting.target !== python.target || row.wave !== python.wave).length;
+      message.textContent = `${matches.size} of ${results.length} local assets matched (${reportCount} report rows). `
+        + `${changed} matched assets differ in target or wave. `
+        + "Matched Python targets take precedence; offline waves stay unchanged."
+        + (matches.size < results.length ? " Unmatched assets use offline routing rules." : "");
+      refreshTargetViews();
+    } catch (error) {
+      if (revision !== comparisonRevision) return;
+      message.textContent = error instanceof InputError ? error.message : error instanceof SyntaxError
+        ? "The selected report is not valid JSON." : "Could not read the Python report or verify source fingerprints.";
+      if (!(error instanceof InputError || error instanceof SyntaxError || error instanceof DOMException)) console.error(error);
+    }
+  });
+
+  function resetWorkflowPage() {
+    workflowPage = 0;
+    renderRows();
+  }
+  workflowFilters.forEach(input => input.addEventListener(input.type === "search" ? "input" : "change", resetWorkflowPage));
+  byId("clear-filters").addEventListener("click", () => {
+    for (const filter of workflowFilters) filter.value = "";
+    resetWorkflowPage();
+  });
+  byId("workflow-prev").addEventListener("click", () => { workflowPage--; renderRows(); });
+  byId("workflow-next").addEventListener("click", () => { workflowPage++; renderRows(); });
+  function resetEvidencePage() {
+    evidencePage = 0;
+    renderTechnical();
+  }
+  for (const label of evidenceTypes.keys()) {
+    const button = element("button", label);
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(label === evidenceKind));
+    button.addEventListener("click", () => {
+      evidenceKind = label;
+      for (const item of byId("register-controls").children) item.setAttribute("aria-pressed", String(item === button));
+      resetEvidencePage();
+    });
+    byId("register-controls").append(button);
+  }
+  byId("evidence-workflow").addEventListener("change", resetEvidencePage);
+  byId("evidence-search").addEventListener("input", resetEvidencePage);
+  byId("clear-evidence").addEventListener("click", () => {
+    byId("evidence-workflow").value = byId("evidence-search").value = "";
+    resetEvidencePage();
+  });
+  byId("evidence-prev").addEventListener("click", () => { evidencePage--; renderTechnical(); });
+  byId("evidence-next").addEventListener("click", () => { evidencePage++; renderTechnical(); });
+  byId("open-evidence").addEventListener("click", () => openWorkflow(selectedEvidenceWorkflow()));
+
+  function download(name, data, mime) {
+    const url = URL.createObjectURL(new Blob([data], { type: mime }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function downloadCsv(name, rows) {
+    download(name, "\ufeff" + rows.map(row => row.map(csvCell).join(",")).join("\r\n") + "\r\n",
+      "text/csv;charset=utf-8");
+  }
+
+  byId("export-register").addEventListener("click", () => {
+    const { columns, rows } = filteredEvidence();
+    downloadCsv("etl-evidence-register.csv", [columns, ...rows]);
+  });
+
+  byId("export-json").addEventListener("click", () => download(
+    "etl-assessment.json",
+    JSON.stringify({ rulesVersion: RULES_VERSION, targetRulesVersion: TARGET_RULES_VERSION, registryVersions,
+      evidenceRowLimit: MAX_EVIDENCE_ROWS, workflows: results.map(row => ({
+        ...row, recommendation: recommendedTarget(row), pythonComparison: pythonMatches.get(row) ?? null,
+      })) }, null, 2),
+    "application/json;charset=utf-8"));
+  function comparisonRows() {
+    return results.map(row => {
+      const python = pythonMatches.get(row);
+      return [row.path, row.platform, row.readiness.label, row.readiness.reasons.join("; "),
+        row.target, row.offlineRouting.target, row.wave, python?.target ?? "", python?.wave ?? ""];
+    });
+  }
+  byId("export-comparison").addEventListener("click", () => downloadCsv("etl-python-comparison.csv", [
+    ["Workflow or asset", "Source", "Readiness", "Readiness reasons", "Original inventory target", "Offline routed target", "Offline wave",
+      "Imported Python target", "Imported Python wave"],
+    ...comparisonRows(),
+  ]));
+  byId("export-plan").addEventListener("click", () => downloadCsv("etl-migration-plan.csv", [
+    ["Workflow or asset", "Source", "Asset type", "Complexity", "Recommended target", "Target source", "Offline migration wave", "Next step"],
+    ...results.map(row => {
+      const { target, source } = recommendedTarget(row);
+      return [row.path, row.platform, row.assetType, row.band, target, source, row.wave, waveActions.get(row.wave)];
+    }),
+  ]));
+  byId("export-technical").addEventListener("click", () => downloadCsv("etl-technical-summary.csv", [
+    ["Workflow or asset", "Source", "Asset type", "Active tools", "Active connections", "Disabled tools", "Macro invocations", "File references", "Expression references", "Informatica dependencies", "Findings"],
+    ...results.map(row => [row.path, row.platform, row.assetType, row.tools, row.connections, row.evidence.disabledCount, row.evidence.macros,
+      row.evidence.fileRefs, row.evidence.expressions, row.evidence.dependencies, row.evidence.findings.join("; ")]),
+  ]));
+  byId("export").addEventListener("click", () => {
+    const rows = [
+      ["Workflow or asset", "Source", "Asset type", "Tools", "Connections", "Complexity score", "Complexity band", "Recommended target",
+        "Target source", "Offline routed target", "Offline migration wave", "Manual tool types", "Rules version", "Target rules version",
+        "Registry version", "Readiness", "Readiness reasons"],
+      ...results.map(row => {
+        const { target, source } = recommendedTarget(row);
+        return [row.path, row.platform, row.assetType, row.tools, row.connections, row.score, row.band, target,
+          source, row.offlineRouting.target, row.wave, row.manual.join("; "), RULES_VERSION, TARGET_RULES_VERSION,
+          row.registryVersion, row.readiness.label, row.readiness.reasons.join("; ")];
+      }),
+    ];
+    downloadCsv("etl-portfolio.csv", rows);
+  });
+</script>
+</body>
+</html>

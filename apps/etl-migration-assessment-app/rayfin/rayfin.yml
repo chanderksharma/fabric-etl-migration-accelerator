@@ -1,0 +1,57 @@
+id: etl-migration-assessment-app
+name: etl-migration-assessment-app
+version: 1.0.0
+services:
+  auth:
+    enabled: true
+    fabric:
+      enabled: true
+    allowedRedirectUris:
+      - http://localhost:5173
+      - http://127.0.0.1:5173
+      - https://neat-fern-bb534f54ab-canadacentral.webapp.fabricapps.net
+  data:
+    enabled: false
+  storage:
+    enabled: false
+  staticHosting:
+    enabled: true
+    assetAccess: protected
+    folder: dist
+    buildCommand: npm run build:fabric
+    indexDocument: index.html
+  functions:
+    enabled: true
+    buildCommand: npm run build
+    auth:
+      type: application
+connectors:
+  - name: assessmentmodel
+    type: fabric-semanticmodel
+    config:
+      workspaceId: "${FABRIC_WORKSPACE_ID}"
+      itemId: "${FABRIC_SEMANTIC_MODEL_ID}"
+    auth:
+      type: delegated
+    version: "1"
+    operations:
+      - name: executeQuery
+secrets:
+  - name: FABRIC_WORKSPACE_ID
+    description: Target Fabric workspace
+  - name: FABRIC_LAKEHOUSE_ID
+    description: Assessment Lakehouse
+  - name: FABRIC_NOTEBOOK_ID
+    description: Assessment notebook
+  - name: DEPLOYMENT_CONFIRMATION_KEY
+    description: HMAC key for expiring deployment confirmations
+  - name: GITHUB_TOKEN
+    description: GitHub token with Actions workflow dispatch access
+  - name: GITHUB_ALLOWED_REPOSITORIES
+    description: Comma-separated GitHub repository allow-list
+  - name: GITLAB_TOKEN
+    description: GitLab project access token with pipeline API access
+  - name: GITLAB_ALLOWED_PROJECTS
+    description: Comma-separated GitLab project allow-list
+  - name: GITLAB_BASE_URL
+    description: Optional GitLab HTTPS origin

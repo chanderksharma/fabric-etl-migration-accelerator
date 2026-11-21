@@ -1,0 +1,22 @@
+EVALUATE
+TOPN(
+    1000,
+    CALCULATETABLE(
+        SUMMARIZECOLUMNS(
+            'CapacityProfile'[WorkflowKey],
+            'CapacityProfile'[ProfileKind],
+            'CapacityProfile'[TargetComponents],
+            'CapacityProfile'[ComplexityUnits],
+            'CapacityProfile'[DestCount],
+            'CapacityProfile'[HeavySteps],
+            'CapacityProfile'[NotebookSteps],
+            'CapacityProfile'[PipelineSteps],
+            'CapacityProfile'[TotalSteps],
+            'CapacityProfile'[CoveredByLinkedMapping],
+            "Profile Rows", COUNTROWS('CapacityProfile')
+        ),
+        'AssessmentRun'[IsLatestCompletedRun] = TRUE()
+    ),
+    'CapacityProfile'[WorkflowKey], ASC
+)
+ORDER BY 'CapacityProfile'[WorkflowKey] ASC

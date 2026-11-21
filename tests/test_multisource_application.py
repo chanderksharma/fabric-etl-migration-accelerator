@@ -3,6 +3,8 @@
 import io
 import json
 import shutil
+import sys
+import types
 import zipfile
 from pathlib import Path
 
@@ -101,6 +103,178 @@ def test_run_service_assesses_one_package_into_multiple_assets(tmp_path: Path) -
     assert {item.source_platform for item in completed.result.assessments} == {
         "informatica_idmc"
     }
+
+
+def test_fabric_notebook_assesses_and_exports_web_app_targets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = Path(__file__).parents[1]
+    source = tmp_path / "input"
+    source.mkdir()
+    shutil.copyfile(
+        root / "alteryx-workflows" / "sample_merge_append_joins.yxmd",
+        source / "=orders.yxmd",
+    )
+    shutil.copyfile(FIXTURES / "powercenter" / "basic_repository.xml", source / "repository.xml")
+    _idmc_archive(source / "idmc-export.zip")
+    service = RunService(tmp_path / "web-state")
+    run = service.create_run(service.preview(source).snapshot_id)
+    service.execute(run.id)
+    web_result = service.get_run(run.id).result
+    assert web_result is not None
+    baseline = AssessmentApplication().assess(source)
+    alteryx_baseline = next(item for item in baseline.assessments if item.path == "=orders.yxmd")
+    assert alteryx_baseline.recommended_target == "Dataflow Gen2"
+
+    notebook = json.loads(
+        (root / "notebooks" / "fabric-portfolio-assessment.ipynb").read_text(encoding="utf-8")
+    )
+    code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
+    params_cell = next(cell for cell in code_cells if cell["id"] == "parameters")
+    assert params_cell["metadata"].get("tags") == ["parameters"]
+    cells = {
+        cell["id"]: compile("".join(cell["source"]), f"notebook:{cell['id']}", "exec")
+        for cell in code_cells
+    }
+
+    saved_tables: dict[str, list[dict[str, object]]] = {}
+    sql_queries: list[str] = []
+
+    class FakeWriter:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def format(self, _name: str) -> "FakeWriter":
+            return self
+
+        def mode(self, _name: str) -> "FakeWriter":
+            return self
+
+        def saveAsTable(self, table_name: str) -> None:
+            saved_tables.setdefault(table_name, []).extend(self._rows)
+
+    class FakeDataFrame(list[dict[str, object]]):
+        @property
+        def write(self) -> FakeWriter:
+            return FakeWriter(list(self))
+
+    class SparkDisplayStub:
+        def createDataFrame(
+            self, rows: list[dict[str, object]], _schema: object = None
+        ) -> FakeDataFrame:
+            return FakeDataFrame(rows)
+
+        def sql(self, query: str) -> None:
+            sql_queries.append(query)
+
+    pyspark_mod = types.ModuleType("pyspark")
+    pyspark_sql = types.ModuleType("pyspark.sql")
+    pyspark_types = types.ModuleType("pyspark.sql.types")
+    for type_name in (
+        "BooleanType",
+        "DoubleType",
+        "IntegerType",
+        "StringType",
+        "StructField",
+        "StructType",
+        "TimestampType",
+    ):
+        setattr(pyspark_types, type_name, lambda *args, **kwargs: (args, kwargs))
+    monkeypatch.setitem(sys.modules, "pyspark", pyspark_mod)
+    monkeypatch.setitem(sys.modules, "pyspark.sql", pyspark_sql)
+    monkeypatch.setitem(sys.modules, "pyspark.sql.types", pyspark_types)
+
+    displayed: list[list[dict[str, object]]] = []
+    dashboards: list[str] = []
+    scope: dict[str, object] = {
+        "spark": SparkDisplayStub(),
+        "display": displayed.append,
+        "displayHTML": dashboards.append,
+    }
+    exec(cells["parameters"], scope)
+    scope.update(LAKEHOUSE_FILES=tmp_path, INPUT_PATH="input", REPORT_FOLDER="reports")
+    exec(cells["preview"], scope)
+    with pytest.raises(RuntimeError, match="CONFIRM_ASSESSMENT"):
+        exec(cells["assess"], scope)
+    scope.update(
+        CONFIRM_ASSESSMENT=True,
+        PERSIST_DELTA_TABLES=True,
+        DETAIL_PATH="=orders.yxmd",
+    )
+    for cell in code_cells:
+        if cell["id"] in {"parameters", "preview"}:
+            continue
+        exec(cells[cell["id"]], scope)
+    assert set(saved_tables) == {
+        "etl_assessment_run",
+        "etl_workflow_assessment",
+        "etl_tool_inventory",
+        "etl_finding",
+        "etl_dependency",
+        "etl_workflow_node",
+        "etl_workflow_connection",
+        "etl_capacity_profile",
+    }
+    assert len(saved_tables["etl_workflow_assessment"]) == 5
+    assert len(saved_tables["etl_capacity_profile"]) == 5
+    assert all(
+        isinstance(row["ComplexityUnits"], (int, float))
+        and row["ComplexityUnits"] >= 0
+        and isinstance(row["TotalSteps"], int)
+        and row["TotalSteps"] >= 0
+        for row in saved_tables["etl_capacity_profile"]
+    )
+    assert any(
+        isinstance(row["TotalSteps"], int) and row["TotalSteps"] > 0
+        for row in saved_tables["etl_capacity_profile"]
+    )
+    assert any("UPDATE etl_assessment_run SET IsLatestCompletedRun" in q for q in sql_queries)
+    assert not (tmp_path / "reports").exists()
+    scope["WRITE_REPORTS"] = True
+    exec(cells["export"], scope)
+
+    [report_path] = (tmp_path / "reports").glob("*/assessment.json")
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["workflow_count"] == 5
+    assert report["failed_count"] == 0
+    assert {row["source_platform"] for row in report["assessments"]} == {
+        "alteryx", "informatica_powercenter", "informatica_idmc"
+    }
+    assert any(row.get("tool") == "AppendFields" for row in displayed[-1])
+    assert len(dashboards) == 9
+    assert "Portfolio migration summary" in dashboards[0]
+    assert "Recommended Fabric targets" in dashboards[0]
+    assert "Evidence-based migration plan" in dashboards[1]
+    assert "Migration backlog and next actions" in dashboards[1]
+    assert "Technical assessment evidence" in dashboards[2]
+    assert "Connection sample" in dashboards[2]
+    assert "Tool-mapping distribution" in dashboards[2]
+    assert "Workflow summary" in dashboards[3]
+    assert "Source workflow" in dashboards[4]
+    assert "<svg" in dashboards[4]
+    assert "Fabric design" in dashboards[5]
+    assert "Risk assessment" in dashboards[6]
+    assert "Validation" in dashboards[7]
+    assert "Tool mappings" in dashboards[8]
+    assert all("estimated_effort" not in dashboard for dashboard in dashboards)
+    assert all("<script" not in dashboard for dashboard in dashboards)
+    expected = {
+        item.path: (item.recommended_target, item.migration_wave, item.complexity_score)
+        for item in web_result.assessments
+    }
+    assert expected["=orders.yxmd"][0] == "Fabric Notebook"
+    assert {
+        row["path"]: (row["recommended_target"], row["migration_wave"], row["complexity_score"])
+        for row in report["assessments"]
+    } == expected
+    assert report["workflows"] == [
+        item.model_dump(mode="json", include={"display_path", "sha256"})
+        for item in web_result.workflows
+    ]
+    assert "estimated_effort_days" not in json.dumps(report)
+    csv_report = report_path.with_suffix(".csv").read_text(encoding="utf-8-sig")
+    assert "'=orders.yxmd" in csv_report
+    assert "effort" not in csv_report
 
 
 def test_run_service_generates_platform_scoped_informatica_artifacts(

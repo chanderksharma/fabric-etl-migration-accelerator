@@ -1,0 +1,75 @@
+/// Completed assessment executions retained for historical comparison.
+table AssessmentRun
+
+	column RunId
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: RunId
+
+	/// Analyst-friendly label for an assessment execution.
+	column RunLabel
+		dataType: string
+		summarizeBy: none
+		sourceColumn: RunLabel
+
+	/// UTC time when assessment processing started.
+	column StartedAtUtc
+		dataType: dateTime
+		formatString: General Date
+		summarizeBy: none
+		sourceColumn: StartedAtUtc
+
+	/// UTC time when assessment processing completed.
+	column CompletedAtUtc
+		dataType: dateTime
+		formatString: General Date
+		summarizeBy: none
+		sourceColumn: CompletedAtUtc
+
+	/// Final execution state for the assessment run.
+	column Status
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Status
+
+	column WorkflowCount
+		dataType: int64
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: WorkflowCount
+
+	column FailedCount
+		dataType: int64
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: FailedCount
+
+	column SkippedCount
+		dataType: int64
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: SkippedCount
+
+	/// Version of the deterministic assessment rules used for the run.
+	column RulesVersion
+		dataType: string
+		summarizeBy: none
+		sourceColumn: RulesVersion
+
+	/// Identifies the newest successfully completed assessment run.
+	column IsLatestCompletedRun
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: IsLatestCompletedRun
+
+	partition AssessmentRun = entity
+		mode: directLake
+		source
+			entityName: etl_assessment_run
+			schemaName: dbo
+			expressionSource: 'DirectLake - ETL Migration Assessment Model'

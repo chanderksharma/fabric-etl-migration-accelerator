@@ -1,0 +1,16 @@
+EVALUATE
+TOPN(
+    500,
+    CALCULATETABLE(
+        SUMMARIZECOLUMNS(
+            'Dependency'[WorkflowKey],
+            'WorkflowAssessment'[WorkflowPath],
+            'Dependency'[DependencyReference],
+            "Dependency Count", [Dependencies]
+        ),
+        'AssessmentRun'[IsLatestCompletedRun] = TRUE()
+    ),
+    'Dependency'[WorkflowKey], ASC,
+    'Dependency'[DependencyReference], ASC
+)
+ORDER BY 'Dependency'[WorkflowKey] ASC, 'Dependency'[DependencyReference] ASC

@@ -1,0 +1,23 @@
+EVALUATE
+TOPN(
+    1000,
+    CALCULATETABLE(
+        SUMMARIZECOLUMNS(
+            'WorkflowNode'[WorkflowKey],
+            'WorkflowAssessment'[WorkflowPath],
+            'WorkflowNode'[NodeId],
+            'WorkflowNode'[NodeName],
+            'WorkflowNode'[NodeLabel],
+            'WorkflowNode'[Plugin],
+            'WorkflowNode'[SupportCategory],
+            'WorkflowNode'[Disabled],
+            'WorkflowNode'[X],
+            'WorkflowNode'[Y],
+            "Node Rows", COUNTROWS('WorkflowNode')
+        ),
+        'AssessmentRun'[IsLatestCompletedRun] = TRUE()
+    ),
+    'WorkflowNode'[WorkflowKey], ASC,
+    'WorkflowNode'[NodeId], ASC
+)
+ORDER BY 'WorkflowNode'[WorkflowKey] ASC, 'WorkflowNode'[NodeId] ASC

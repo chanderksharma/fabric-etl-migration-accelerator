@@ -4,11 +4,15 @@ from dataclasses import replace
 from pathlib import Path
 
 from accelerator.assessment import WorkflowParseError, assess_workflow
-from accelerator.capacity import CapacityStaticProfile, build_informatica_capacity_profile
+from accelerator.capacity import (
+    CapacityStaticProfile,
+    build_capacity_profile,
+    build_informatica_capacity_profile,
+)
 from accelerator.discovery import DiscoveryService
 from accelerator.etl_assessment import EtlAssessment, assess_package
-from accelerator.etl_generation import apply_native_route
 from accelerator.etl_ir import SourcePlatform
+from accelerator.etl_routing import apply_alteryx_native_route, apply_native_route
 from accelerator.schemas import (
     DiscoverySummaryResponse,
     EstateAssessmentResponse,
@@ -43,7 +47,9 @@ class AssessmentApplication:
             skipped=[SkippedItemResponse.model_validate(item) for item in summary.skipped],
         )
 
-    def assess(self, path: Path) -> EstateAssessmentResponse:
+    def assess(
+        self, path: Path, *, route_alteryx: bool = False
+    ) -> EstateAssessmentResponse:
         """Assess every discovered workflow with per-file fault isolation."""
         summary = self._discovery.discover(path)
         assessments: list[WorkflowAssessmentResponse] = []
@@ -52,12 +58,14 @@ class AssessmentApplication:
             try:
                 with self._discovery.staged_workflow(candidate) as workflow_path:
                     if candidate.source_platform is SourcePlatform.ALTERYX:
-                        assessment = replace(
-                            assess_workflow(workflow_path),
-                            path=candidate.display_path,
-                        )
+                        assessment = assess_workflow(workflow_path)
+                        if route_alteryx:
+                            assessment = apply_alteryx_native_route(workflow_path, assessment)
+                        assessment = replace(assessment, path=candidate.display_path)
                         assessments.append(
-                            WorkflowAssessmentResponse.model_validate(assessment)
+                            WorkflowAssessmentResponse.model_validate(assessment).model_copy(
+                                update={"capacity_profile": build_capacity_profile(workflow_path)}
+                            )
                         )
                     else:
                         detected = self._source_registry.detect(

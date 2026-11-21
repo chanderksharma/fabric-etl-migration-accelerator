@@ -1,0 +1,75 @@
+/// Bounded source workflow nodes used for technical evidence.
+table WorkflowNode
+
+	column RunId
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: RunId
+
+	column WorkflowKey
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: WorkflowKey
+
+	/// Source node identifier.
+	column NodeId
+		dataType: string
+		summarizeBy: none
+		sourceColumn: NodeId
+
+	/// Parsed source node name.
+	column NodeName
+		dataType: string
+		summarizeBy: none
+		sourceColumn: NodeName
+
+	/// Analyst-friendly source node label.
+	column NodeLabel
+		dataType: string
+		summarizeBy: none
+		sourceColumn: NodeLabel
+
+	/// Redacted source plugin or component identifier.
+	column Plugin
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Plugin
+
+	/// Native, transform, redesign, or unsupported implementation category.
+	column SupportCategory
+		dataType: string
+		summarizeBy: none
+		sourceColumn: SupportCategory
+
+	/// Whether the source node is disabled.
+	column Disabled
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: Disabled
+
+	/// Optional source-canvas X coordinate.
+	column X
+		dataType: double
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: X
+
+	/// Optional source-canvas Y coordinate.
+	column Y
+		dataType: double
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: Y
+
+	partition WorkflowNode = entity
+		mode: directLake
+		source
+			entityName: etl_workflow_node
+			schemaName: dbo
+			expressionSource: 'DirectLake - ETL Migration Assessment Model'

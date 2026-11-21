@@ -1,0 +1,47 @@
+/// Source tool counts and implementation support categories by workflow.
+table ToolInventory
+
+	/// Total parsed source components represented by filtered tool inventory rows.
+	measure 'Mapped Components' = SUM(ToolInventory[ToolCount])
+		formatString: #,##0
+		displayFolder: Technical Evidence
+
+	column RunId
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: RunId
+
+	column WorkflowKey
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: WorkflowKey
+
+	/// Parsed source component type.
+	column ToolName
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ToolName
+
+	/// Count of the source component in the workflow.
+	column ToolCount
+		dataType: int64
+		formatString: #,##0
+		summarizeBy: sum
+		sourceColumn: ToolCount
+
+	/// Native, transform, redesign, or unsupported implementation category.
+	column SupportCategory
+		dataType: string
+		summarizeBy: none
+		sourceColumn: SupportCategory
+
+	partition ToolInventory = entity
+		mode: directLake
+		source
+			entityName: etl_tool_inventory
+			schemaName: dbo
+			expressionSource: 'DirectLake - ETL Migration Assessment Model'

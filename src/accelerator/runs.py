@@ -26,7 +26,6 @@ from accelerator.application import assessment_response
 from accelerator.assessment import (
     REGISTRY_VERSION,
     RULES_VERSION,
-    WorkflowAssessment,
     assess_workflow,
 )
 from accelerator.capacity import (
@@ -41,7 +40,6 @@ from accelerator.capacity import (
 )
 from accelerator.discovery import DiscoveryService
 from accelerator.domain import WorkflowCandidate
-from accelerator.effort import remaining_effort_days
 from accelerator.etl_assessment import (
     ASSESSMENT_RULES_VERSION,
     REGISTRY_VERSIONS,
@@ -52,7 +50,7 @@ from accelerator.etl_generation import (
     compile_asset,
 )
 from accelerator.etl_ir import IR_VERSION, EtlAsset, EtlPackage, SourcePlatform
-from accelerator.etl_routing import apply_native_route
+from accelerator.etl_routing import apply_alteryx_native_route, apply_native_route
 from accelerator.evidence import EvidenceResponse, etl_asset_evidence, workflow_evidence
 from accelerator.generation import COMPILER_VERSION, Candidate, Target, generate_candidate
 from accelerator.graph import GRAPH_VERSION, WorkflowParseError, redact
@@ -131,63 +129,6 @@ class Run(BaseModel):
     cache_hits: int
     error: str | None = None
     result: EstateAssessmentResponse | None = None
-
-
-def _apply_native_route(path: Path, assessment: WorkflowAssessment) -> WorkflowAssessment:
-    if (
-        assessment.unsupported_tools
-        and {"Dataflow Gen2", "Fabric Notebook"}.issubset(assessment.target_components)
-    ):
-        dataflow = generate_candidate(path, "dataflow")
-        notebook = generate_candidate(path, "notebook")
-        if dataflow.deployable and notebook.deployable:
-            bindings = (*dataflow.required_bindings, *notebook.required_bindings)
-            return replace(
-                assessment,
-                recommended_target="Mixed Fabric solution",
-                target_components=(
-                    "Dataflow Gen2",
-                    "Fabric Notebook",
-                    "Fabric Pipeline",
-                ),
-                recommendation_reason=(
-                    assessment.recommendation_reason
-                    + "; generated bundle orchestrates Dataflow Gen2 then Fabric Notebook"
-                ),
-                estimated_effort_days=remaining_effort_days(
-                    required_bindings=bindings,
-                ),
-            )
-    labels: tuple[tuple[Target, str], ...] = (
-        ("dataflow", "Dataflow Gen2"),
-        ("notebook", "Fabric Notebook"),
-    )
-    for target, label in labels:
-        candidate = generate_candidate(path, target)
-        if not candidate.deployable:
-            continue
-        reason = assessment.recommendation_reason
-        if assessment.recommended_target != label:
-            reason += f"; native compiler routes deployment to {label}"
-        return replace(
-            assessment,
-            recommended_target=label,
-            target_components=(label,),
-            recommendation_reason=reason,
-            estimated_effort_days=remaining_effort_days(
-                required_bindings=candidate.required_bindings,
-            ),
-        )
-    return replace(
-        assessment,
-        recommended_target="Manual rework",
-        target_components=(),
-        recommendation_reason=(
-            assessment.recommendation_reason
-            + "; no deployable native Dataflow or Notebook implementation is available"
-        ),
-        migration_wave="Redesign",
-    )
 
 
 class RunService:
@@ -598,7 +539,7 @@ class RunService:
                 assessments = [
                     WorkflowAssessmentResponse.model_validate(
                         replace(
-                            _apply_native_route(path, assess_workflow(path)),
+                            apply_alteryx_native_route(path, assess_workflow(path)),
                             path=item.display_path,
                         )
                     )

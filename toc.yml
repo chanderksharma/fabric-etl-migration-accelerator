@@ -24,6 +24,12 @@
       href: docs/Planning/local-architecture-decisions.md
     - name: Implementation Plan
       href: docs/Planning/accelerator-implementation-plan.md
+    - name: Pluggable Architecture Business Requirements
+      href: docs/Planning/pluggable-architecture-business-requirements.md
+    - name: Pluggable Architecture Analysis and Target Approach
+      href: docs/Planning/pluggable-architecture-analysis-and-approach.md
+    - name: Pluggable Architecture Delivery Team Draft
+      href: docs/Planning/pluggable-architecture-delivery-team-draft.md
 - name: Security & Quality
   items:
     - name: Threat Model (STRIDE)

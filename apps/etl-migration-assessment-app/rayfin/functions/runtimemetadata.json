@@ -1,0 +1,201 @@
+{
+  "schemaVersion": "3.0",
+  "functions": [
+    {
+      "functionName": "uploadWorkflow",
+      "delegateParameters": [
+        {
+          "name": "fileName",
+          "type": "string",
+          "optional": false,
+          "hasDefault": false,
+          "position": 0,
+          "isFabricParameter": false
+        },
+        {
+          "name": "contentBase64",
+          "type": "string",
+          "optional": false,
+          "hasDefault": false,
+          "position": 1,
+          "isFabricParameter": false
+        },
+        {
+          "name": "inputFolder",
+          "type": "string",
+          "optional": false,
+          "hasDefault": false,
+          "position": 2,
+          "isFabricParameter": false
+        },
+        {
+          "name": "ctx",
+          "type": "RayfinContext",
+          "optional": false,
+          "hasDefault": false,
+          "position": 3,
+          "isFabricParameter": false
+        }
+      ],
+      "contextAudiences": [
+        "Fabric",
+        "Storage"
+      ],
+      "capabilities": []
+    },
+    {
+      "functionName": "getDeploymentConfiguration",
+      "delegateParameters": [
+        {
+          "name": "ctx",
+          "type": "RayfinContext",
+          "optional": false,
+          "hasDefault": false,
+          "position": 0,
+          "isFabricParameter": false
+        }
+      ],
+      "contextAudiences": [
+        "Fabric",
+        "Storage"
+      ],
+      "capabilities": []
+    },
+    {
+      "functionName": "previewDeployment",
+      "delegateParameters": [
+        {
+          "name": "providerValue",
+          "type": "string",
+          "optional": false,
+          "hasDefault": false,
+          "position": 0,
+          "isFabricParameter": false
+        },
+        {
+          "name": "repositoryUrl",
+          "type": "string",
+          "optional": false,
+          "hasDefault": false,
+          "position": 1,
+          "isFabricParameter": false
+        },
+        {
+          "name": "refValue",
+          "type": "string",
+          "optional": false,
+          "hasDefault": false,
+          "position": 2,
+          "isFabricParameter": false
+        },
+        {
+          "name": "conflictBehaviorValue",
+          "type": "string",
+          "optional": false,
+          "hasDefault": false,
+          "position": 3,
+          "isFabricParameter": false
+        },
+        {
+          "name": "selectionsJson",
+          "type": "string",
+          "optional": false,
+          "hasDefault": false,
+          "position": 4,
+          "isFabricParameter": false
+        },
+        {
+          "name": "ctx",
+          "type": "RayfinContext",
+          "optional": false,
+          "hasDefault": false,
+          "position": 5,
+          "isFabricParameter": false
+        }
+      ],
+      "contextAudiences": [
+        "Fabric",
+        "Storage"
+      ],
+      "capabilities": []
+    },
+    {
+      "functionName": "dispatchDeployment",
+      "delegateParameters": [
+        {
+          "name": "confirmationToken",
+          "type": "string",
+          "optional": false,
+          "hasDefault": false,
+          "position": 0,
+          "isFabricParameter": false
+        },
+        {
+          "name": "ctx",
+          "type": "RayfinContext",
+          "optional": false,
+          "hasDefault": false,
+          "position": 1,
+          "isFabricParameter": false
+        }
+      ],
+      "contextAudiences": [
+        "Fabric",
+        "Storage"
+      ],
+      "capabilities": []
+    },
+    {
+      "functionName": "startAssessment",
+      "delegateParameters": [
+        {
+          "name": "inputPath",
+          "type": "string",
+          "optional": false,
+          "hasDefault": false,
+          "position": 0,
+          "isFabricParameter": false
+        },
+        {
+          "name": "ctx",
+          "type": "RayfinContext",
+          "optional": false,
+          "hasDefault": false,
+          "position": 1,
+          "isFabricParameter": false
+        }
+      ],
+      "contextAudiences": [
+        "Fabric",
+        "Storage"
+      ],
+      "capabilities": []
+    },
+    {
+      "functionName": "getAssessmentStatus",
+      "delegateParameters": [
+        {
+          "name": "jobInstanceId",
+          "type": "string",
+          "optional": false,
+          "hasDefault": false,
+          "position": 0,
+          "isFabricParameter": false
+        },
+        {
+          "name": "ctx",
+          "type": "RayfinContext",
+          "optional": false,
+          "hasDefault": false,
+          "position": 1,
+          "isFabricParameter": false
+        }
+      ],
+      "contextAudiences": [
+        "Fabric",
+        "Storage"
+      ],
+      "capabilities": []
+    }
+  ]
+}

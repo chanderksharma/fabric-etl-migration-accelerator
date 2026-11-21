@@ -1,0 +1,115 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "d224ccc29894098065a9",
+  "position": {
+    "x": 24,
+    "y": 536,
+    "z": 1000,
+    "height": 160,
+    "width": 1232,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "WorkflowAssessment"
+                    }
+                  },
+                  "Property": "WorkflowPath"
+                }
+              },
+              "queryRef": "WorkflowAssessment.WorkflowPath",
+              "nativeQueryRef": "WorkflowPath"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "WorkflowAssessment"
+                    }
+                  },
+                  "Property": "ComplexityScore"
+                }
+              },
+              "queryRef": "WorkflowAssessment.ComplexityScore",
+              "nativeQueryRef": "ComplexityScore"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "WorkflowAssessment"
+                    }
+                  },
+                  "Property": "ComplexityBand"
+                }
+              },
+              "queryRef": "WorkflowAssessment.ComplexityBand",
+              "nativeQueryRef": "ComplexityBand"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "WorkflowAssessment"
+                    }
+                  },
+                  "Property": "RecommendedTarget"
+                }
+              },
+              "queryRef": "WorkflowAssessment.RecommendedTarget",
+              "nativeQueryRef": "RecommendedTarget"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "WorkflowAssessment"
+                    }
+                  },
+                  "Property": "MigrationWave"
+                }
+              },
+              "queryRef": "WorkflowAssessment.MigrationWave",
+              "nativeQueryRef": "MigrationWave"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {
+      "columnHeaders": [
+        {
+          "properties": {
+            "columnAdjustment": {
+              "expr": {
+                "Literal": {
+                  "Value": "'growToFit'"
+                }
+              }
+            },
+            "autoSizeColumnWidth": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

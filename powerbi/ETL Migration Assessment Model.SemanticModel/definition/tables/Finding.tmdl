@@ -1,0 +1,40 @@
+/// Bounded static assessment findings by workflow.
+table Finding
+
+	/// Number of static findings in the current filter context.
+	measure 'Static Findings' = COUNTROWS(Finding)
+		formatString: #,##0
+		displayFolder: Technical Evidence
+
+	column RunId
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: RunId
+
+	column WorkflowKey
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: WorkflowKey
+
+	/// Finding classification.
+	column FindingType
+		dataType: string
+		summarizeBy: none
+		sourceColumn: FindingType
+
+	/// Redacted, bounded finding description.
+	column FindingText
+		dataType: string
+		summarizeBy: none
+		sourceColumn: FindingText
+
+	partition Finding = entity
+		mode: directLake
+		source
+			entityName: etl_finding
+			schemaName: dbo
+			expressionSource: 'DirectLake - ETL Migration Assessment Model'

@@ -1,0 +1,9 @@
+EVALUATE
+CALCULATETABLE(
+    SUMMARIZECOLUMNS(
+        'WorkflowAssessment'[ComplexityBand],
+        "Assets", [Assessed Assets]
+    ),
+    'AssessmentRun'[IsLatestCompletedRun] = TRUE()
+)
+ORDER BY [Assets] DESC

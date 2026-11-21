@@ -1,0 +1,9 @@
+EVALUATE
+CALCULATETABLE(
+    SUMMARIZECOLUMNS(
+        'WorkflowAssessment'[MigrationWave],
+        "Assets", [Assessed Assets]
+    ),
+    'AssessmentRun'[IsLatestCompletedRun] = TRUE()
+)
+ORDER BY [Assets] DESC

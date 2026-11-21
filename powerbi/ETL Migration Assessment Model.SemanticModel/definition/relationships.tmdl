@@ -1,0 +1,27 @@
+relationship 'Assessment Run to Workflow Assessment'
+	fromColumn: WorkflowAssessment.RunId
+	toColumn: AssessmentRun.RunId
+
+relationship 'Workflow Assessment to Tool Inventory'
+	fromColumn: ToolInventory.WorkflowKey
+	toColumn: WorkflowAssessment.WorkflowKey
+
+relationship 'Workflow Assessment to Finding'
+	fromColumn: Finding.WorkflowKey
+	toColumn: WorkflowAssessment.WorkflowKey
+
+relationship 'Workflow Assessment to Dependency'
+	fromColumn: Dependency.WorkflowKey
+	toColumn: WorkflowAssessment.WorkflowKey
+
+relationship 'Workflow Assessment to Workflow Node'
+	fromColumn: WorkflowNode.WorkflowKey
+	toColumn: WorkflowAssessment.WorkflowKey
+
+relationship 'Workflow Assessment to Workflow Connection'
+	fromColumn: WorkflowConnection.WorkflowKey
+	toColumn: WorkflowAssessment.WorkflowKey
+
+relationship 'Workflow Assessment to Capacity Profile'
+	fromColumn: CapacityProfile.WorkflowKey
+	toColumn: WorkflowAssessment.WorkflowKey

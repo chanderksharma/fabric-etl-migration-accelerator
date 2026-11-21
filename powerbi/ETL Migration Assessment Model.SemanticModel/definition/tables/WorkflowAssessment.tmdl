@@ -1,0 +1,145 @@
+/// One deterministic migration assessment per workflow and run.
+table WorkflowAssessment
+
+	/// Number of workflows in the current filter context.
+	measure 'Assessed Assets' = COUNTROWS(WorkflowAssessment)
+		formatString: #,##0
+		displayFolder: Portfolio
+
+	/// Number of workflows classified as high complexity.
+	measure 'High Complexity Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(WorkflowAssessment[ComplexityBand] = "High"))
+		formatString: #,##0
+		displayFolder: Portfolio
+
+	/// Number of workflows assigned to a pilot migration wave.
+	measure 'Pilot Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(CONTAINSSTRING(LOWER(WorkflowAssessment[MigrationWave]), "pilot")))
+		formatString: #,##0
+		displayFolder: Migration Plan
+
+	/// Number of workflows assigned to a redesign migration wave.
+	measure 'Redesign Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(CONTAINSSTRING(LOWER(WorkflowAssessment[MigrationWave]), "redesign")))
+		formatString: #,##0
+		displayFolder: Migration Plan
+
+	/// Number of workflows requiring manual review or rework.
+	measure 'Manual Review Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(CONTAINSSTRING(LOWER(WorkflowAssessment[RecommendedTarget]), "manual")))
+		formatString: #,##0
+		displayFolder: Portfolio
+
+	/// Mean deterministic complexity score for filtered workflows.
+	measure 'Average Complexity Score' = AVERAGE(WorkflowAssessment[ComplexityScore])
+		formatString: #,##0.0
+		displayFolder: Portfolio
+
+	/// Total parsed source components represented by filtered workflows.
+	measure 'Source Components' = SUM(WorkflowAssessment[ToolCount])
+		formatString: #,##0
+		displayFolder: Technical Evidence
+
+	/// Total parsed source connections represented by filtered workflows.
+	measure Connections = SUM(WorkflowAssessment[ConnectionCount])
+		formatString: #,##0
+		displayFolder: Technical Evidence
+
+	column WorkflowKey
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: WorkflowKey
+
+	column RunId
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: RunId
+
+	/// Bounded workflow path relative to the assessed input folder.
+	column WorkflowPath
+		dataType: string
+		summarizeBy: none
+		sourceColumn: WorkflowPath
+
+	/// Source ETL platform detected by the parser.
+	column SourcePlatform
+		dataType: string
+		summarizeBy: none
+		sourceColumn: SourcePlatform
+
+	/// Source asset classification such as workflow, mapping, or taskflow.
+	column AssetType
+		dataType: string
+		summarizeBy: none
+		sourceColumn: AssetType
+
+	column NativeId
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: NativeId
+
+	/// Source repository folder or package folder when available.
+	column Folder
+		dataType: string
+		summarizeBy: none
+		sourceColumn: Folder
+
+	column ToolCount
+		dataType: int64
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: ToolCount
+
+	column ConnectionCount
+		dataType: int64
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: ConnectionCount
+
+	/// Deterministic technical complexity score.
+	column ComplexityScore
+		dataType: int64
+		formatString: #,##0
+		summarizeBy: none
+		sourceColumn: ComplexityScore
+
+	/// Low, Medium, or High technical complexity classification.
+	column ComplexityBand
+		dataType: string
+		summarizeBy: none
+		sourceColumn: ComplexityBand
+
+	/// Compiler-grounded recommended Microsoft Fabric implementation target.
+	column RecommendedTarget
+		dataType: string
+		summarizeBy: none
+		sourceColumn: RecommendedTarget
+
+	/// Evidence-based migration sequence classification.
+	column MigrationWave
+		dataType: string
+		summarizeBy: none
+		sourceColumn: MigrationWave
+
+	/// Deterministic explanation for the recommended target and wave.
+	column RecommendationReason
+		dataType: string
+		summarizeBy: none
+		sourceColumn: RecommendationReason
+
+	/// Tool-mapping registry version used for the assessment.
+	column RegistryVersion
+		dataType: string
+		summarizeBy: none
+		sourceColumn: RegistryVersion
+
+	partition WorkflowAssessment = entity
+		mode: directLake
+		source
+			entityName: etl_workflow_assessment
+			schemaName: dbo
+			expressionSource: 'DirectLake - ETL Migration Assessment Model'

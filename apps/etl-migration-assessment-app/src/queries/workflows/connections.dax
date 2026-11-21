@@ -1,0 +1,23 @@
+EVALUATE
+TOPN(
+    1000,
+    CALCULATETABLE(
+        SUMMARIZECOLUMNS(
+            'WorkflowConnection'[WorkflowKey],
+            'WorkflowAssessment'[WorkflowPath],
+            'WorkflowConnection'[SourceNodeId],
+            'WorkflowConnection'[TargetNodeId],
+            'WorkflowConnection'[SourceAnchor],
+            'WorkflowConnection'[TargetAnchor],
+            "Connection Rows", COUNTROWS('WorkflowConnection')
+        ),
+        'AssessmentRun'[IsLatestCompletedRun] = TRUE()
+    ),
+    'WorkflowConnection'[WorkflowKey], ASC,
+    'WorkflowConnection'[SourceNodeId], ASC,
+    'WorkflowConnection'[TargetNodeId], ASC
+)
+ORDER BY
+    'WorkflowConnection'[WorkflowKey] ASC,
+    'WorkflowConnection'[SourceNodeId] ASC,
+    'WorkflowConnection'[TargetNodeId] ASC

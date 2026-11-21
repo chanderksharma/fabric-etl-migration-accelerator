@@ -1,0 +1,17 @@
+EVALUATE
+TOPN(
+    1000,
+    CALCULATETABLE(
+        SUMMARIZECOLUMNS(
+            'Finding'[WorkflowKey],
+            'WorkflowAssessment'[WorkflowPath],
+            'Finding'[FindingType],
+            'Finding'[FindingText],
+            "Finding Count", [Static Findings]
+        ),
+        'AssessmentRun'[IsLatestCompletedRun] = TRUE()
+    ),
+    'Finding'[WorkflowKey], ASC,
+    'Finding'[FindingType], ASC
+)
+ORDER BY 'Finding'[WorkflowKey] ASC, 'Finding'[FindingType] ASC

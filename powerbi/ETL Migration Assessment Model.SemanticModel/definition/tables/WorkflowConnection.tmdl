@@ -1,0 +1,47 @@
+/// Bounded directed connections between source workflow nodes.
+table WorkflowConnection
+
+	column RunId
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: RunId
+
+	column WorkflowKey
+		dataType: string
+		isHidden
+		isAvailableInMdx: false
+		summarizeBy: none
+		sourceColumn: WorkflowKey
+
+	/// Upstream source node identifier.
+	column SourceNodeId
+		dataType: string
+		summarizeBy: none
+		sourceColumn: SourceNodeId
+
+	/// Downstream target node identifier.
+	column TargetNodeId
+		dataType: string
+		summarizeBy: none
+		sourceColumn: TargetNodeId
+
+	/// Upstream source anchor.
+	column SourceAnchor
+		dataType: string
+		summarizeBy: none
+		sourceColumn: SourceAnchor
+
+	/// Downstream target anchor.
+	column TargetAnchor
+		dataType: string
+		summarizeBy: none
+		sourceColumn: TargetAnchor
+
+	partition WorkflowConnection = entity
+		mode: directLake
+		source
+			entityName: etl_workflow_connection
+			schemaName: dbo
+			expressionSource: 'DirectLake - ETL Migration Assessment Model'

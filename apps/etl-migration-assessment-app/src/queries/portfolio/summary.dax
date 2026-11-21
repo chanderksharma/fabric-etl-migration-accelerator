@@ -1,0 +1,16 @@
+EVALUATE
+CALCULATETABLE(
+    ROW(
+        "Assessed Assets", [Assessed Assets],
+        "High Complexity Assets", [High Complexity Assets],
+        "Pilot Assets", [Pilot Assets],
+        "Redesign Assets", [Redesign Assets],
+        "Manual Review Assets", [Manual Review Assets],
+        "Average Complexity Score", [Average Complexity Score],
+        "Source Components", [Source Components],
+        "Connections", [Connections],
+        "Dependencies", [Dependencies],
+        "Static Findings", [Static Findings]
+    ),
+    'AssessmentRun'[IsLatestCompletedRun] = TRUE()
+)

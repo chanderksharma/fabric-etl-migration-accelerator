@@ -1,0 +1,9 @@
+EVALUATE
+CALCULATETABLE(
+    SUMMARIZECOLUMNS(
+        'ToolInventory'[SupportCategory],
+        "Tool Count", SUM('ToolInventory'[ToolCount])
+    ),
+    'AssessmentRun'[IsLatestCompletedRun] = TRUE()
+)
+ORDER BY [Tool Count] DESC

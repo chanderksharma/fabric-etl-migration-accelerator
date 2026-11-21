@@ -30,3 +30,6 @@ _site/
 .vscode/mcp.json
 .DS_Store
 
+# Power BI local preview state
+**/.pbi/
+

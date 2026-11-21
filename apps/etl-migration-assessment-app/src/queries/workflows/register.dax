@@ -1,0 +1,27 @@
+EVALUATE
+TOPN(
+    100,
+    CALCULATETABLE(
+        SUMMARIZECOLUMNS(
+            'WorkflowAssessment'[WorkflowKey],
+            'WorkflowAssessment'[WorkflowPath],
+            'WorkflowAssessment'[SourcePlatform],
+            'WorkflowAssessment'[AssetType],
+            'WorkflowAssessment'[NativeId],
+            'WorkflowAssessment'[Folder],
+            'WorkflowAssessment'[ToolCount],
+            'WorkflowAssessment'[ConnectionCount],
+            'WorkflowAssessment'[ComplexityScore],
+            'WorkflowAssessment'[ComplexityBand],
+            'WorkflowAssessment'[RecommendedTarget],
+            'WorkflowAssessment'[MigrationWave],
+            'WorkflowAssessment'[RecommendationReason],
+            'WorkflowAssessment'[RegistryVersion],
+            "Assets", [Assessed Assets]
+        ),
+        'AssessmentRun'[IsLatestCompletedRun] = TRUE()
+    ),
+    'WorkflowAssessment'[ComplexityScore], DESC,
+    'WorkflowAssessment'[WorkflowPath], ASC
+)
+ORDER BY 'WorkflowAssessment'[ComplexityScore] DESC, 'WorkflowAssessment'[WorkflowPath] ASC

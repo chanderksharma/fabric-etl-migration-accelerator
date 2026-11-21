@@ -1,0 +1,143 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "95655c57abcccd561a23",
+  "position": {
+    "x": 24,
+    "y": 536,
+    "z": 1000,
+    "height": 160,
+    "width": 1232,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "AssessmentRun"
+                    }
+                  },
+                  "Property": "RunLabel"
+                }
+              },
+              "queryRef": "AssessmentRun.RunLabel",
+              "nativeQueryRef": "RunLabel"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "AssessmentRun"
+                    }
+                  },
+                  "Property": "Status"
+                }
+              },
+              "queryRef": "AssessmentRun.Status",
+              "nativeQueryRef": "Status"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "AssessmentRun"
+                    }
+                  },
+                  "Property": "RulesVersion"
+                }
+              },
+              "queryRef": "AssessmentRun.RulesVersion",
+              "nativeQueryRef": "RulesVersion"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "AssessmentRun"
+                    }
+                  },
+                  "Property": "IsLatestCompletedRun"
+                }
+              },
+              "queryRef": "AssessmentRun.IsLatestCompletedRun",
+              "nativeQueryRef": "IsLatestCompletedRun"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "WorkflowAssessment"
+                    }
+                  },
+                  "Property": "Assessed Assets"
+                }
+              },
+              "queryRef": "WorkflowAssessment.Assessed Assets",
+              "nativeQueryRef": "Assessed Assets"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "WorkflowAssessment"
+                    }
+                  },
+                  "Property": "High Complexity Assets"
+                }
+              },
+              "queryRef": "WorkflowAssessment.High Complexity Assets",
+              "nativeQueryRef": "High Complexity Assets"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "WorkflowAssessment"
+                    }
+                  },
+                  "Property": "Manual Review Assets"
+                }
+              },
+              "queryRef": "WorkflowAssessment.Manual Review Assets",
+              "nativeQueryRef": "Manual Review Assets"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {
+      "columnHeaders": [
+        {
+          "properties": {
+            "columnAdjustment": {
+              "expr": {
+                "Literal": {
+                  "Value": "'growToFit'"
+                }
+              }
+            },
+            "autoSizeColumnWidth": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
