@@ -17,7 +17,7 @@ The **Microsoft Fabric ETL Migration Accelerator** solves these delivery challen
 | **Compiler-Grounded Fabric Generation** | Compiles supported DAGs natively into **Dataflow Gen2** (`mashup.pq` + `queryMetadata.json`), **Fabric PySpark Notebooks** (`.ipynb`), and **Fabric Data Pipelines** (`pipeline-content.json`), while isolating unsupported operations as explicit, non-deployable `scaffold` diagnostics. |
 | **Secretless CI/CD & Governed ALM** | GitHub Actions and GitLab CI authenticate through Microsoft Entra Workload Identity Federation to deploy Development artifacts, provision Fabric Deployment Pipelines, and promote reviewed Selected/All scopes through protected Test and Production environments. |
 
-![End-to-End Architecture Overview](docs/Architecture/arch-01-end-to-end-accelerator.vsdx.fig.png)
+![Pluggable & Extensible ETL Migration Solution Architecture](docs/Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png)
 
 ---
 
@@ -25,8 +25,8 @@ The **Microsoft Fabric ETL Migration Accelerator** solves these delivery challen
 
 Take these quick actions depending on your role:
 
-1. **Explore the Architecture & Capabilities**: Read [System Architecture](docs/Architecture/system-architecture.md), [ADR-001: Source Adapters & Canonical ETL IR](docs/Architecture/ADR-001-etl-source-adapters.md), and [Release Notes v1.0.0](docs/Release/release-notes.md).
-2. **Run a 5-Minute Synthetic Walkthrough**: Follow the step-by-step [Getting Started Guide](docs/Guides/getting-started.md) using the repository's built-in synthetic Alteryx (`alteryx-workflows/`) and Informatica (`tests/fixtures/`) estates.
+1. **Explore the Architecture & Capabilities**: Read [System Architecture](docs/Architecture/system-architecture.md), [ADR-001: Source Adapters & Canonical ETL IR](docs/Architecture/ADR-001-etl-source-adapters.md), [Building Source and Target Plugins](docs/Guides/building-plugins.md), and [Release Notes v1.0.0](docs/Release/release-notes.md).
+2. **Walk Through Every Feature**: Follow the [User Guide](docs/Guides/user-guide.md) and [Getting Started Guide](docs/Guides/getting-started.md) using the repository's built-in synthetic Alteryx (`alteryx-workflows/`) and Informatica (`tests/fixtures/`) estates.
 3. **Configure Fabric Dev CI/CD**: Follow [Fabric CI/CD Setup](docs/Guides/fabric-ci-cd-setup.md) to connect GitHub Actions or GitLab CI to a Microsoft Fabric `dev` workspace via Entra OIDC.
 4. **Ask Questions or Plan a Contribution**: Open a GitHub Issue to propose a new Alteryx plugin or Informatica transformation mapping, and review [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
@@ -38,7 +38,13 @@ See [Installation and Runtime Modes](docs/Guides/installation.md) for full works
 
 ### Local Analyst Web UI & API
 
-Build the React UI once, then start the loopback FastAPI + UI server:
+Build and start the loopback FastAPI + UI server directly from built `.whl` packages (`dist/*.whl` installed into `build\app-venv`):
+
+```powershell
+pwsh -NoProfile -File scripts\Start-LocalApp.ps1
+```
+
+Or run in editable developer mode:
 
 ```powershell
 uv sync --extra dev --locked
@@ -53,7 +59,8 @@ Open **`http://127.0.0.1:8050`**:
 
 1. Choose **Alteryx** or **Informatica**, then select files, a `.zip`/`.yxzp` archive, or a local folder. Each assessment scopes one source family at a time; switching workflow family clears the active selection.
 2. Review discovered and skipped items, then click **Confirm and assess** (runs against an immutable snapshot using four bounded file workers with cooperative cancellation and SQLite WAL recovery).
-3. Use **Portfolio** (and the six-tab workflow drawer or **Technical Details** register — see [Prototype UI Review](docs/Quality/prototype-ui-review.md)) to export JSON/CSV reports, generate Fabric definitions, or download workflow-level deployment ZIP bundles (`generated-fabric-workflows/alteryx-workflows/`, `generated-fabric-workflows/informatica-powercenter/`, and `generated-fabric-workflows/informatica-idmc/`).
+3. Use **Portfolio** (and the six-tab workflow drawer or **Technical Details** register — see [Prototype UI Review](docs/Quality/prototype-ui-review.md)) to inspect estate readiness and export JSON/CSV reports.
+4. Switch to **Fabric Deployment** (or click **Open Fabric Deployment** from **Portfolio** / a workflow's **Fabric deployment** drawer tab) to pick the target platform, generate Fabric definitions (`Dataflow Gen2`, `Fabric Notebook`, `Data Pipeline`), download ZIP packages (`generated-fabric-workflows/`), run dry-run validation, and dispatch GitHub Actions or GitLab CI.
 
 ### Windows Desktop Utility
 
@@ -91,7 +98,7 @@ The repository is structured as a `uv` workspace producing independent wheels wi
 * `packages/etl-portfolio-assessment` (`etl-portfolio-assessment`): Target-neutral assessment engine and stateless `etl-assess` CLI (`etl-assess preview|assess|evidence <path>`).
 * `packages/etl-target-fabric` (`etl-target-fabric`): Microsoft Fabric provider, F-SKU capacity model, M/PySpark/Pipeline compilers, artifact writer, and stateless `etl-fabric` CLI (`etl-fabric evaluate|compile <path>`).
 
-See [Building Source and Target Plugins](docs/Guides/building-plugins.md) and [Figure ARCH-02](docs/Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png).
+See [PyPI Packages and Publishing Guide](docs/Guides/pypi-packages.md), [Building Source and Target Plugins](docs/Guides/building-plugins.md), and [Figure ARCH-02](docs/Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png).
 
 ### Local Loopback Container
 
@@ -104,7 +111,7 @@ docker run --rm -p 127.0.0.1:8050:8050 -v fabric-etl-state:/data fabric-etl-acce
 
 ### Fabric Workspace Deployment (FEMA)
 
-Deploy the full Fabric-native analytics and intake stack into a Microsoft Fabric workspace with one idempotent pass. The installer creates or reuses a `FEMA` workspace folder (configurable with `-FolderName`) and places the Lakehouse, Fabric Runtime 2.0 Environment with the accelerator wheel, [portfolio assessment notebook](notebooks/fabric-portfolio-assessment.ipynb), eight initialized `etl_*` Delta tables, Direct Lake semantic model, six-page Power BI report, and [Fabric analyst app](apps/etl-migration-assessment-app/) inside it.
+Deploy the full Fabric-native analytics and intake stack into a Microsoft Fabric workspace with one idempotent pass. The installer creates or reuses a `FEMA` workspace folder (configurable with `-FolderName`) and places the Lakehouse, Fabric Runtime 2.0 Environment with the three decoupled library wheels (`etl-migration-core`, `etl-portfolio-assessment`, `etl-target-fabric`), [portfolio assessment notebook](notebooks/fabric-portfolio-assessment.ipynb), eight initialized `etl_*` Delta tables, Direct Lake semantic model, five-page Power BI report, and [Fabric analyst app](apps/etl-migration-assessment-app/) inside it.
 
 Validate local payloads without changing Fabric:
 

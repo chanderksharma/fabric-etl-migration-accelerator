@@ -250,6 +250,52 @@
 .reference-workspace .code-details { margin-top: 10px; }
 .reference-workspace .code-details summary { padding: 10px 14px; font-size: 13px; }
 .reference-workspace .deploy-link { display: inline-block; margin-top: 8px; font-weight: 600; }
+.reference-workspace .target-platform-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.reference-workspace .target-platform-card {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--cp-border);
+  background: var(--cp-surface);
+  color: var(--cp-text);
+}
+.reference-workspace .target-platform-card.selected {
+  border-color: var(--cp-accent);
+  background: var(--cp-accent-soft);
+}
+.reference-workspace .target-platform-card.placeholder {
+  opacity: 0.72;
+  cursor: not-allowed;
+  background: var(--cp-surface-soft);
+}
+.reference-workspace .target-platform-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.reference-workspace .target-platform-card p {
+  margin: 0;
+  color: var(--cp-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.reference-workspace .workflow-deploy-picker {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.reference-workspace .workflow-deploy-picker label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cp-text-muted);
+}
 @media (max-width: 760px) {
   .reference-workspace .modeGrid.twoColumn { grid-template-columns: 1fr; }
 }

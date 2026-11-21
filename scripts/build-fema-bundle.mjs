@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,6 +7,19 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultOut = path.join(root, "dist", "fema-deployment-bundle");
 const options = parseOptions(process.argv.slice(2));
 const outDir = path.resolve(options.out || defaultOut);
+
+if (options.buildWheels) {
+  const build = spawnSync("uv", ["build", "--all-packages", "--wheel"], {
+    cwd: root,
+    stdio: "inherit",
+  });
+  if (build.error) {
+    throw build.error;
+  }
+  if (build.status !== 0) {
+    throw new Error("uv build --all-packages --wheel failed.");
+  }
+}
 
 const resolvedOut = path.resolve(outDir);
 if (!resolvedOut.startsWith(root + path.sep)) {
@@ -98,11 +112,15 @@ console.log(
 );
 
 function parseOptions(args) {
-  const result = { requireWheel: false };
+  const result = { requireWheel: false, buildWheels: false };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--require-wheel") {
       result.requireWheel = true;
+      continue;
+    }
+    if (arg === "--build-wheels") {
+      result.buildWheels = true;
       continue;
     }
     const value = args[index + 1];

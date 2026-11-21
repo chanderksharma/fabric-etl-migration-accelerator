@@ -1,22 +1,20 @@
 ---
 title: System Architecture
-description: End-to-end accelerator architecture, compiler boundaries, and Fabric ALM topology
-ms.date: 2026-11-17
+description: End-to-end accelerator architecture, pluggable packages, compiler boundaries, and Fabric ALM topology
+ms.date: 2026-11-21
 ---
 
 ## Overview
 
 This architecture covers the end-to-end component boundaries, canonical
-intermediate representation, and deployment topology of the **Microsoft Fabric
-ETL Migration Accelerator**.
+intermediate representation, pluggable target-platform SPI, and deployment
+topology of the **Microsoft Fabric ETL Migration Accelerator**.
 
-![End-to-End Architecture Overview](arch-01-end-to-end-accelerator.vsdx.fig.png)
+![Pluggable Solution Architecture](arch-02-pluggable-solution-architecture.vsdx.fig.png)
 
 ## Pluggable Package and Extension Architecture
 
-The codebase is organized as a `uv` workspace separating canonical ETL IR, target-neutral portfolio assessment, target-platform providers, and the runtime application shell. See [Building Source and Target Plugins](../Guides/building-plugins.md) and the [Pluggable Architecture Implementation Plan](../Planning/pluggable-architecture-implementation-plan.md).
-
-![Pluggable Solution Architecture](arch-02-pluggable-solution-architecture.vsdx.fig.png)
+The codebase is organized as a `uv` workspace separating canonical ETL IR, target-neutral portfolio assessment, target-platform providers, and the runtime application shell. In the local React workbench (`apps/web`), portfolio assessment (**Portfolio**) is separated from target-platform selection, Fabric code generation, and GitOps dispatch (**Fabric Deployment**). See [Building Source and Target Plugins](../Guides/building-plugins.md) and the [Pluggable Architecture Implementation Plan](../Planning/pluggable-architecture-implementation-plan.md).
 
 | Package | PyPI distribution | Responsibilities |
 | :--- | :--- | :--- |

@@ -401,7 +401,13 @@ test("restores a run within the same browser session and offers real exports", a
   })).toHaveAttribute(
     "href", "/api/runs/saved-run/export?format=csv",
   );
-  expect(within(portfolio).getByRole("link", {
+  expect(within(portfolio).getByRole("button", {
+    name: "Open Fabric Deployment →",
+    hidden: true,
+  })).toBeInTheDocument();
+  const deploySection = document.getElementById("fabric-deployment");
+  if (!deploySection) throw new Error("Missing fabric deployment section");
+  expect(within(deploySection).getByRole("link", {
     name: "Download Notebook package",
     hidden: true,
   })).toHaveAttribute(
@@ -427,13 +433,39 @@ test("preserves the requested workspace page while restoring a completed run", a
   );
 });
 
-test("generates and displays explicit unvalidated review candidates", async () => {
+test("generates and displays explicit unvalidated review candidates on Fabric Deployment tab", async () => {
   sessionStorage.setItem("accelerator-run-v6", "saved-run");
   vi.stubGlobal("fetch", vi.fn()
     .mockResolvedValueOnce({ ok: true, json: async () => completedRun() })
     .mockResolvedValueOnce({
       ok: true, json: async () => ({
         scenarios: [], workflows: [], assumptions: [],
+      }),
+    })
+    .mockResolvedValueOnce({
+      ok: true, json: async () => ({
+        targets: [
+          {
+            platform_id: "fabric",
+            display_name: "Microsoft Fabric",
+            provider_version: "1.0.0",
+            supported_ir_versions: ["1.0.0"],
+            implemented: true,
+            status: "ready",
+            capabilities: ["evaluate", "capacity", "codegen", "dry_run"],
+            description: "Microsoft Fabric provider",
+          },
+          {
+            platform_id: "databricks",
+            display_name: "Azure Databricks",
+            provider_version: "0.0.0-placeholder",
+            supported_ir_versions: ["1.0.0"],
+            implemented: false,
+            status: "placeholder",
+            capabilities: [],
+            description: "Roadmap placeholder",
+          },
+        ],
       }),
     })
     .mockResolvedValueOnce({
@@ -446,6 +478,13 @@ test("generates and displays explicit unvalidated review candidates", async () =
     }));
   render(<App />);
   await screen.findByRole("heading", {name: "Portfolio Migration Summary"});
+  expect(screen.queryByRole("button", { name: "Generate Notebook previews" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Open Fabric Deployment →" })).toBeInTheDocument();
+
+  fireEvent.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Fabric Deployment" }));
+  expect(await screen.findByRole("heading", { name: "Fabric Code Generation & Deployment" })).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: /Azure Databricks/ })).toBeDisabled();
+
   fireEvent.click(await screen.findByRole("button", { name: "Generate Notebook previews" }));
   expect(await screen.findByRole("heading", {
     name: "orders.yxmd: generated_unvalidated",
@@ -465,11 +504,22 @@ test("discards a late generation response after the analyst changes selection", 
   let resolveResponse!: (response: PreviewResponse) => void;
   const pending = new Promise<PreviewResponse>((resolve) => { resolveResponse = resolve; });
   sessionStorage.setItem("accelerator-run-v6", "saved-run");
-  vi.stubGlobal("fetch", vi.fn()
-    .mockResolvedValueOnce({ ok: true, json: async () => completedRun() })
-    .mockReturnValueOnce(pending));
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/api/runs/saved-run/generate")) {
+      return pending as unknown as Response;
+    }
+    if (url.includes("/api/targets")) {
+      return { ok: true, json: async () => ({ targets: [] }) } as unknown as Response;
+    }
+    if (url.includes("/capacity")) {
+      return { ok: true, json: async () => ({ scenarios: [], workflows: [], assumptions: [] }) } as unknown as Response;
+    }
+    return { ok: true, json: async () => completedRun() } as unknown as Response;
+  }));
   render(<App />);
   await screen.findByRole("heading", {name: "Portfolio Migration Summary"});
+  fireEvent.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Fabric Deployment" }));
   fireEvent.click(await screen.findByRole("button", { name: "Generate Notebook previews" }));
   fireEvent.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "New Assessment" }));
   expect(sessionStorage.getItem("accelerator-run-v6")).toBeNull();

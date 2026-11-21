@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from accelerator.targets.fabric import FabricTargetProvider
-from accelerator.targets.placeholders import builtin_placeholder_providers
-from accelerator.targets.registry import TargetPlatformRegistry
+from etl_migration_core.targets import (
+    TargetPlatformRegistry,
+    builtin_placeholder_providers,
+)
+from etl_target_fabric.provider import FabricTargetProvider
 
 
-def create_default_target_registry(*, load_entry_points: bool = True) -> TargetPlatformRegistry:
+def create_default_target_registry(
+    *, load_entry_points: bool = True
+) -> TargetPlatformRegistry:
     """Build the target registry with Microsoft Fabric and roadmap placeholders."""
     registry = TargetPlatformRegistry(
         (

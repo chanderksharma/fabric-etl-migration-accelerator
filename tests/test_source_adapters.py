@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from accelerator.etl_ir import EtlPackage, SourcePlatform
-from accelerator.sources.base import SourceMatch
-from accelerator.sources.defaults import create_default_registry
-from accelerator.sources.registry import (
+from etl_migration_core.contracts.ir import EtlPackage, SourcePlatform
+from etl_migration_core.sources.base import SourceMatch
+from etl_migration_core.sources.defaults import create_default_registry
+from etl_migration_core.sources.registry import (
     AmbiguousSourceFormatError,
     SourceAdapterRegistry,
     UnknownSourceFormatError,

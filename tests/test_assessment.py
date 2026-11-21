@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from accelerator.assessment import assess_workflow
+from etl_target_fabric.assessment.workflow import assess_workflow
 
 
 def test_assessment_inventories_tools_and_recommends_dataflow(tmp_path: Path) -> None:

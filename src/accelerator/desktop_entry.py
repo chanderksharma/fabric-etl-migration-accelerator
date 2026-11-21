@@ -1,6 +1,6 @@
-"""PyInstaller entry point for the Windows desktop utility."""
+"""Top-level Windows desktop PyInstaller entrypoint."""
 
-from accelerator.desktop import desktop_entry
+from accelerator.desktop.window import desktop_entry
 
 if __name__ == "__main__":
     raise SystemExit(desktop_entry())

@@ -10,7 +10,7 @@ from typing import Protocol
 
 from pydantic import JsonValue
 
-from etl_migration_core.ir import (
+from etl_migration_core.contracts.ir import (
     AssetType,
     EtlAsset,
     EtlDependency,

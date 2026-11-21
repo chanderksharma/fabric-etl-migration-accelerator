@@ -21,7 +21,13 @@ This guide walks delivery engineers, migration architects, and contributors thro
 
 ## 1. Build and Launch the Analyst Web Application
 
-From the repository root:
+From the repository root, build and launch the app directly from the four workspace `.whl` packages:
+
+```powershell
+pwsh -NoProfile -File scripts\Start-LocalApp.ps1
+```
+
+Or run in editable developer mode:
 
 ```powershell
 uv sync --extra dev --locked
@@ -41,15 +47,17 @@ Open **`http://127.0.0.1:8050`** in your browser.
 3. Select **Folder** and choose the repository's synthetic `alteryx-workflows` directory (or `tests/fixtures/powercenter` for Informatica).
 4. Review the pre-run discovery summary (discovered workflow count, byte totals, and any skipped files), then click **Confirm and assess**.
 5. Inspect the **Portfolio** dashboard:
-   - Click any workflow row to open the **six-tab workflow inspection drawer** (Summary, Canvas Graph, Source Register, Generated Code, Readiness & Diagnostics, and Fabric Deployment).
-   - Switch to **Technical Details** for filterable, paginated tool and endpoint registers.
+   - Export estate assessment summaries as **JSON** or formula-defused **CSV**, or click **Open Fabric Deployment** to proceed to code generation.
+   - Open **Workflows** and click any workflow row to open the **six-tab workflow inspection drawer** (Summary, Canvas Graph, Source Register, Generated Code, Readiness & Diagnostics, and Fabric Deployment handoff).
+   - Switch to **Technical Details** for filterable, paginated tool and endpoint registers, and **Capacity Sizing** to model Fabric F-SKU capacity.
 
 ## 3. Generate and Export Microsoft Fabric Artifacts
 
-From the **Portfolio** view (or via CLI):
+Open the **Fabric Deployment** tab in the sidebar (or click **Continue to Fabric Deployment** from a workflow drawer):
 
-- Export estate assessment summaries as **JSON** or formula-defused **CSV**.
-- Generate **Dataflow Gen2** (`mashup.pq` + `queryMetadata.json`), **Fabric Notebook** (`.ipynb`), and **Data Pipeline** (`pipeline-content.json`) packages, or download a workflow-level deployment bundle ZIP.
+- Select the target platform (**Microsoft Fabric** is ready; **Databricks**, **Azure Synapse**, and **Snowflake** appear as fail-closed roadmap placeholders).
+- Generate **Dataflow Gen2** (`mashup.pq` + `queryMetadata.json`), **Fabric Notebook** (`.ipynb`), and **Data Pipeline** (`pipeline-content.json`) previews, or download target/workflow ZIP packages.
+- Select ready workflows, run dry-run validation, and dispatch GitHub Actions or GitLab CI workflows.
 
 Equivalent CLI workflow:
 

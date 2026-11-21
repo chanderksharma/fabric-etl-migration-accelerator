@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from accelerator.etl_ir import AssetType, GraphKind, SourcePlatform
-from accelerator.sources.informatica_powercenter import PowerCenterSourceAdapter
+from etl_migration_core.contracts.ir import AssetType, GraphKind, SourcePlatform
+from etl_migration_core.sources.informatica_powercenter import PowerCenterSourceAdapter
 
 FIXTURE = Path(__file__).parent / "fixtures" / "powercenter" / "basic_repository.xml"
 

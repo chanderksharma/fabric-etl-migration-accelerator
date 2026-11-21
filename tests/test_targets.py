@@ -9,10 +9,15 @@ import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from accelerator.api import app
-from accelerator.application import AssessmentApplication
-from accelerator.cli import app as cli_app
-from accelerator.etl_ir import (
+from accelerator.cli.app import app as cli_app
+from accelerator.server.api import app
+from accelerator.targets import (
+    TargetPlatformRegistry,
+    UnknownTargetPlatformError,
+    builtin_placeholder_providers,
+    create_default_target_registry,
+)
+from etl_migration_core.contracts.ir import (
     AssetType,
     EtlAsset,
     EtlEdge,
@@ -23,20 +28,15 @@ from accelerator.etl_ir import (
     NodeKind,
     SourcePlatform,
 )
-from accelerator.neutral_assessment import assess_package_neutral
-from accelerator.spi import (
+from etl_migration_core.contracts.spi import (
     TargetCapability,
     TargetEvaluator,
     TargetPlatformInfo,
     UnsupportedTargetCapabilityError,
 )
-from accelerator.targets import (
-    TargetPlatformRegistry,
-    UnknownTargetPlatformError,
-    builtin_placeholder_providers,
-    create_default_target_registry,
-)
-from accelerator.workload_profile import extract_workload_profile
+from etl_portfolio_assessment.assessment.engine import assess_package_neutral
+from etl_portfolio_assessment.assessment.workload_profile import extract_workload_profile
+from etl_portfolio_assessment.service.application import PortfolioAssessmentApplication
 
 
 def _sample_package() -> EtlPackage:
@@ -189,6 +189,6 @@ def test_neutral_assessment_and_workload_profile_contain_no_fabric_terms(
     assert profile.counts["targets"] == 1
 
     sample_dir = Path(__file__).parents[1] / "alteryx-workflows"
-    neutral_items, failures = AssessmentApplication().assess_neutral(sample_dir)
-    assert not failures
-    assert len(neutral_items) > 0
+    neutral_estate = PortfolioAssessmentApplication().assess_neutral(sample_dir)
+    assert neutral_estate.failed_count == 0
+    assert neutral_estate.workflow_count > 0

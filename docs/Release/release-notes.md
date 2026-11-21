@@ -1,21 +1,27 @@
 ---
 title: Release Notes v1.0.0
-description: Initial release capabilities, validation evidence, and known boundaries
-ms.date: 2026-11-17
+description: Initial release capabilities, modular package workspace, FEMA stack, and validation evidence
+ms.date: 2026-11-21
 ms.topic: reference
 ---
 
-**Release Date:** 2026-11-15  
+**Release Date:** 2026-11-21  
 **Asset Type:** Chrysalis IP Collection (`v1.0.0`)
 
 ## Summary
 
-Initial Chrysalis-ready InnerSource release of the **Microsoft Fabric ETL Migration Accelerator**, unifying deterministic multi-source ETL estate assessment, compiler-grounded Microsoft Fabric artifact generation, and secretless CI/CD `dev` workspace deployment across **Alteryx Designer**, **Informatica PowerCenter**, and **Informatica IDMC**.
+Chrysalis-ready InnerSource release of the **Microsoft Fabric ETL Migration Accelerator**, unifying deterministic multi-source ETL estate assessment, modular PyPI packages, compiler-grounded Microsoft Fabric artifact generation, Fabric-native FEMA analytics, and secretless CI/CD `dev` workspace deployment across **Alteryx Designer**, **Informatica PowerCenter**, and **Informatica IDMC**.
 
 ## Capabilities Included
 
+- **Modular Multi-Package `uv` Workspace**:
+  - `etl-migration-core`: Canonical `EtlPackage` IR, secure archive staging, built-in source adapters, and target SPI (`TargetPlatformRegistry` with fail-closed roadmap placeholders for `databricks`, `synapse`, and `snowflake`).
+  - `etl-portfolio-assessment`: Target-neutral portfolio scoring, redacted graph evidence, and stateless `etl-assess` CLI.
+  - `etl-target-fabric`: Microsoft Fabric evaluator, F-SKU capacity model, Dataflow Gen2 / PySpark / Data Pipeline compilers, artifact writer, and stateless `etl-fabric` CLI.
+  - `fabric-etl-migration-accelerator`: FastAPI loopback server, SQLite WAL `RunService`, Typer `tool` CLI, CI dispatchers, wheel-backed local/desktop launchers (`Start-LocalApp.ps1`, `Build-Desktop.ps1`), and multi-stage wheel `Dockerfile`.
 - **Multi-Source Discovery & Intake**: Recursive file, folder, `.yxzp`, and `.zip` ingestion with archive-bomb, symlink, and `defusedxml` entity/depth protections plus SHA-256 content deduplication.
-- **Canonical ETL Graph & Portfolio UI**: Six-tab React 19 workflow inspection drawer (source canvas geometry, tool/endpoint registers, generated code preview, readiness diagnostics, and one-click bundle export) backed by resumable SQLite WAL runs.
+- **7-Tab Analyst Workbench & 6-Tab Workflow Drawer**: React 19 UI separating assessment review (**Portfolio**, **Workflows**, **Migration Plan**, **Technical Details**, **Capacity Sizing**) from target-platform selection, Fabric code generation, and GitOps dispatch (**Fabric Deployment**).
+- **Fabric-Native FEMA Workspace Stack**: One-step deployment (`Deploy-AcceleratorWorkspace.ps1` / `Deploy_FEMA.ipynb`) provisioning the Lakehouse, Runtime 2.0 Environment with the 3 decoupled library wheels, Assessment Notebook, 8 Delta tables, Direct Lake Semantic Model, 5-page Power BI leadership report, and Fabric Analyst App (`fema-etl-migration-app`).
 - **Deterministic Target Compilers**:
   - **Dataflow Gen2 (`mashup.pq` + `queryMetadata.json`)**: Linear step folding, multi-source joins/unions/crosstabs, Alteryx `ToolContainer` → `queryGroups` hierarchy, PowerCenter Expression/Router/Aggregator compilation, and staging disabled (`allowFastCopy: false`, `loadEnabled: false`) by default.
   - **Fabric Notebook (`.ipynb`)**: Structured markdown guidance, source configuration table, PySpark stage transformations, and explicit `transform_bindings` hooks.
@@ -25,8 +31,9 @@ Initial Chrysalis-ready InnerSource release of the **Microsoft Fabric ETL Migrat
 
 ## Validation Summary
 
-- **Python (`3.13`)**: `165 passed` (`87.24%` line coverage), `ruff` 0 issues, `mypy --strict` 0 issues, `pip-audit --strict` 0 vulnerabilities.
-- **Web (`Node 22` / `React 19` / `TypeScript 7.0.2`)**: `44 passed` (`vitest 5.1.0`), `eslint` 0 issues, and `vite build` clean.
+- **Python (`3.13`)**: `262 passed` (`85.03%` line coverage), `ruff` 0 issues, `mypy --strict` 0 issues, `twine check` passed across all 4 wheels, and wheel-backed `Start-LocalApp.ps1 -VerifyOnly` + `Build-Desktop.ps1` smoke tests passed.
+- **Web (`apps/web` — React 19 / TypeScript / Vite)**: `66 passed` (`vitest`), `eslint` 0 issues, and `vite build` clean.
+- **Fabric Analyst App (`apps/etl-migration-assessment-app`)**: `206 passed | 1 skipped` (`vitest`), `eslint` 0 errors.
 
 ## Known Boundaries
 

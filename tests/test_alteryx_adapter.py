@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from accelerator.etl_ir import AssetType, GraphKind, SourcePlatform
-from accelerator.sources.alteryx import AlteryxSourceAdapter
+from etl_migration_core.contracts.ir import AssetType, GraphKind, SourcePlatform
+from etl_migration_core.sources.alteryx import AlteryxSourceAdapter
 
 
 def test_alteryx_adapter_detects_and_normalizes_existing_workflow() -> None:

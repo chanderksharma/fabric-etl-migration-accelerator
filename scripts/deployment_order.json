@@ -21,7 +21,7 @@
       "itemType": "Environment",
       "defaultDisplayName": "ETL_Migration_Assessment_Env",
       "runtimeVersion": "2.0",
-      "description": "Fabric Runtime 2.0 (Python 3.13) environment with the ETL Migration Accelerator wheel."
+      "description": "Fabric Runtime 2.0 (Python 3.13) environment with the decoupled ETL migration wheels (etl-migration-core, etl-portfolio-assessment, etl-target-fabric)."
     },
     {
       "step": 4,
@@ -58,7 +58,7 @@
       "itemType": "Report",
       "defaultDisplayName": "ETL Migration Assessment",
       "source": "powerbi/ETL Migration Assessment.Report",
-      "description": "Six-page Power BI analytical report bound to the Direct Lake semantic model."
+      "description": "Five-page Power BI analytical report bound to the Direct Lake semantic model."
     },
     {
       "step": 8,

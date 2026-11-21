@@ -5,8 +5,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
-from accelerator.discovery import DiscoveryService, InputRejectedError
-from accelerator.domain import DiscoveryLimits, SkipReason
+from etl_migration_core.intake.discovery import DiscoveryService, InputRejectedError
+from etl_migration_core.intake.domain import DiscoveryLimits, SkipReason
 
 
 def test_folder_discovery_is_recursive_deduplicated_and_deterministic(tmp_path: Path) -> None:

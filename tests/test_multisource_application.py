@@ -10,10 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from accelerator import api
-from accelerator.application import AssessmentApplication
-from accelerator.discovery import DiscoveryService
-from accelerator.runs import RunService
+from accelerator.runtime.runs import RunService
+from accelerator.server import api
+from etl_migration_core.intake.discovery import DiscoveryService
+from etl_target_fabric.assessment.portfolio import (
+    FabricAssessmentApplication as AssessmentApplication,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

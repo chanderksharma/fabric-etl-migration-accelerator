@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from etl_migration_core.spi import (
+from etl_migration_core.contracts.spi import (
     TargetCapability,
     TargetEvaluator,
     TargetPlatformInfo,

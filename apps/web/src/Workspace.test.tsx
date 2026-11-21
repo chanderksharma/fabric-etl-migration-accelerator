@@ -315,8 +315,12 @@ test("presents migration stages as Wave 1 through Wave 4", () => {
   expect(screen.queryByRole("heading", {name: "Redesign"})).not.toBeInTheDocument();
 });
 
-test("opens all six drawer views and gates GitHub Actions deployment", async () => {
-  render(<Harness initial="workflows"/>);
+test("opens all six drawer views and hands off to Fabric Deployment", async () => {
+  const navigate = vi.fn();
+  render(<Workspace page="workflows" navigate={navigate} assessment={assessment} runId="test-ui"
+    run={{id: "test-ui", snapshot_id: "snapshot-ui", status: "completed", processed: 2, total: 2, cache_hits: 0, error: null, result: assessment}}
+    candidates={[]} generating={false} generate={vi.fn()} theme="light" toggleTheme={vi.fn()}
+    request={vi.fn().mockResolvedValue({json: async () => evidence})}><span>Intake</span></Workspace>);
   fireEvent.click(screen.getByRole("button", {name: "Open workflow orders"}));
   const dialog = screen.getByRole("dialog");
   expect((await within(dialog).findAllByText("Validate orders")).length).toBeGreaterThan(0);
@@ -340,13 +344,13 @@ test("opens all six drawer views and gates GitHub Actions deployment", async () 
     fireEvent.click(within(dialog).getByRole("tab", {name}));
     expect(within(dialog).getByRole("tab", {name})).toHaveAttribute("aria-selected", "true");
   }
-  expect(within(dialog).getByRole("button", {name: "Trigger GitHub Actions"})).toBeEnabled();
-  expect(within(dialog).getByText(
-    /GitHub Actions and GitLab CI are dispatch-only deployment methods/
-  )).toBeInTheDocument();
-  expect(within(dialog).getByLabelText("GitHub repository URL")).toBeInTheDocument();
-  expect(within(dialog).getByDisplayValue("Existing workflow required")).toBeInTheDocument();
-  fireEvent.keyDown(dialog, {key: "Escape"});
+  expect(within(dialog).getByRole("heading", {name: "Deployment readiness"})).toBeInTheDocument();
+  expect(within(dialog).getByRole("link", {name: "Download workflow bundle"})).toHaveAttribute(
+    "href",
+    "/api/runs/test-ui/bundle?workflow=orders.yxmd",
+  );
+  fireEvent.click(within(dialog).getByRole("button", {name: "Continue to Fabric Deployment →"}));
+  expect(navigate).toHaveBeenCalledWith("fabric-deployment");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
@@ -368,36 +372,34 @@ test("exposes the prototype technical evidence columns across every register", a
 });
 
 test("validates the GitHub repository URL before deployment dispatch", async () => {
-  const request = vi.fn().mockResolvedValue({json: async () => evidence});
+  const request = vi.fn().mockResolvedValue({ok: false, json: async () => ({})});
   const candidates = [{
     workflow: "orders.yxmd", target: "dataflow", validation_state: "generated_unvalidated",
     code: "display(df)", diagnostics: [], deployable: true, definition_ready: true,
     runtime_ready: true, artifact_path: "orders", definition_files: ["dataflow-mashup.pq"],
   }];
-  render(<Workspace page="workflows" navigate={vi.fn()} assessment={assessment} runId="test-ui"
+  render(<Workspace page="fabric-deployment" navigate={vi.fn()} assessment={assessment} runId="test-ui"
     run={{id: "test-ui", snapshot_id: "snapshot-ui", status: "completed", processed: 2, total: 2, cache_hits: 0, error: null, result: assessment}}
     candidates={candidates} generating={false} generate={vi.fn()} theme="light" toggleTheme={vi.fn()}
     request={request}><span>Intake</span></Workspace>);
-  fireEvent.click(screen.getByRole("button", {name: "Open workflow orders"}));
-  const dialog = screen.getByRole("dialog");
-  fireEvent.click(within(dialog).getByRole("tab", {name: "Fabric deployment"}));
-  expect(within(dialog).getByRole("link", {
+  const section = document.getElementById("fabric-deployment")!;
+  expect(within(section).getByRole("link", {
     name: "Download workflow bundle",
   })).toHaveAttribute(
     "href",
     "/api/runs/test-ui/bundle?workflow=orders.yxmd",
   );
-  expect(within(dialog).queryByRole("heading", {
+  expect(within(section).queryByRole("heading", {
     name: "Generated deployment manifest",
   })).not.toBeInTheDocument();
-  fireEvent.change(within(dialog).getByLabelText("GitHub repository URL"), {target: {value: "owner/repository"}});
-  fireEvent.click(within(dialog).getByRole("button", {name: "Validate deployment request"}));
-  expect(within(dialog).getByText(/Use an HTTPS GitHub repository URL/)).toBeInTheDocument();
-  fireEvent.change(within(dialog).getByLabelText("GitHub repository URL"), {
+  fireEvent.change(within(section).getByLabelText("GitHub repository URL"), {target: {value: "owner/repository"}});
+  fireEvent.click(within(section).getByRole("button", {name: "Validate deployment request"}));
+  expect(within(section).getByText(/Use an HTTPS GitHub repository URL/)).toBeInTheDocument();
+  fireEvent.change(within(section).getByLabelText("GitHub repository URL"), {
     target: {value: "https://github.com/owner/repository"},
   });
-  fireEvent.click(within(dialog).getByRole("button", {name: "Validate deployment request"}));
-  expect(within(dialog).getByText(/request is ready for owner\/repository/)).toBeInTheDocument();
+  fireEvent.click(within(section).getByRole("button", {name: "Validate deployment request"}));
+  expect(within(section).getByText(/request is ready for owner\/repository/)).toBeInTheDocument();
 });
 
 test("dispatches a validated GitHub Actions deployment", async () => {
@@ -406,24 +408,26 @@ test("dispatches a validated GitHub Actions deployment", async () => {
     code: "display(df)", diagnostics: [], deployable: true, definition_ready: true,
     runtime_ready: true, artifact_path: "orders", definition_files: ["dataflow-mashup.pq"],
   }];
-  const request = vi.fn().mockResolvedValue({
-    json: async () => ({
-      deployment_id: "dispatch-1", repository: "owner/repository",
-      target: "dataflow", status: "dispatched",
-    }),
+  const request = vi.fn().mockImplementation(async (path: string) => {
+    if (path === "/api/targets") return {ok: false, json: async () => ({})};
+    return {
+      ok: true,
+      json: async () => ({
+        deployment_id: "dispatch-1", repository: "owner/repository",
+        target: "dataflow", status: "dispatched",
+      }),
+    };
   });
-  render(<Workspace page="workflows" navigate={vi.fn()} assessment={assessment} runId="test-ui"
+  render(<Workspace page="fabric-deployment" navigate={vi.fn()} assessment={assessment} runId="test-ui"
     run={{id: "test-ui", snapshot_id: "snapshot-ui", status: "completed", processed: 2, total: 2, cache_hits: 0, error: null, result: assessment}}
     candidates={candidates} generating={false} generate={vi.fn()} theme="light" toggleTheme={vi.fn()}
     request={request}><span>Intake</span></Workspace>);
-  fireEvent.click(screen.getByRole("button", {name: "Open workflow orders"}));
-  const dialog = screen.getByRole("dialog");
-  fireEvent.click(within(dialog).getByRole("tab", {name: "Fabric deployment"}));
-  fireEvent.change(within(dialog).getByLabelText("GitHub repository URL"), {
+  const section = document.getElementById("fabric-deployment")!;
+  fireEvent.change(within(section).getByLabelText("GitHub repository URL"), {
     target: {value: "https://github.com/owner/repository"},
   });
-  fireEvent.click(within(dialog).getByRole("button", {name: "Trigger GitHub Actions"}));
-  expect(await within(dialog).findByRole("status")).toHaveTextContent(
+  fireEvent.click(within(section).getByRole("button", {name: "Trigger GitHub Actions"}));
+  expect(await within(section).findByRole("status")).toHaveTextContent(
     "deployment dispatch-1 triggered"
   );
   expect(request).toHaveBeenCalledWith(
@@ -449,31 +453,33 @@ test("dispatches a validated GitLab CI deployment", async () => {
     code: "display(df)", diagnostics: [], deployable: true, definition_ready: true,
     runtime_ready: true, artifact_path: "orders", definition_files: ["dataflow-mashup.pq"],
   }];
-  const request = vi.fn().mockResolvedValue({
-    json: async () => ({
-      deployment_id: "901", project: "group/project", target: "dataflow",
-      status: "dispatched", pipeline_url: "https://gitlab.com/group/project/-/pipelines/901",
-    }),
+  const request = vi.fn().mockImplementation(async (path: string) => {
+    if (path === "/api/targets") return {ok: false, json: async () => ({})};
+    return {
+      ok: true,
+      json: async () => ({
+        deployment_id: "901", project: "group/project", target: "dataflow",
+        status: "dispatched", pipeline_url: "https://gitlab.com/group/project/-/pipelines/901",
+      }),
+    };
   });
-  render(<Workspace page="workflows" navigate={vi.fn()} assessment={assessment} runId="test-ui"
+  render(<Workspace page="fabric-deployment" navigate={vi.fn()} assessment={assessment} runId="test-ui"
     run={{id: "test-ui", snapshot_id: "snapshot-ui", status: "completed", processed: 2, total: 2, cache_hits: 0, error: null, result: assessment}}
     candidates={candidates} generating={false} generate={vi.fn()} theme="light" toggleTheme={vi.fn()}
     request={request}><span>Intake</span></Workspace>);
-  fireEvent.click(screen.getByRole("button", {name: "Open workflow orders"}));
-  const dialog = screen.getByRole("dialog");
-  fireEvent.click(within(dialog).getByRole("tab", {name: "Fabric deployment"}));
-  fireEvent.change(within(dialog).getByLabelText("Deployment method"), {
+  const section = document.getElementById("fabric-deployment")!;
+  fireEvent.change(within(section).getByLabelText("Deployment method"), {
     target: {value: "gitlab"},
   });
-  expect(within(dialog).getByDisplayValue(".gitlab-ci.yml")).toBeInTheDocument();
-  expect(within(dialog).getByDisplayValue(
+  expect(within(section).getByDisplayValue(".gitlab-ci.yml")).toBeInTheDocument();
+  expect(within(section).getByDisplayValue(
     "Server-side GitLab project access token",
   )).toBeInTheDocument();
-  fireEvent.change(within(dialog).getByLabelText("GitLab project URL"), {
+  fireEvent.change(within(section).getByLabelText("GitLab project URL"), {
     target: {value: "https://gitlab.com/group/project"},
   });
-  fireEvent.click(within(dialog).getByRole("button", {name: "Trigger GitLab CI"}));
-  expect(await within(dialog).findByText(/GitLab CI dataflow pipeline 901 triggered/))
+  fireEvent.click(within(section).getByRole("button", {name: "Trigger GitLab CI"}));
+  expect(await within(section).findByText(/GitLab CI dataflow pipeline 901 triggered/))
     .toBeInTheDocument();
 
   const deploymentCall = request.mock.calls.find(
@@ -514,30 +520,32 @@ test("dispatches a mixed redesign workflow as a three-item bundle", async () => 
       runtime_ready: false, artifact_path: "mixed", definition_files: ["notebook-content.ipynb"],
     },
   ];
-  const request = vi.fn().mockResolvedValue({
-    json: async () => ({
-      deployment_id: "dispatch-bundle",
-      repository: "owner/repository",
-      target: "bundle",
-      status: "dispatched",
-    }),
+  const request = vi.fn().mockImplementation(async (path: string) => {
+    if (path === "/api/targets") return {ok: false, json: async () => ({})};
+    return {
+      ok: true,
+      json: async () => ({
+        deployment_id: "dispatch-bundle",
+        repository: "owner/repository",
+        target: "bundle",
+        status: "dispatched",
+      }),
+    };
   });
-  render(<Workspace page="workflows" navigate={vi.fn()} assessment={mixedAssessment}
+  render(<Workspace page="fabric-deployment" navigate={vi.fn()} assessment={mixedAssessment}
     runId="test-ui" run={{id: "test-ui", snapshot_id: "snapshot-ui", status: "completed",
       processed: 1, total: 1, cache_hits: 0, error: null, result: mixedAssessment}}
     candidates={candidates} generating={false} generate={vi.fn()} theme="light"
     toggleTheme={vi.fn()} request={request}><span>Intake</span></Workspace>);
 
-  fireEvent.click(screen.getByRole("button", {name: "Open workflow mixed"}));
-  const dialog = screen.getByRole("dialog");
-  fireEvent.click(within(dialog).getByRole("tab", {name: "Fabric deployment"}));
-  expect(within(dialog).getByLabelText("Deployment target")).toHaveValue("bundle");
-  expect(within(dialog).getByRole("option", {name: "Fabric Data Pipeline"}))
+  const section = document.getElementById("fabric-deployment")!;
+  expect(within(section).getByLabelText("Deployment target")).toHaveValue("bundle");
+  expect(within(section).getByRole("option", {name: "Fabric Data Pipeline"}))
     .toBeInTheDocument();
-  fireEvent.change(within(dialog).getByLabelText("GitHub repository URL"), {
+  fireEvent.change(within(section).getByLabelText("GitHub repository URL"), {
     target: {value: "https://github.com/owner/repository"},
   });
-  fireEvent.click(within(dialog).getByRole("button", {name: "Trigger GitHub Actions"}));
+  fireEvent.click(within(section).getByRole("button", {name: "Trigger GitHub Actions"}));
   await act(async () => undefined);
 
   const bundleCall = request.mock.calls.find(
@@ -551,7 +559,7 @@ test("dispatches a mixed redesign workflow as a three-item bundle", async () => 
   });
 });
 
-test("groups assessment outputs into reports, packages, and code previews with clear summary", () => {
+test("groups fabric deployment outputs into packages and code previews with clear summary", () => {
   const candidates = [
     {
       workflow: "orders.yxmd", target: "notebook", validation_state: "generated_unvalidated",
@@ -564,18 +572,23 @@ test("groups assessment outputs into reports, packages, and code previews with c
       runtime_ready: false, artifact_path: "legacy-def", definition_files: ["diagnostics.json"],
     },
   ];
-  render(<Workspace page="executive-summary" navigate={vi.fn()} assessment={assessment}
+  render(<Workspace page="fabric-deployment" navigate={vi.fn()} assessment={assessment}
     runId="test-outputs" run={{id: "test-outputs", snapshot_id: "snapshot-outputs", status: "completed",
       processed: 2, total: 2, cache_hits: 0, error: null, result: assessment}}
     candidates={candidates} generating={false} generate={vi.fn()} theme="light"
     toggleTheme={vi.fn()} request={vi.fn()}><span>Intake</span></Workspace>);
 
-  expect(screen.getByRole("heading", {name: "1. Assessment reports"})).toBeInTheDocument();
-  expect(screen.getByRole("heading", {name: "2. Download Fabric packages"})).toBeInTheDocument();
-  expect(screen.getByRole("heading", {name: "3. Preview generated code"})).toBeInTheDocument();
+  expect(screen.getByRole("heading", {name: "1. Target platform"})).toBeInTheDocument();
+  expect(screen.getByRole("heading", {name: "2. Generate & download Fabric definitions"})).toBeInTheDocument();
+  expect(screen.getByRole("heading", {name: "Download Fabric packages"})).toBeInTheDocument();
+  expect(screen.getByRole("heading", {name: "Preview generated code"})).toBeInTheDocument();
+  expect(screen.getByRole("heading", {name: "3. Select workflow & dispatch deployment"})).toBeInTheDocument();
   expect(screen.getByText("Fabric Notebook previews (2)")).toBeInTheDocument();
   expect(screen.getByText("1 deployable · 1 manual scaffold")).toBeInTheDocument();
   expect(screen.getByText("Deployable definition")).toBeInTheDocument();
+  expect(screen.getByText("Scaffold / manual rework")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Filter generated previews"), {target: {value: "scaffold"}});
+  expect(screen.queryByText("Deployable definition")).not.toBeInTheDocument();
   expect(screen.getByText("Scaffold / manual rework")).toBeInTheDocument();
 });
 
@@ -600,19 +613,16 @@ test("defaults orchestration assets to a pipeline deployment", () => {
       target_components: ["Fabric Pipeline"],
     }],
   };
-  render(<Workspace page="workflows" navigate={vi.fn()} assessment={orchestrationAssessment}
+  render(<Workspace page="fabric-deployment" navigate={vi.fn()} assessment={orchestrationAssessment}
     runId="test-ui" run={null} candidates={[]} generating={false} generate={vi.fn()}
     theme="light" toggleTheme={vi.fn()}
-    request={vi.fn().mockResolvedValue({json: async () => evidence})}>
+    request={vi.fn().mockResolvedValue({ok: false, json: async () => ({})})}>
     <span>Intake</span>
   </Workspace>);
 
-  fireEvent.click(screen.getByRole("button", {name: "Open workflow tf_orders"}));
-  const dialog = screen.getByRole("dialog");
-  fireEvent.click(within(dialog).getByRole("tab", {name: "Fabric deployment"}));
-
-  expect(within(dialog).getByLabelText("Deployment target")).toHaveValue("pipeline");
-  expect(within(dialog).getByRole("option", {name: "Fabric Data Pipeline"}))
+  const section = document.getElementById("fabric-deployment")!;
+  expect(within(section).getByLabelText("Deployment target")).toHaveValue("pipeline");
+  expect(within(section).getByRole("option", {name: "Fabric Data Pipeline"}))
     .toBeInTheDocument();
 });
 
@@ -660,6 +670,7 @@ test("reference styles and components cannot import remote code or deployment sc
   const css = readFileSync(join(process.cwd(), "src", "prototype.css"), "utf8");
   const component = [
     "Workspace.tsx",
+    "FabricDeploymentPage.tsx",
     "workspace-deployment.tsx",
     "workspace-evidence.ts",
     "workspace-registers.tsx",
@@ -699,8 +710,10 @@ test("supports drawer prev/next navigation, manual-rework guard, and remembered 
     runtime_ready: true, artifact_path: "orders", definition_files: ["dataflow-mashup.pq"],
   }];
   const request = vi.fn().mockImplementation(async (path: string) => {
+    if (path === "/api/targets") return {ok: false, json: async () => ({})};
     if (path.includes("/deploy/github")) {
       return {
+        ok: true,
         json: async () => ({
           deployment_id: "dep-nav-1",
           repository: "owner/repo",
@@ -709,36 +722,49 @@ test("supports drawer prev/next navigation, manual-rework guard, and remembered 
         }),
       };
     }
-    return {json: async () => evidence};
+    return {ok: true, json: async () => evidence};
   });
-  render(<Workspace page="workflows" navigate={vi.fn()} assessment={assessment} runId="test-ui-nav"
+  const app = render(<Workspace page="workflows" navigate={vi.fn()} assessment={assessment} runId="test-ui-nav"
     run={{id: "test-ui-nav", snapshot_id: "snapshot-ui", status: "completed", processed: 2, total: 2, cache_hits: 0, error: null, result: assessment}}
     candidates={candidates} generating={false} generate={vi.fn()} theme="light" toggleTheme={vi.fn()}
     request={request}><span>Intake</span></Workspace>);
 
   expect(within(screen.getByRole("navigation", {name: "Primary"})).getByRole("link", {name: "New Assessment"})).toBeInTheDocument();
+  expect(within(screen.getByRole("navigation", {name: "Primary"})).getByRole("link", {name: "Fabric Deployment"})).toBeInTheDocument();
   expect(screen.queryByRole("button", {name: "New assessment"})).not.toBeInTheDocument();
   expect(within(screen.getByRole("navigation", {name: "Mobile primary navigation"})).getByRole("link", {name: "Intake"})).toBeInTheDocument();
+  expect(within(screen.getByRole("navigation", {name: "Mobile primary navigation"})).getByRole("link", {name: "Deploy"})).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", {name: "Open workflow orders"}));
   const dialog = screen.getByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", {name: "Next workflow →"}));
+  expect(within(dialog).getByRole("heading", {name: "custom"})).toBeInTheDocument();
   fireEvent.click(within(dialog).getByRole("tab", {name: "Fabric deployment"}));
-  fireEvent.change(within(dialog).getByLabelText("GitHub repository URL"), {
+  expect(within(dialog).getByText("Manual rework required.")).toBeInTheDocument();
+  fireEvent.keyDown(dialog, {key: "Escape"});
+
+  app.rerender(<Workspace page="fabric-deployment" navigate={vi.fn()} assessment={assessment} runId="test-ui-nav"
+    run={{id: "test-ui-nav", snapshot_id: "snapshot-ui", status: "completed", processed: 2, total: 2, cache_hits: 0, error: null, result: assessment}}
+    candidates={candidates} generating={false} generate={vi.fn()} theme="light" toggleTheme={vi.fn()}
+    request={request}><span>Intake</span></Workspace>);
+  const section = document.getElementById("fabric-deployment")!;
+  fireEvent.change(within(section).getByLabelText("GitHub repository URL"), {
     target: {value: "https://github.com/owner/repo"},
   });
-  fireEvent.change(within(dialog).getByLabelText("Git ref"), {
+  fireEvent.change(within(section).getByLabelText("Git ref"), {
     target: {value: "main"},
   });
-  fireEvent.click(within(dialog).getByRole("button", {name: "Trigger GitHub Actions"}));
-  expect(await within(dialog).findByRole("link", {name: /Open GitHub Actions runs/})).toHaveAttribute(
+  fireEvent.click(within(section).getByRole("button", {name: "Trigger GitHub Actions"}));
+  expect(await within(section).findByRole("link", {name: /Open GitHub Actions runs/})).toHaveAttribute(
     "href",
     "https://github.com/owner/repo/actions",
   );
 
-  fireEvent.click(within(dialog).getByRole("button", {name: "Next workflow →"}));
-  expect(within(dialog).getByRole("heading", {name: "custom"})).toBeInTheDocument();
-  expect(within(dialog).getByText("Manual rework required.")).toBeInTheDocument();
-  expect(within(dialog).getByRole("button", {name: "Trigger GitHub Actions"})).toBeDisabled();
-  expect(within(dialog).getByLabelText("GitHub repository URL")).toHaveValue("https://github.com/owner/repo");
-  expect(within(dialog).getByLabelText("Git ref")).toHaveValue("main");
+  fireEvent.change(within(section).getByLabelText("Workflow to deploy"), {
+    target: {value: "custom.yxmd"},
+  });
+  expect(within(section).getByText("Manual rework required.")).toBeInTheDocument();
+  expect(within(section).getByRole("button", {name: "Trigger GitHub Actions"})).toBeDisabled();
+  expect(within(section).getByLabelText("GitHub repository URL")).toHaveValue("https://github.com/owner/repo");
+  expect(within(section).getByLabelText("Git ref")).toHaveValue("main");
 });

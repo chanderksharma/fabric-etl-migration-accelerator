@@ -1,0 +1,1 @@
+"""Desktop subpackage for accelerator."""

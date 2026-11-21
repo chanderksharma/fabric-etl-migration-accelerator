@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from accelerator.desktop import desktop_paths
+from accelerator.desktop.window import desktop_paths
 
 ROOT = Path(__file__).parents[1]
 
@@ -25,6 +25,29 @@ def test_desktop_paths_use_local_app_data(
     assert paths.artifacts == paths.root / "artifacts"
     assert paths.logs == paths.root / "logs"
     assert paths.web_root == tmp_path / "web"
+
+
+def test_desktop_paths_falls_back_to_cwd_for_wheel_installs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import accelerator.desktop.window as window_module
+
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.delenv("ACCELERATOR_WEB_ROOT", raising=False)
+    fake_site_pkg = tmp_path / "venv" / "Lib" / "site-packages" / "accelerator" / "desktop"
+    fake_site_pkg.mkdir(parents=True)
+    fake_window = fake_site_pkg / "window.py"
+    fake_window.write_text("", encoding="utf-8")
+    monkeypatch.setattr(window_module, "__file__", str(fake_window))
+
+    repo_cwd = tmp_path / "workspace"
+    cwd_dist = repo_cwd / "apps" / "web" / "dist"
+    cwd_dist.mkdir(parents=True)
+    (cwd_dist / "index.html").write_text("<div id='root'></div>", encoding="utf-8")
+    monkeypatch.chdir(repo_cwd)
+
+    paths = desktop_paths()
+    assert paths.web_root == cwd_dist
 
 
 def test_packaged_entry_smoke_starts_authenticated_ui_and_exits(

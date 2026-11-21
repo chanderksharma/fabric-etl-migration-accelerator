@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from accelerator.cli import app
-from accelerator.runs import RunService
+from accelerator.cli.app import app
+from accelerator.runtime.runs import RunService
 
 
 def test_preview_subcommand_returns_discovery_summary(tmp_path: Path) -> None:

@@ -53,12 +53,12 @@ Focused synthetic-input probes also established:
 | GAP-07 | The inspected application exposes discovery/assessment but no graph compiler, generation/export routes, or deployment workflow | These are remaining milestones, not completed capabilities |
 | GAP-08 | Existing objective summary still describes empty customer folders | Refresh derived intake evidence using the newly supplied sources |
 
-Code evidence:
-[application](../../src/accelerator/application.py),
-[discovery](../../src/accelerator/discovery.py),
-[assessment](../../src/accelerator/assessment.py),
-[API](../../src/accelerator/api.py),
-[CLI](../../src/accelerator/cli.py), and
+Current module locations (reorganized into the modular `uv` workspace):
+[portfolio application](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/service/application.py),
+[discovery](../../packages/etl-migration-core/src/etl_migration_core/intake/discovery.py),
+[assessment engine](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/engine.py),
+[API](../../src/accelerator/server/api.py),
+[CLI](../../src/accelerator/cli/app.py), and
 [React application](../../apps/web/src/App.tsx).
 
 ## Scope boundaries

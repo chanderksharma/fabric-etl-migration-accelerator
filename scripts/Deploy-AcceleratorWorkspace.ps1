@@ -515,54 +515,71 @@ function Resolve-WheelArtifacts {
         [switch]$IsDryRun
     )
 
+    $WheelPatterns = @(
+        'etl_migration_core-*.whl',
+        'etl_portfolio_assessment-*.whl',
+        'etl_target_fabric-*.whl'
+    )
+
     if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
-        if (-not (Test-Path -LiteralPath $ExplicitPath -PathType Leaf)) {
+        if (Test-Path -LiteralPath $ExplicitPath -PathType Leaf) {
+            return @((Resolve-Path -LiteralPath $ExplicitPath).Path)
+        }
+        if (Test-Path -LiteralPath $ExplicitPath -PathType Container) {
+            $SearchDir = (Resolve-Path -LiteralPath $ExplicitPath).Path
+        }
+        else {
             throw "WheelPath not found: $ExplicitPath"
         }
-        return @((Resolve-Path -LiteralPath $ExplicitPath).Path)
     }
-
-    $DistDir = Join-Path $RepoRoot 'dist'
-    if (-not $SkipBuild -and -not $IsDryRun) {
-        if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-            throw 'uv is required to build the Python wheels (or pass -WheelPath / -SkipWheelBuild).'
-        }
-        Push-Location $RepoRoot
-        try {
-            & uv build --all-packages --wheel
-            if ($LASTEXITCODE -ne 0) {
-                throw 'uv build --all-packages --wheel failed.'
+    else {
+        $SearchDir = Join-Path $RepoRoot 'dist'
+        if (-not $SkipBuild -and -not $IsDryRun) {
+            if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+                throw 'uv is required to build the Python wheels (or pass -WheelPath / -SkipWheelBuild).'
+            }
+            if (Test-Path -LiteralPath $SearchDir -PathType Container) {
+                Get-ChildItem -LiteralPath $SearchDir -Filter '*.whl' -File | Remove-Item -Force
+            }
+            Push-Location $RepoRoot
+            try {
+                & uv build --all-packages --wheel
+                if ($LASTEXITCODE -ne 0) {
+                    throw 'uv build --all-packages --wheel failed.'
+                }
+            }
+            finally {
+                Pop-Location
             }
         }
-        finally {
-            Pop-Location
-        }
     }
 
-    if (Test-Path -LiteralPath $DistDir -PathType Container) {
-        $WheelPatterns = @(
-            'etl_migration_core-*.whl',
-            'etl_portfolio_assessment-*.whl',
-            'etl_target_fabric-*.whl'
-        )
+    if (Test-Path -LiteralPath $SearchDir -PathType Container) {
         $Selected = [System.Collections.Generic.List[string]]::new()
+        $Missing = [System.Collections.Generic.List[string]]::new()
         foreach ($Pattern in $WheelPatterns) {
-            $Latest = Get-ChildItem -LiteralPath $DistDir -Filter $Pattern -File |
+            $Latest = Get-ChildItem -LiteralPath $SearchDir -Filter $Pattern -File |
                 Sort-Object LastWriteTimeUtc -Descending |
                 Select-Object -First 1
             if ($Latest) {
                 $Selected.Add($Latest.FullName)
             }
+            else {
+                $Missing.Add($Pattern)
+            }
         }
-        if ($Selected.Count -gt 0) {
+        if ($Selected.Count -eq $WheelPatterns.Count) {
             return $Selected.ToArray()
+        }
+        if (-not $IsDryRun -and $Selected.Count -gt 0) {
+            throw "Incomplete workspace wheels in $SearchDir; missing: $($Missing -join ', ')"
         }
     }
 
     if ($IsDryRun) {
         return @('<built via uv build --all-packages --wheel>')
     }
-    throw "No workspace wheels found in $DistDir. Run 'uv build --all-packages --wheel' or pass -WheelPath."
+    throw "No workspace wheels found in $SearchDir. Run 'uv build --all-packages --wheel' or pass -WheelPath."
 }
 
 function New-RandomSecretHex {
@@ -682,6 +699,26 @@ try {
         $null = Invoke-FabricRequest -Method Patch `
             -Uri "$FabricApi/workspaces/$WsId/environments/$($Environment.id)/staging/sparkcompute?beta=false" `
             -Token $Token -SkillName 'spark-cli' -Body $SparkComputeBody
+
+        $StagedLibs = Invoke-FabricRequest -Method Get `
+            -Uri "$FabricApi/workspaces/$WsId/environments/$($Environment.id)/staging/libraries" `
+            -Token $Token -SkillName 'spark-cli'
+        $DesiredWheelNames = @($ResolvedWheels | ForEach-Object { [IO.Path]::GetFileName($_) })
+        foreach ($ExistingWheel in @($StagedLibs.customLibraries.wheelFiles)) {
+            $NameStr = [string]$ExistingWheel
+            if ([string]::IsNullOrWhiteSpace($NameStr)) { continue }
+            $IsLegacyMonolith = $NameStr -like 'fabric_etl_migration_accelerator-*.whl'
+            $IsSupersededWorkspaceWheel = (
+                $NameStr -match '^(etl_migration_core|etl_portfolio_assessment|etl_target_fabric)-.*\.whl$' -and
+                $NameStr -notin $DesiredWheelNames
+            )
+            if ($IsLegacyMonolith -or $IsSupersededWorkspaceWheel) {
+                $EncodedLib = [Uri]::EscapeDataString($NameStr)
+                $null = Invoke-FabricRequest -Method Delete `
+                    -Uri "$FabricApi/workspaces/$WsId/environments/$($Environment.id)/staging/libraries?libraryToDelete=$EncodedLib" `
+                    -Token $Token -SkillName 'spark-cli'
+            }
+        }
 
         foreach ($WheelArtifact in $ResolvedWheels) {
             $WheelFileName = [IO.Path]::GetFileName($WheelArtifact)

@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 
 from etl_migration_core.sources.defaults import create_default_registry
-from etl_target_fabric.artifact_writer import write_candidates
-from etl_target_fabric.deployer import dry_run
-from etl_target_fabric.generation import generate_candidate
+from etl_target_fabric.compilers.alteryx import generate_candidate
+from etl_target_fabric.delivery.artifact_writer import write_candidates
+from etl_target_fabric.delivery.deployer import dry_run
 from etl_target_fabric.provider import FabricTargetProvider
 from etl_target_fabric.stdio import main as fabric_stdio_main
 

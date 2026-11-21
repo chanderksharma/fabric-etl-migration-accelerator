@@ -7,7 +7,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from etl_migration_core.ir import EtlPackage, SourcePlatform
+from etl_migration_core.contracts.ir import EtlPackage, SourcePlatform
 
 
 class SourceMatch(BaseModel):

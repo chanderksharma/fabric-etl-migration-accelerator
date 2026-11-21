@@ -18,7 +18,8 @@ export type Page =
   | "workflows"
   | "migration-plan"
   | "capacity-planning"
-  | "technical-details";
+  | "technical-details"
+  | "fabric-deployment";
 
 type SourceMetadata = {
   source_platform?: string;
@@ -115,6 +116,7 @@ const pages: Array<{ id: Page; label: string }> = [
   { id: "migration-plan", label: "Migration Plan" },
   { id: "capacity-planning", label: "Capacity Planning" },
   { id: "technical-details", label: "Technical Details" },
+  { id: "fabric-deployment", label: "Fabric Deployment" },
 ];
 
 export function App() {

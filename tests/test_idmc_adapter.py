@@ -3,8 +3,8 @@
 import zipfile
 from pathlib import Path
 
-from accelerator.etl_ir import AssetType, GraphKind, SourcePlatform
-from accelerator.sources.informatica_idmc import IdmcSourceAdapter
+from etl_migration_core.contracts.ir import AssetType, GraphKind, SourcePlatform
+from etl_migration_core.sources.informatica_idmc import IdmcSourceAdapter
 
 FIXTURE = Path(__file__).parent / "fixtures" / "idmc" / "basic_export"
 

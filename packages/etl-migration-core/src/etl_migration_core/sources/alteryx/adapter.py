@@ -7,8 +7,7 @@ from pathlib import Path
 
 from defusedxml import ElementTree
 
-from etl_migration_core.graph import GraphNode, WorkflowGraph, parse_graph
-from etl_migration_core.ir import (
+from etl_migration_core.contracts.ir import (
     AssetType,
     EtlAsset,
     EtlConnectionRef,
@@ -23,6 +22,7 @@ from etl_migration_core.ir import (
     SourceLocation,
     SourcePlatform,
 )
+from etl_migration_core.sources.alteryx.graph import GraphNode, WorkflowGraph, parse_graph
 from etl_migration_core.sources.base import SourceMatch
 
 ALTERYX_EXTENSIONS = frozenset({".yxmd", ".yxmc", ".yxwz"})

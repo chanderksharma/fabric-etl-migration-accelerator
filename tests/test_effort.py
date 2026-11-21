@@ -1,6 +1,6 @@
 """Tests for practical remaining-effort estimates."""
 
-from accelerator.effort import (
+from etl_portfolio_assessment.assessment.effort import (
     MAX_EFFORT_DAYS,
     assessment_effort_days,
     remaining_effort_days,

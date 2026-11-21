@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from accelerator.idmc_export import (
+from etl_migration_core.sources.informatica_idmc.export_client import (
     HttpResponse,
     IdmcExportClient,
     IdmcExportError,

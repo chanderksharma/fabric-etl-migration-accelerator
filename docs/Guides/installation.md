@@ -79,8 +79,8 @@ Use the [portfolio assessment notebook](../../notebooks/fabric-portfolio-assessm
 to run the Python assessment engine without a separate app. The notebook
 uses the same compiler-backed target routing as the analyst web app.
 
-1. Build the accelerator wheel on an approved build machine with
-   `uv build --wheel`. Add it and its approved dependencies to a Fabric
+1. Build the three decoupled library wheels (`etl-migration-core`, `etl-portfolio-assessment`, `etl-target-fabric`) on an approved build machine with
+   `uv build --all-packages --wheel`. Add them and their approved dependencies (`defusedxml`, `pydantic`) to a Fabric
    Environment using [Runtime 2.0](https://learn.microsoft.com/fabric/data-engineering/runtime-2-0).
    Publish the environment. The notebook requires the PySpark runtime with
    Python 3.13 or later, not the standalone Python notebook kernel.
@@ -107,7 +107,7 @@ export effort estimates, save generated Fabric definitions, or deploy items.
 ## Power BI assessment report
 
 The [Power BI project](../../powerbi/ETL%20Migration%20Assessment.pbip) provides
-a six-page analyst report over normalized Lakehouse tables. It uses Direct
+a five-page analyst report over normalized Lakehouse tables. It uses Direct
 Lake, retains assessment history, filters operational pages to the latest
 completed run, and includes an **Assessment Run History** page across retained
 runs.
@@ -232,7 +232,7 @@ with persistence enabled.
 
 To provision or upgrade the entire Fabric stack in a single idempotent pass
 (creating or reusing a `FEMA` workspace folder and placing the Lakehouse,
-Runtime 2.0 Environment with the accelerator wheel, Assessment Notebook,
+Runtime 2.0 Environment with the decoupled library wheels, Assessment Notebook,
 initialized `etl_*` Delta tables, Direct Lake Semantic Model, Power BI Report,
 and optionally the Fabric Analyst App inside it), use the unified workspace
 installer or the in-Fabric deployment notebook.
@@ -274,8 +274,7 @@ or `-SkipFabricApp` to deploy only the Lakehouse, Spark, and Power BI items.
 1. Build a self-contained deployment bundle on an approved workstation:
 
    ```powershell
-   uv build --wheel
-   node scripts\build-fema-bundle.mjs --require-wheel
+   node scripts\build-fema-bundle.mjs --build-wheels --require-wheel
    ```
 
 2. Upload `dist\fema-deployment-bundle\` into a Fabric Lakehouse under
@@ -289,7 +288,17 @@ or `-SkipFabricApp` to deploy only the Lakehouse, Spark, and Power BI items.
 
 ## Option 1: Local Workstation Setup (Recommended)
 
-### Install dependencies
+### Run directly from built `.whl` files (production-like local runtime)
+
+Build the React UI, build all four workspace `.whl` distributions (`etl-migration-core`, `etl-portfolio-assessment`, `etl-target-fabric`, and `fabric-etl-migration-accelerator`), install them into an isolated `build\app-venv`, and launch the loopback UI server:
+
+```powershell
+pwsh -NoProfile -File scripts\Start-LocalApp.ps1
+```
+
+Pass `-Port <port>` to customize the loopback port, `-Desktop` to open the native Windows WebView2 window from the built wheels, or `-VerifyOnly` to validate wheel installation and `/health` + `/api/targets` startup without keeping the server running.
+
+### Editable developer installation
 
 ```powershell
 uv python install 3.13

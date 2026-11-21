@@ -2,8 +2,7 @@
 
 from pathlib import Path
 
-from accelerator.etl_assessment import assess_package
-from accelerator.etl_ir import (
+from etl_migration_core.contracts.ir import (
     AssetType,
     EtlAsset,
     EtlEdge,
@@ -14,8 +13,9 @@ from accelerator.etl_ir import (
     NodeKind,
     SourcePlatform,
 )
-from accelerator.sources.informatica_idmc import IdmcSourceAdapter
-from accelerator.sources.informatica_powercenter import PowerCenterSourceAdapter
+from etl_migration_core.sources.informatica_idmc import IdmcSourceAdapter
+from etl_migration_core.sources.informatica_powercenter import PowerCenterSourceAdapter
+from etl_target_fabric.assessment.ir_assessment import assess_package
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

@@ -111,7 +111,7 @@ function Invoke-FabricRequest {
     [OutputType([object])]
     param(
         [Parameter(Mandatory = $true)]
-        [ValidateSet('Get', 'Post', 'Patch')]
+        [ValidateSet('Get', 'Post', 'Patch', 'Delete')]
         [string]$Method,
 
         [Parameter(Mandatory = $true)]

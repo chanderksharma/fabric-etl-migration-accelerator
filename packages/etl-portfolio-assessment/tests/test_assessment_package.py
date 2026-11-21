@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from etl_portfolio_assessment.application import PortfolioAssessmentApplication
-from etl_portfolio_assessment.stdio import main as assess_stdio_main
+from etl_portfolio_assessment.service.application import PortfolioAssessmentApplication
+from etl_portfolio_assessment.service.stdio import main as assess_stdio_main
 
 
 def test_portfolio_assessment_application_and_stdio(

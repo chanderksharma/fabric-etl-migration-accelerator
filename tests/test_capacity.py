@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from accelerator.capacity import (
+from accelerator.runtime.runs import RunService
+from etl_migration_core.contracts.ir import SourcePlatform
+from etl_target_fabric.capacity.model import (
     COUNT_KEYS,
     INFORMATICA_COUNT_KEYS,
     CapacitySettings,
@@ -16,8 +18,6 @@ from accelerator.capacity import (
     build_capacity_profile,
     estimate_capacity,
 )
-from accelerator.etl_ir import SourcePlatform
-from accelerator.runs import RunService
 
 
 @dataclass
@@ -512,7 +512,7 @@ def test_workbook_four_workflow_golden_parity() -> None:
 def test_disabled_alteryx_container_tools_are_excluded_from_capacity_profile(
     tmp_path: Path,
 ) -> None:
-    from accelerator.assessment import assess_workflow
+    from etl_target_fabric.assessment.workflow import assess_workflow
 
     workflow = tmp_path / "disabled.yxmd"
     workflow.write_text(

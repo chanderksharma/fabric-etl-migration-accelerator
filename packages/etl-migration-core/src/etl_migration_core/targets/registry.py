@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from importlib.metadata import entry_points
 
-from etl_migration_core.spi import (
+from etl_migration_core.contracts.spi import (
     TargetPlatformInfo,
     TargetPlatformProvider,
     UnsupportedTargetCapabilityError,

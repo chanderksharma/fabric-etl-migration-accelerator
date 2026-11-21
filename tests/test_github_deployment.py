@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from accelerator.github_deployment import (
+from accelerator.delivery.github import (
     APPROVED_WORKFLOW_PATH,
     DeploymentTarget,
     GitHubDeploymentError,

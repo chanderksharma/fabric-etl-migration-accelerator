@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from etl_migration_core.discovery import DiscoveryService
-from etl_migration_core.ir import IR_VERSION, SourcePlatform
+from etl_migration_core.contracts.ir import IR_VERSION, SourcePlatform
+from etl_migration_core.contracts.spi import UnsupportedTargetCapabilityError
+from etl_migration_core.intake.discovery import DiscoveryService
 from etl_migration_core.sources.defaults import create_default_registry
-from etl_migration_core.spi import UnsupportedTargetCapabilityError
 from etl_migration_core.targets import create_target_registry
 
 

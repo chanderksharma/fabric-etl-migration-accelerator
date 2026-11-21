@@ -1,8 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AssessmentResult, Candidate, Page, RunResult } from "./App";
 import type { WorkflowEvidence } from "./evidence-types";
+import { FabricDeploymentPage } from "./FabricDeploymentPage";
 import { SourceGraph } from "./SourceGraph";
-import { Deployment } from "./workspace-deployment";
 import { CapacityPlanning } from "./workspace-capacity";
 import { useCapacity } from "./use-capacity";
 import { useEvidence } from "./workspace-evidence";
@@ -51,6 +51,7 @@ const pages: Array<{id: Page; label: string; icon: string}> = [
   {id: "migration-plan", label: "Migration Plan", icon: "plan"},
   {id: "capacity-planning", label: "Capacity Planning", icon: "capacity"},
   {id: "technical-details", label: "Technical Details", icon: "gear"},
+  {id: "fabric-deployment", label: "Fabric Deployment", icon: "deploy"},
 ];
 const detailTabs = [
   ["summary", "Summary"], ["flow", "Source Workflow"], ["design", "Fabric design"],
@@ -65,6 +66,7 @@ function Icon({name}: {name: string}) {
       : name === "flow" ? <><path d="M4 6h7M4 12h16M13 18h7"/><circle cx="14" cy="6" r="2"/><circle cx="10" cy="18" r="2"/></>
       : name === "plan" ? <><path d="M5 19V9m7 10V5m7 14v-7"/><path d="m4 7 6-4 5 5 5-4"/></>
       : name === "capacity" ? <><path d="M4 19h16M6 16l3-4 3 2 5-7"/><circle cx="17" cy="7" r="2"/></>
+      : name === "deploy" ? <><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/><path d="M5 5v14"/></>
       : name === "moon" ? <path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.5A7 7 0 0 1 12 3Z"/>
       : <><circle cx="12" cy="12" r="3"/><path d="M4 12h3m10 0h3M12 4v3m0 10v3"/><circle cx="12" cy="12" r="9"/></>}
   </svg>;
@@ -104,6 +106,7 @@ export function Workspace(props: Props) {
   const [technicalSearch, setTechnicalSearch] = useState("");
   const [technicalWorkflow, setTechnicalWorkflow] = useState("");
   const [registerPage, setRegisterPage] = useState(0);
+  const [deployWorkflowPath, setDeployWorkflowPath] = useState<string | undefined>(undefined);
   const [team, setTeam] = useState(7);
   const [allocation, setAllocation] = useState(77);
   const dialog = useRef<HTMLDivElement>(null);
@@ -521,7 +524,7 @@ export function Workspace(props: Props) {
               <td><button className="workflow-open-button workflow-name" aria-label={`Open workflow ${nameOf(item.path)}`} onClick={e => open(item, e.currentTarget)}>{nameOf(item.path)}</button></td><td>{item.complexity_score}</td><td><span className={`status ${statusClass(item.complexity_band)}`}>{item.complexity_band}</span></td><td>{waveLabel(item.migration_wave)}</td><td>{item.recommended_target}</td><td>{item.estimated_effort_days.toFixed(1)}d</td><td>{item.recommendation_reason}</td></tr>)}</tbody></table></div></Panel></div>
           <div className="two-column section-gap"><Panel title="Principal technical risks" note="Technical evidence requiring remediation or validation before cutover."><div className="focus-list"><div className="focus-item"><div><strong>Unmapped tools and expressions</strong><span>Explicit redesign and parity evidence required.</span></div><button className="link-button" onClick={() => jump("technical-details", "", 4)}>Inspect</button></div><div className="focus-item"><div><strong>Environment-specific references</strong><span>Validate portable connections and file bindings.</span></div><button className="link-button" onClick={() => jump("technical-details", "", 3)}>Review dependencies</button></div></div></Panel>
             <Panel title="Assessment confidence and limitations"><p>Static evidence is not runtime, throughput, memory, business criticality, measured effort, or production readiness. Unknown values are not Low risk. No workflow content is executed.</p></Panel></div>
-          {assessment && props.runId && <div className="section-gap"><Panel title="Assessment outputs" note="Export assessment data, download Fabric ZIP packages, or generate code previews below. Previews are unbound and unvalidated; nothing is executed or deployed.">
+          {assessment && props.runId && <div className="section-gap"><Panel title="Assessment outputs" note="Export portfolio assessment results, or open Fabric Deployment to generate definitions and dispatch CI/CD.">
             <div className="outputs-grid">
               <div className="output-group">
                 <h3>1. Assessment reports</h3>
@@ -532,70 +535,13 @@ export function Workspace(props: Props) {
                 </div>
               </div>
               <div className="output-group">
-                <h3>2. Download Fabric packages</h3>
-                <p>Build and download a ZIP of generated artifacts for each Fabric target.</p>
+                <h3>2. Code generation &amp; Fabric deployment</h3>
+                <p>Generate Dataflow, Notebook, and Pipeline definitions or trigger CI/CD from the dedicated Fabric Deployment tab.</p>
                 <div className="deploy-actions">
-                  <a className="secondary-button" href={`/api/runs/${props.runId}/candidates?target=notebook`}>Download Notebook package</a>
-                  <a className="secondary-button" href={`/api/runs/${props.runId}/candidates?target=dataflow`}>Download Dataflow package</a>
-                  <a className="secondary-button" href={`/api/runs/${props.runId}/candidates?target=pipeline`}>Download Pipeline package</a>
-                </div>
-              </div>
-              <div className="output-group">
-                <h3>3. Preview generated code</h3>
-                <p>Inspect generated Fabric definitions, paths, and diagnostics on this page.</p>
-                <div className="deploy-actions">
-                  <button className="secondary-button" disabled={props.generating} onClick={() => props.generate("notebook")}>Generate Notebook previews</button>
-                  <button className="secondary-button" disabled={props.generating} onClick={() => props.generate("dataflow")}>Generate Dataflow previews</button>
-                  <button className="secondary-button" disabled={props.generating} onClick={() => props.generate("pipeline")}>Generate Pipeline previews</button>
+                  <button className="primary-button" onClick={() => jump("fabric-deployment")}>Open Fabric Deployment →</button>
                 </div>
               </div>
             </div>
-            {props.generating && <p className="output-status" role="status">Generating Fabric definitions for preview…</p>}
-            {props.candidates.length > 0 && (() => {
-              const targetNames = new Set(props.candidates.map(item =>
-                item.target === "dataflow" ? "Dataflow Gen2" : item.target === "pipeline" ? "Fabric Data Pipeline" : "Fabric Notebook"
-              ));
-              const deployableCount = props.candidates.filter(item => item.deployable).length;
-              const scaffoldCount = props.candidates.length - deployableCount;
-              return <div className="outputs-preview-list">
-                <div className="outputs-preview-header">
-                  <strong>{Array.from(targetNames).join(" / ")} previews ({props.candidates.length})</strong>
-                  <span>{deployableCount} deployable · {scaffoldCount} manual scaffold{scaffoldCount === 1 ? "" : "s"}</span>
-                </div>
-                {props.candidates.map(candidate => {
-                  const targetLabel = candidate.target === "dataflow"
-                    ? "Dataflow Gen2"
-                    : candidate.target === "pipeline"
-                      ? "Fabric Data Pipeline"
-                      : "Fabric Notebook";
-                  const validationSummary = candidate.validation_state === "generated_unvalidated"
-                    ? "Unvalidated preview (bind sources and test parity before deploy)"
-                    : candidate.validation_state === "scaffold_only"
-                      ? "Scaffold only (manual redesign required)"
-                      : candidate.validation_state;
-                  return <div className="summary-box output-card" key={`${candidate.workflow}-${candidate.target}`}>
-                    <div className="output-card-meta">
-                      <span className="chip">{targetLabel}</span>
-                      <span className={`status ${candidate.deployable ? "ready" : "redesign"}`}>
-                        <span className="dot"/>
-                        {candidate.deployable ? "Deployable definition" : "Scaffold / manual rework"}
-                      </span>
-                      {candidate.definition_files.map(file => <span className="chip" key={file}>{file}</span>)}
-                    </div>
-                    <h2 className="output-card-title" aria-label={`${candidate.workflow}: ${candidate.validation_state}`}>
-                      {nameOf(candidate.workflow)}
-                    </h2>
-                    <p className="output-card-source"><code>{candidate.workflow}</code> · {validationSummary}</p>
-                    {candidate.artifact_path && <p>Saved in <code>generated-fabric-workflows/{candidate.artifact_path}</code></p>}
-                    {candidate.diagnostics.map(value => <p key={value}>{value}</p>)}
-                    {candidate.code && <details className="code-details">
-                      <summary>View generated code ({candidate.code.split("\n").length} lines)</summary>
-                      <pre className="deploy-code">{candidate.code}</pre>
-                    </details>}
-                  </div>;
-                })}
-              </div>;
-            })()}
           </Panel></div>}
         </section>
 
@@ -637,9 +583,22 @@ export function Workspace(props: Props) {
           <EvidenceRegister tab={evidenceTab} data={evidence.data} items={items} search={technicalSearch} workflow={technicalWorkflow} page={registerPage} setPage={setRegisterPage} exportRows={exportRows}/>
           <p className="technical-note">Static evidence does not prove runtime performance, connector availability, semantic parity, credential safety or production readiness.</p>
         </section>
+
+        <FabricDeploymentPage
+          key={deployWorkflowPath ?? "__default__"}
+          active={page === "fabric-deployment"}
+          assessment={assessment}
+          runId={props.runId}
+          candidates={props.candidates}
+          generating={props.generating}
+          generate={props.generate}
+          request={props.request}
+          preselectedWorkflowPath={deployWorkflowPath}
+          onStartIntake={() => jump("intake")}
+        />
       </div>
     </main>
-    <nav className="mobile-nav" aria-label="Mobile primary navigation">{pages.map(item => <a key={item.id} className={page === item.id ? "active" : ""} href={`#${item.id}`} onClick={() => {setSelected(null); navigate(item.id);}}><Icon name={item.icon}/>{item.id === "intake" ? "Intake" : item.id === "migration-plan" ? "Plan" : item.id === "capacity-planning" ? "Capacity" : item.id === "technical-details" ? "Technical" : item.label}</a>)}</nav>
+    <nav className="mobile-nav" aria-label="Mobile primary navigation">{pages.map(item => <a key={item.id} className={page === item.id ? "active" : ""} href={`#${item.id}`} onClick={() => {setSelected(null); navigate(item.id);}}><Icon name={item.icon}/>{item.id === "intake" ? "Intake" : item.id === "migration-plan" ? "Plan" : item.id === "capacity-planning" ? "Capacity" : item.id === "technical-details" ? "Technical" : item.id === "fabric-deployment" ? "Deploy" : item.label}</a>)}</nav>
     {selected && (() => {
       const list = filtered.some(item => item.path === selected.path) ? filtered : items;
       const selectedPos = list.findIndex(item => item.path === selected.path);
@@ -671,15 +630,22 @@ export function Workspace(props: Props) {
         {graph?.parse_status === "failed" && <div role="alert" className="notice">
           Source graph parsing failed. {graph.findings.join(" · ")}
         </div>}
-        <DrawerContent detail={detail} item={selected} graph={graph} props={props} openTechnical={() => {setTechnicalWorkflow(selected.path); setEvidenceTab(0); setSelected(null); navigate("technical-details");}}/>
+        <DrawerContent
+          detail={detail}
+          item={selected}
+          graph={graph}
+          props={props}
+          openTechnical={() => {setTechnicalWorkflow(selected.path); setEvidenceTab(0); setSelected(null); navigate("technical-details");}}
+          openDeployment={() => {setDeployWorkflowPath(selected.path); setSelected(null); navigate("fabric-deployment");}}
+        />
       </div>
     </div>;
     })()}
   </div>;
 }
 
-function DrawerContent({detail, item, graph, props, openTechnical}: {
-  detail: string; item: Item; graph: WorkflowEvidence | undefined; props: Props; openTechnical: () => void;
+function DrawerContent({detail, item, graph, props, openTechnical, openDeployment}: {
+  detail: string; item: Item; graph: WorkflowEvidence | undefined; props: Props; openTechnical: () => void; openDeployment: () => void;
 }) {
   const shape = useMemo(() => graphShape(graph), [graph]);
   const itemMappingRows = useMemo(() => toolMappingRows([item]), [item]);
@@ -705,13 +671,34 @@ function DrawerContent({detail, item, graph, props, openTechnical}: {
     return <section className="detail-section active"><div className="summary-box"><h3>Risk profile</h3><p>Static review priorities; no runtime or credential risk rating is inferred.</p><div className="mini-grid"><div className="mini"><span>Performance review</span><strong>{performancePriority}</strong></div><div className="mini"><span>Operational review</span><strong>{operationalPriority}</strong></div><div className="mini"><span>Compatibility review</span><strong>{compatibilityPriority}</strong></div><div className="mini"><span>Credential pattern</span><strong>No static rating</strong></div></div></div><div className="summary-box"><h3>Assessment dimensions</h3><div className="dimension"><strong>Performance review priority · {performancePriority}</strong><p>{item.tool_count} tools, graph depth {shape.depth} and {shape.branches} branches require validation with representative production volumes.</p></div><div className="dimension"><strong>Operational review · {operationalPriority}</strong><p>{item.dependencies.length} dependency references and {shape.containers} containers require environment, restart and monitoring validation.</p></div><div className="dimension"><strong>Compatibility review · {compatibilityPriority}</strong><p>{item.recommendation_reason}</p></div><div className="dimension"><strong>Credential-pattern review · No static rating</strong><p>Common secret patterns are redacted. This is not a complete secret audit.</p></div></div><div className="summary-box"><h3>Priority findings</h3>{[...item.unsupported_tools.map(value => `${value}: requires explicit redesign`), ...(graph?.findings ?? [])].map((value, index) => <p key={index}>{value}</p>)}</div><div className="notice">Unknown is not Low risk. Static priorities are not measured operational outcomes.</div></section>;
   }
   if (detail === "validation") return <section className="detail-section active"><Steps title="Functional parity" values={["Compare schemas, types, row counts and record-level reconciliation.", "Test nulls, expressions, joins and rejected-row behavior using edge cases.", "Validate every parameter combination and conditional route."]}/><Steps title="Operational acceptance" values={["Confirm identities, bindings, permissions and configuration.", "Test retries, restart, idempotency, logging and alerting.", "Measure runtime and capacity with authorized representative volumes."]}/><Steps title="Cutover and rollback" values={["Agree acceptance thresholds and owner sign-off.", "Run source and target in parallel where authorized.", "Retain a tested rollback route until parity is accepted."]}/></section>;
-  return <Deployment
-    key={item.path}
-    item={item}
-    candidates={props.candidates}
-    runId={props.runId}
-    request={props.request}
-  />;
+  const isManualOnly = item.recommended_target === "Manual rework";
+  return <section className="detail-section active">
+    {isManualOnly && <div className="notice" role="status"><strong>Manual rework required.</strong> This workflow has no deployable native definition. Download the manual deployment package below or review diagnostics in Fabric Deployment.</div>}
+    <div className="summary-box">
+      <h3>Deployment readiness</h3>
+      <div className="fact-grid">
+        <div className="fact"><span>Recommended target</span><strong>{item.recommended_target}</strong></div>
+        <div className="fact"><span>Migration wave</span><strong>{waveLabel(item.migration_wave)}</strong></div>
+        <div className="fact"><span>Remaining effort</span><strong>{item.estimated_effort_days.toFixed(1)} days</strong></div>
+        <div className="fact"><span>Status</span><strong>{isManualOnly ? "Manual redesign required" : "Eligible for Fabric codegen & CI dispatch"}</strong></div>
+      </div>
+      {item.target_components && item.target_components.length > 0 && (
+        <div className="chip-list" style={{marginTop: 12}}>
+          {item.target_components.map(value => <span className="chip" key={value}>{value}</span>)}
+        </div>
+      )}
+    </div>
+    <div className="summary-box">
+      <h3>Generate code &amp; dispatch deployment</h3>
+      <p>Code generation, generated artifact previews, dry-run validation, and GitHub Actions / GitLab CI dispatch are managed in the dedicated <strong>Fabric Deployment</strong> tab.</p>
+      <div className="deploy-actions">
+        <button type="button" className="primary-button" onClick={openDeployment}>Continue to Fabric Deployment →</button>
+        {props.runId
+          ? <a className="secondary-button" href={`/api/runs/${props.runId}/bundle?workflow=${encodeURIComponent(item.path)}`}>Download workflow bundle</a>
+          : <button type="button" className="secondary-button" disabled>Download workflow bundle</button>}
+      </div>
+    </div>
+  </section>;
 }
 
 function Steps({title, values}: {title: string; values: string[]}) {

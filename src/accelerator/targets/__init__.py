@@ -1,15 +1,13 @@
-"""Pluggable target platform providers and registry."""
+"""Target platform registry wiring for the accelerator app shell."""
 
 from accelerator.targets.defaults import create_default_target_registry
-from accelerator.targets.fabric import FabricTargetEvaluator, FabricTargetProvider
-from accelerator.targets.placeholders import (
+from etl_migration_core.targets import (
     PlaceholderTargetProvider,
-    builtin_placeholder_providers,
-)
-from accelerator.targets.registry import (
     TargetPlatformRegistry,
     UnknownTargetPlatformError,
+    builtin_placeholder_providers,
 )
+from etl_target_fabric.provider import FabricTargetEvaluator, FabricTargetProvider
 
 __all__ = [
     "FabricTargetEvaluator",

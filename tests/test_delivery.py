@@ -18,14 +18,19 @@ import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from accelerator.api import app
-from accelerator.application import AssessmentApplication
-from accelerator.assessment import WorkflowParseError, assess_workflow
-from accelerator.cli import app as cli
-from accelerator.discovery import DiscoveryService, InputRejectedError
-from accelerator.domain import DiscoveryLimits
-from accelerator.runs import RunService
-from accelerator.schemas import WorkflowAssessmentResponse, WorkflowCandidateResponse
+from accelerator.cli.app import app as cli
+from accelerator.runtime.runs import RunService
+from accelerator.server.api import app
+from etl_migration_core.intake.discovery import DiscoveryService, InputRejectedError
+from etl_migration_core.intake.domain import DiscoveryLimits
+from etl_target_fabric.assessment.portfolio import (
+    FabricAssessmentApplication as AssessmentApplication,
+)
+from etl_target_fabric.assessment.schemas import (
+    WorkflowAssessmentResponse,
+    WorkflowCandidateResponse,
+)
+from etl_target_fabric.assessment.workflow import WorkflowParseError, assess_workflow
 
 WORKFLOW = b"""<AlteryxDocument><Nodes>
 <Node ToolID="1"><GuiSettings Plugin="AlteryxBasePluginsGui.InputData.InputData"/>
@@ -130,7 +135,7 @@ def test_zip_upload_can_be_confirmed() -> None:
 
 
 def test_candidate_generation_produces_deployable_definition(tmp_path: Path) -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     path = tmp_path / "orders.yxmd"
     path.write_bytes(WORKFLOW)
@@ -146,7 +151,7 @@ def test_candidate_generation_produces_deployable_definition(tmp_path: Path) -> 
 
 
 def test_generation_scaffolds_unknown_semantics(tmp_path: Path) -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     path = tmp_path / "custom.yxmd"
     path.write_bytes(
@@ -164,7 +169,7 @@ def test_generation_scaffolds_unknown_semantics(tmp_path: Path) -> None:
 
 
 def test_union_crosstab_graph_compiles_natively() -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     source = Path(__file__).parents[1] / "alteryx-workflows" / "06_high_channel_crosstab.yxmd"
     notebook = generate_candidate(source, "notebook")
@@ -184,7 +189,7 @@ def test_union_crosstab_graph_compiles_natively() -> None:
 
 
 def test_reconciliation_compiles_to_multi_query_dataflow() -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     source = (
         Path(__file__).parents[1]
@@ -226,7 +231,7 @@ def test_reconciliation_compiles_to_multi_query_dataflow() -> None:
 
 
 def test_dataflow_query_groups_preserve_nested_alteryx_containers(tmp_path: Path) -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     source = tmp_path / "nested-containers.yxmd"
     source.write_text(
@@ -274,7 +279,7 @@ def test_dataflow_query_groups_preserve_nested_alteryx_containers(tmp_path: Path
 
 
 def test_target_variance_graph_compiles_to_native_notebook() -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     source = Path(__file__).parents[1] / "alteryx-workflows" / "07_high_target_variance.yxmd"
     candidate = generate_candidate(source, "notebook")
@@ -300,7 +305,7 @@ def test_target_variance_graph_compiles_to_native_notebook() -> None:
     ],
 )
 def test_very_high_workflows_compile_to_native_notebooks(workflow: str) -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     source = Path(__file__).parents[1] / "alteryx-workflows" / workflow
     candidate = generate_candidate(source, "notebook")
@@ -313,7 +318,7 @@ def test_very_high_workflows_compile_to_native_notebooks(workflow: str) -> None:
 
 
 def test_append_fields_workflow_compiles_to_native_notebook() -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     source = Path(__file__).parents[1] / "alteryx-workflows" / "sample_merge_append_joins.yxmd"
     candidate = generate_candidate(source, "notebook")
@@ -325,7 +330,7 @@ def test_append_fields_workflow_compiles_to_native_notebook() -> None:
 
 
 def test_snapshots_jobs_and_exports_survive_reopening(tmp_path: Path) -> None:
-    from accelerator.runs import RunService
+    from accelerator.runtime.runs import RunService
 
     source = tmp_path / "orders.yxmd"
     source.write_bytes(WORKFLOW)
@@ -344,7 +349,7 @@ def test_snapshots_jobs_and_exports_survive_reopening(tmp_path: Path) -> None:
 
 
 def test_cancelled_run_is_not_executed(tmp_path: Path) -> None:
-    from accelerator.runs import RunService
+    from accelerator.runtime.runs import RunService
 
     source = tmp_path / "orders.yxmd"
     source.write_bytes(WORKFLOW)
@@ -364,8 +369,8 @@ def test_run_service_context_closes_store(tmp_path: Path) -> None:
 
 
 def test_dry_run_cannot_approve_unvalidated_candidates(tmp_path: Path) -> None:
-    from accelerator.deployment import dry_run
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
+    from etl_target_fabric.delivery.deployer import dry_run
 
     source = tmp_path / "orders.yxmd"
     source.write_bytes(WORKFLOW)
@@ -435,7 +440,7 @@ def test_api_confirm_poll_generate_export_and_dry_run(local_client: TestClient) 
 def test_api_dispatches_github_deployment(
     local_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from accelerator.github_deployment import (
+    from accelerator.delivery.github import (
         GitHubDeploymentResult,
         GitHubDeploymentSelection,
         GitHubDeploymentService,
@@ -578,7 +583,7 @@ def test_api_dispatches_gitlab_deployment(
     local_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from accelerator.gitlab_deployment import (
+    from accelerator.delivery.gitlab import (
         GitLabDeploymentResult,
         GitLabDeploymentSelection,
         GitLabDeploymentService,
@@ -754,9 +759,58 @@ def test_snapshot_tampering_and_newer_schema_are_rejected(tmp_path: Path) -> Non
 
 def test_core_has_no_ai_network_or_legacy_imports() -> None:
     forbidden = {"httpx", "requests", "flask", "src", "openai", "anthropic", "langchain", "azure"}
-    root = Path(__file__).parents[1] / "src" / "accelerator"
-    for name in ("graph", "assessment", "discovery", "generation", "runs", "deployment"):
-        tree = ast.parse((root / f"{name}.py").read_text(encoding="utf-8"))
+    repo_root = Path(__file__).parents[1]
+    targets = [
+        (
+            repo_root
+            / "packages"
+            / "etl-migration-core"
+            / "src"
+            / "etl_migration_core"
+            / "sources"
+            / "alteryx"
+            / "graph.py"
+        ),
+        (
+            repo_root
+            / "packages"
+            / "etl-migration-core"
+            / "src"
+            / "etl_migration_core"
+            / "intake"
+            / "discovery.py"
+        ),
+        (
+            repo_root
+            / "packages"
+            / "etl-target-fabric"
+            / "src"
+            / "etl_target_fabric"
+            / "assessment"
+            / "workflow.py"
+        ),
+        (
+            repo_root
+            / "packages"
+            / "etl-target-fabric"
+            / "src"
+            / "etl_target_fabric"
+            / "compilers"
+            / "alteryx.py"
+        ),
+        (
+            repo_root
+            / "packages"
+            / "etl-target-fabric"
+            / "src"
+            / "etl_target_fabric"
+            / "delivery"
+            / "deployer.py"
+        ),
+        repo_root / "src" / "accelerator" / "runtime" / "runs.py",
+    ]
+    for path in targets:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 assert all(alias.name.split(".")[0] not in forbidden for alias in node.names)
@@ -780,7 +834,7 @@ def test_invalid_graphs_are_isolated(tmp_path: Path, content: bytes) -> None:
 
 
 def test_events_and_unsupported_expressions_generate_scaffolds(tmp_path: Path) -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     path = tmp_path / "events.yxmd"
     path.write_bytes(
@@ -907,7 +961,7 @@ def test_stale_worker_cannot_commit_results(
 
 @pytest.mark.parametrize("target", ["notebook", "dataflow"])
 def test_select_preview_golden_and_unsupported_options(tmp_path: Path, target: str) -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     path = tmp_path / "select.yxmd"
     content = WORKFLOW.replace(b"Filter.Filter", b"Select.Select").replace(
@@ -938,7 +992,7 @@ def test_csv_formula_injection_is_defused(tmp_path: Path, name: str) -> None:
 
 
 def test_repeated_configuration_is_inventoried_in_scaffold(tmp_path: Path) -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     path = tmp_path / "repeated.yxmd"
     path.write_bytes(
@@ -965,7 +1019,7 @@ def test_configuration_connections_are_not_canvas_edges(tmp_path: Path) -> None:
 
 
 def test_m_literal_escape_preserves_hash_sequences(tmp_path: Path) -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     path = tmp_path / "hash-name.yxmd"
     path.write_bytes(WORKFLOW.replace(b"[Amount]", b"[#(lf)]"))
@@ -985,7 +1039,7 @@ def test_unreadable_workflow_does_not_abort_other_files(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import accelerator.discovery as discovery
+    import etl_migration_core.intake.discovery as discovery
 
     (tmp_path / "a.yxmd").write_bytes(WORKFLOW)
     (tmp_path / "b.yxmd").write_bytes(WORKFLOW)
@@ -1010,7 +1064,7 @@ def test_waiting_batch_renews_its_fenced_lease(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import accelerator.runs as runs
+    import accelerator.runtime.runs as runs
 
     source = tmp_path / "orders.yxmd"
     source.write_bytes(WORKFLOW)
@@ -1064,7 +1118,7 @@ def test_waiting_batch_renews_its_fenced_lease(
 
 
 def test_canvas_annotations_do_not_change_score_or_block_preview(tmp_path: Path) -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     path = tmp_path / "annotated.yxmd"
     path.write_bytes(WORKFLOW)
@@ -1083,7 +1137,7 @@ def test_canvas_annotations_do_not_change_score_or_block_preview(tmp_path: Path)
 
 
 def test_disabled_workflow_events_do_not_block_generation(tmp_path: Path) -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     path = tmp_path / "events-disabled.yxmd"
     path.write_bytes(
@@ -1098,7 +1152,7 @@ def test_disabled_workflow_events_do_not_block_generation(tmp_path: Path) -> Non
 
 
 def test_real_designer_workflow_with_empty_enabled_events_and_anchor_join_compiles() -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     workflow = Path(__file__).parents[1] / "alteryx-workflows" / "my_alteryx-workflow.yxmd"
     dataflow = generate_candidate(workflow, "dataflow")
@@ -1119,7 +1173,7 @@ def test_real_designer_workflow_with_empty_enabled_events_and_anchor_join_compil
 
 
 def test_unique_output_anchor_and_date_regex_compile_natively(tmp_path: Path) -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     unique = tmp_path / "unique.yxmd"
     unique.write_bytes(
@@ -1303,7 +1357,7 @@ def test_informatica_dataflow_definition_disables_staging(tmp_path: Path) -> Non
 
 
 def test_alteryx_linear_dataflow_steps_group_into_single_query() -> None:
-    from accelerator.generation import generate_candidate
+    from etl_target_fabric.compilers.alteryx import generate_candidate
 
     source = Path(__file__).parents[1] / "alteryx-workflows" / "02_low_west_sample.yxmd"
     candidate = generate_candidate(source, "dataflow")
@@ -1484,7 +1538,7 @@ def test_readonly_evidence_is_identity_bound_and_redacted(
 
 
 def test_evidence_preserves_alteryx_annotations_and_container_dimensions() -> None:
-    from accelerator.evidence import workflow_evidence
+    from etl_portfolio_assessment.evidence.extractor import workflow_evidence
 
     source = (
         Path(__file__).parents[1]
@@ -1526,7 +1580,7 @@ def test_evidence_errors_are_not_cached(local_client: TestClient, tmp_path: Path
 
 
 def test_evidence_redacts_before_truncation_and_withholds_sensitive_expressions() -> None:
-    from accelerator.evidence import safe_expression, safe_text
+    from etl_portfolio_assessment.evidence.extractor import safe_expression, safe_text
 
     value = "https://sensitiveuser:secretpassword@example.invalid/data"
     assert "sensitiveuser" not in safe_text(value, 30)

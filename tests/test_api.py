@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from accelerator.api import app
+from accelerator.server.api import app
 
 
 def test_health_reports_version() -> None:
@@ -133,7 +133,7 @@ def test_upload_assessment_returns_deterministic_result() -> None:
 def test_browse_local_folder_returns_picked_path_and_handles_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import accelerator.api as api_module
+    import accelerator.server.api as api_module
 
     client = TestClient(app, base_url="http://localhost")
 
@@ -153,3 +153,30 @@ def test_browse_local_folder_returns_picked_path_and_handles_unavailable(
     monkeypatch.setattr(api_module, "_pick_local_folder", fail_picker)
     unavailable = client.post("/api/snapshots/browse-folder")
     assert unavailable.status_code == 501
+
+
+def test_resolve_web_root_supports_wheel_installs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import accelerator.server.api as api_module
+
+    monkeypatch.delenv("ACCELERATOR_WEB_ROOT", raising=False)
+    fake_site_pkg = tmp_path / "venv" / "Lib" / "site-packages" / "accelerator" / "server"
+    fake_site_pkg.mkdir(parents=True)
+    fake_api = fake_site_pkg / "api.py"
+    fake_api.write_text("", encoding="utf-8")
+    monkeypatch.setattr(api_module, "__file__", str(fake_api))
+
+    repo_cwd = tmp_path / "workspace"
+    cwd_dist = repo_cwd / "apps" / "web" / "dist"
+    cwd_dist.mkdir(parents=True)
+    (cwd_dist / "index.html").write_text("<div id='root'></div>", encoding="utf-8")
+    monkeypatch.chdir(repo_cwd)
+
+    assert api_module.resolve_web_root() == cwd_dist
+
+    packaged = fake_site_pkg.parent / "web_dist"
+    packaged.mkdir(parents=True)
+    (packaged / "index.html").write_text("<div id='root'></div>", encoding="utf-8")
+    assert api_module.resolve_web_root() == packaged
+

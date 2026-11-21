@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from importlib.metadata import entry_points
 from pathlib import Path
 
-from etl_migration_core.ir import EtlPackage
+from etl_migration_core.contracts.ir import EtlPackage
 from etl_migration_core.sources.base import SourceAdapter, SourceMatch
 
 SOURCE_ENTRY_POINT_GROUP = "etl_migration.sources"

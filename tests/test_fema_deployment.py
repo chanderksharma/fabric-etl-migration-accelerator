@@ -259,11 +259,24 @@ function global:Invoke-FabricRequest {{
             value = @(@{{ status = 'Completed' }})
         }}
     }}
+    if ($Method -eq 'Get' -and $Uri -match '/environments/{GUID_ENV}/staging/libraries$') {{
+        $Wheels = if ($global:ExistingItems) {{
+            @('fabric_etl_migration_accelerator-1.0.0-py3-none-any.whl')
+        }} else {{
+            @()
+        }}
+        return @{{
+            customLibraries = @{{ wheelFiles = $Wheels }}
+        }}
+    }}
     if ($Method -eq 'Get' -and $Uri -match '/environments/{GUID_ENV}$') {{
         return @{{
             id = '{GUID_ENV}'
             properties = @{{ publishDetails = @{{ state = 'Success' }} }}
         }}
+    }}
+    if ($Method -eq 'Delete' -and $Uri -match '/environments/{GUID_ENV}/staging/libraries') {{
+        return @{{}}
     }}
     if (
         $Method -eq 'Get' -and
@@ -404,6 +417,12 @@ def test_workspace_installer_fresh_and_idempotent_upgrade(tmp_path: Path) -> Non
     assert any(
         "/semanticModels/" in u and u.endswith("/updateDefinition") for u in update_uris
     )
+    delete_calls = [
+        c for c in upgrade_calls
+        if c["Method"] == "Delete" and "/staging/libraries?libraryToDelete=" in c["Uri"]
+    ]
+    assert len(delete_calls) == 1
+    assert "fabric_etl_migration_accelerator-1.0.0-py3-none-any.whl" in delete_calls[0]["Uri"]
 
 
 def test_fabric_environment_excludes_web_server_dependencies() -> None:

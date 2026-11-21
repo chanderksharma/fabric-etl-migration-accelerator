@@ -5,14 +5,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from etl_migration_core.ir import IR_VERSION, EtlAsset, EtlPackage
-from etl_migration_core.spi import (
+from etl_migration_core.contracts.ir import IR_VERSION, EtlAsset, EtlPackage
+from etl_migration_core.contracts.spi import (
     TargetCapability,
     TargetEvaluation,
     TargetEvaluator,
     TargetPlatformInfo,
 )
-from etl_target_fabric.evaluator import (
+from etl_target_fabric.assessment.evaluator import (
     evaluate_alteryx_native_route,
     evaluate_etl_native_route,
 )

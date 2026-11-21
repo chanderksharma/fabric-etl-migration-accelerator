@@ -28,8 +28,8 @@ Target platforms register via open string identifiers (`"fabric"`, `"databricks"
 from collections.abc import Sequence
 from pathlib import Path
 
-from etl_migration_core.ir import IR_VERSION, EtlAsset, EtlPackage
-from etl_migration_core.spi import (
+from etl_migration_core.contracts.ir import IR_VERSION, EtlAsset, EtlPackage
+from etl_migration_core.contracts.spi import (
     TargetCapability,
     TargetEvaluation,
     TargetEvaluator,

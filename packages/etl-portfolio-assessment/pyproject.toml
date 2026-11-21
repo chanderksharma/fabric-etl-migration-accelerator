@@ -22,7 +22,7 @@ fabric = [
 ]
 
 [project.scripts]
-etl-assess = "etl_portfolio_assessment.stdio:main"
+etl-assess = "etl_portfolio_assessment.service.stdio:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/etl_portfolio_assessment"]

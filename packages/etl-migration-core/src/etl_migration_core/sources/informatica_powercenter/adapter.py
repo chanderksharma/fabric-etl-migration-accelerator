@@ -10,7 +10,7 @@ from xml.etree.ElementTree import Element
 from defusedxml import ElementTree
 from pydantic import JsonValue
 
-from etl_migration_core.ir import (
+from etl_migration_core.contracts.ir import (
     AssetType,
     EtlAsset,
     EtlDependency,

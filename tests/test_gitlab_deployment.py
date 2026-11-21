@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from accelerator.gitlab_deployment import (
+from accelerator.delivery.gitlab import (
     APPROVED_CI_FILE,
     DeploymentTarget,
     GitLabDeploymentError,

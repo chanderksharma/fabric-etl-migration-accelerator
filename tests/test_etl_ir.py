@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from accelerator.etl_ir import (
+from etl_migration_core.contracts.ir import (
     IR_VERSION,
     AssetType,
     EtlAsset,

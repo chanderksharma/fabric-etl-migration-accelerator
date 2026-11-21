@@ -1,7 +1,13 @@
 """Core canonical ETL IR, discovery, source adapters, and plugin SPI."""
 
-from etl_migration_core.ir import IR_VERSION, EtlAsset, EtlGraph, EtlPackage, SourcePlatform
-from etl_migration_core.spi import (
+from etl_migration_core.contracts.ir import (
+    IR_VERSION,
+    EtlAsset,
+    EtlGraph,
+    EtlPackage,
+    SourcePlatform,
+)
+from etl_migration_core.contracts.spi import (
     IR_SPI_VERSION,
     TargetEvaluation,
     TargetPlatformInfo,

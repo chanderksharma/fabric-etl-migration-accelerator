@@ -25,10 +25,13 @@ All structured intellectual property, source code, synthetic fixtures, and Docs-
 
 | Path | Purpose |
 | --- | --- |
-| `src/accelerator/` | Core Python 3.13 package: FastAPI routes (`api.py`), Typer CLI (`cli.py`), SQLite WAL run/snapshot state (`runs.py`), canonical ETL IR (`etl_ir.py`), Alteryx & Informatica compilers (`generation.py`, `etl_generation.py`), and GitHub/GitLab dispatchers |
-| `src/accelerator/sources/` | Pluggable source adapters (`alteryx/`, `informatica_powercenter/`, `informatica_idmc/`) and adapter registry |
-| `apps/web/` | React 19 + TypeScript + Vite analyst portfolio UI and Vitest unit suites |
-| `scripts/Deploy-FabricArtifacts.ps1` | PowerShell 7 deployment engine with Microsoft Entra OIDC federation, bundle ordering, readback verification, and `executeQuery` validation |
+| `packages/etl-migration-core/` | `etl-migration-core` PyPI package: canonical ETL IR & target SPI (`contracts/`), secure discovery (`intake/`), source adapters (`sources/alteryx`, `sources/informatica_powercenter`, `sources/informatica_idmc`), and target registry/placeholders (`targets/`) |
+| `packages/etl-portfolio-assessment/` | `etl-portfolio-assessment` PyPI package: target-neutral portfolio assessment (`assessment/`), redacted graph evidence (`evidence/`), and stateless `etl-assess` CLI (`service/`) |
+| `packages/etl-target-fabric/` | `etl-target-fabric` PyPI package: Microsoft Fabric fit evaluator & support matrix (`assessment/`), F-SKU capacity model (`capacity/`), M/PySpark/Pipeline compilers (`compilers/`), artifact writer & dry-run planner (`delivery/`), and stateless `etl-fabric` CLI |
+| `src/accelerator/` | Local application shell (`fabric-etl-migration-accelerator`): FastAPI loopback routes (`server/`), Typer CLI (`cli/`), SQLite WAL run/snapshot state (`runtime/`), GitHub/GitLab CI dispatchers (`delivery/`), Windows desktop host (`desktop/`), and target registry assembly (`targets/`) |
+| `apps/web/` | React 19 + TypeScript + Vite 7-tab analyst workbench (`Portfolio` assessment separated from `Fabric Deployment` code generation/dispatch) and Vitest suites |
+| `apps/etl-migration-assessment-app/` | Fabric-native Analyst App (Rayfin static hosting + User Data Functions + semantic model queries) |
+| `scripts/` | PowerShell 7 and Node deployment automation (`Deploy-AcceleratorWorkspace.ps1`, `Deploy-FabricArtifacts.ps1`, `Start-LocalApp.ps1`, `Build-Desktop.ps1`, `build-fema-bundle.mjs`) |
 | `alteryx-workflows/` | Hermetic, 100% synthetic Alteryx Designer sample workflows (`01_low_*` through `11_multi_container_reconciliation.yxmd`) |
 | `tests/` | Pytest unit, adapter, compiler, API, CLI, compatibility, and acceptance suites plus synthetic Informatica fixtures (`tests/fixtures/powercenter/`, `tests/fixtures/idmc/`) |
 | `generated-fabric-workflows/` | Deterministically generated Fabric Dataflow Gen2, Notebook, and Data Pipeline envelopes, manifests, and `deployment-plan.json` |

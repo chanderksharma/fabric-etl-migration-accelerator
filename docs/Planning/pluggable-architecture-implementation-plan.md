@@ -46,26 +46,19 @@ fabric-etl-migration-accelerator/
 |   |   |-- README.md
 |   |   |-- src/etl_migration_core/
 |   |   |   |-- py.typed
-|   |   |   |-- ir.py                         # From accelerator/etl_ir.py
-|   |   |   |-- graph.py                      # Legacy XML graph primitives (transitional)
-|   |   |   |-- domain.py                     # DiscoveryLimits, SkipReason, Candidate models
-|   |   |   |-- discovery.py                  # Secure staging & zip-bomb guards
-|   |   |   |-- spi.py                        # Source, Target, Capacity, Codegen, Deploy Protocols
-|   |   |   |-- registry.py                   # Generic entry_points + explicit registration
-|   |   |   `-- sources/                      # Built-in Alteryx, PowerCenter, IDMC + idmc_export
+|   |   |   |-- contracts/                    # ir.py (EtlPackage IR), spi.py (Protocols)
+|   |   |   |-- intake/                       # domain.py, discovery.py (secure staging & zip guards)
+|   |   |   |-- sources/                      # Built-in Alteryx, PowerCenter, IDMC + registry/defaults
+|   |   |   `-- targets/                      # TargetPlatformRegistry + roadmap placeholders
 |   |   `-- tests/
 |   |-- etl-portfolio-assessment/             # PyPI: etl-portfolio-assessment
 |   |   |-- pyproject.toml                    # Deps: etl-migration-core
 |   |   |-- README.md
 |   |   |-- src/etl_portfolio_assessment/
 |   |   |   |-- py.typed
-|   |   |   |-- engine.py                     # Source-neutral assessment over EtlPackage
-|   |   |   |-- complexity.py                 # Intrinsic node/edge/dependency scoring
-|   |   |   |-- effort.py                     # Target-neutral base effort & wave inputs
-|   |   |   |-- workload_profile.py           # Target-agnostic operator & schedule counts
-|   |   |   |-- evidence.py                   # Redacted bounded graph evidence
-|   |   |   |-- schemas.py                    # Neutral assessment & summary contracts
-|   |   |   `-- application.py                # Stateless preview & assess facade
+|   |   |   |-- assessment/                   # engine.py, effort.py, workload_profile.py
+|   |   |   |-- evidence/                     # extractor.py (redacted bounded graph evidence)
+|   |   |   `-- service/                      # application.py, schemas.py, stdio.py (etl-assess CLI)
 |   |   `-- tests/
 |   `-- etl-target-fabric/                    # PyPI: etl-target-fabric
 |       |-- pyproject.toml                    # Deps: etl-migration-core
@@ -73,19 +66,16 @@ fabric-etl-migration-accelerator/
 |       |-- src/etl_target_fabric/
 |       |   |-- py.typed
 |       |   |-- provider.py                   # FabricTargetProvider implementing Target SPI
-|       |   |-- support_matrix.py             # Dataflow, Notebook, Pipeline support markers
-|       |   |-- evaluator.py                  # Compiler-backed routing & fit evaluation
-|       |   |-- capacity.py                   # Fabric F-SKU (F2-F8192) & CU sizing model
-|       |   |-- generators/                   # Dataflow M, PySpark Notebook, Pipeline compilers
-|       |   |-- artifact_writer.py            # Extracted from runs.py (_artifact_path & manifests)
-|       |   `-- deployer.py                   # Pure dry-run planner & deployment manifest
+|       |   |-- stdio.py                      # Stateless etl-fabric CLI
+|       |   |-- assessment/                   # support_matrix.py, evaluator.py, portfolio.py, effort.py, schemas.py
+|       |   |-- capacity/                     # model.py (Fabric F2-F8192 & CU sizing)
+|       |   |-- compilers/                    # alteryx.py, ir.py (Dataflow M, PySpark, Pipeline)
+|       |   `-- delivery/                     # artifact_writer.py, deployer.py
 |       `-- tests/
-|-- src/accelerator/                          # App shell (FastAPI, Typer, RunService, CI, Desktop)
-|   |-- targets/                              # Target registry + built-in roadmap placeholders
-|   `-- ...                                   # Thin backward-compatibility shims
-|-- apps/                                     # React UI & Rayfin Fabric Analyst App
+|-- src/accelerator/                          # App shell (server/, cli/, runtime/, delivery/, desktop/, targets/)
+|-- apps/                                     # React UI (apps/web) & Rayfin Fabric Analyst App
 |-- notebooks/                                # Headless Spark assessment & FEMA installer
-`-- scripts/                                  # PowerShell & Node deployment automation
+`-- scripts/                                  # PowerShell & Node deployment, wheel-app, & desktop automation
 ```
 
 > [!NOTE]
