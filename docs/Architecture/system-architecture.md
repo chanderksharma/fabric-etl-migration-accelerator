@@ -12,6 +12,19 @@ ETL Migration Accelerator**.
 
 ![End-to-End Architecture Overview](arch-01-end-to-end-accelerator.vsdx.fig.png)
 
+## Pluggable Package and Extension Architecture
+
+The codebase is organized as a `uv` workspace separating canonical ETL IR, target-neutral portfolio assessment, target-platform providers, and the runtime application shell. See [Building Source and Target Plugins](../Guides/building-plugins.md) and the [Pluggable Architecture Implementation Plan](../Planning/pluggable-architecture-implementation-plan.md).
+
+![Pluggable Solution Architecture](arch-02-pluggable-solution-architecture.vsdx.fig.png)
+
+| Package | PyPI distribution | Responsibilities |
+| :--- | :--- | :--- |
+| Core IR and SPI | `etl-migration-core` | Canonical `EtlPackage` IR, secure staging, source adapters, and `TargetPlatformRegistry` (with fail-closed placeholders for `databricks`, `synapse`, and `snowflake`) |
+| Portfolio Assessment | `etl-portfolio-assessment` | Target-neutral complexity, base effort, workload profile, redacted evidence, and stateless `etl-assess` CLI |
+| Microsoft Fabric Provider | `etl-target-fabric` | Fabric target evaluator, F-SKU capacity model, Dataflow Gen2 / PySpark / Pipeline compilers, artifact writer, dry-run planner, and stateless `etl-fabric` CLI |
+| Application Shell | `fabric-etl-migration-accelerator` | FastAPI loopback API (`/api/targets`, `/api/runs`), SQLite WAL `RunService`, Typer CLI (`tool`), CI dispatchers, and Desktop shell |
+
 ## System Context
 
 ```mermaid

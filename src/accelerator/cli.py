@@ -11,6 +11,7 @@ from accelerator.application import AssessmentApplication
 from accelerator.discovery import InputRejectedError
 from accelerator.generation import Target
 from accelerator.runs import RunService
+from accelerator.targets import create_default_target_registry
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -116,3 +117,19 @@ def generate_artifacts(
     except (KeyError, OSError, ValueError) as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=2) from error
+
+
+@app.command("targets")
+def list_targets() -> None:
+    """List registered migration target platforms and capability status."""
+    registry = create_default_target_registry()
+    typer.echo(
+        json.dumps(
+            {
+                "targets": [
+                    info.model_dump(mode="json") for info in registry.list_providers()
+                ]
+            },
+            indent=2,
+        )
+    )

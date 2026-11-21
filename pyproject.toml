@@ -10,6 +10,9 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
   "defusedxml>=0.7.1,<1",
+  "etl-migration-core>=1.0.0,<2",
+  "etl-portfolio-assessment>=1.0.0,<2",
+  "etl-target-fabric>=1.0.0,<2",
   "fastapi>=0.120,<1",
   "pyjwt[crypto]>=2.10,<3",
   "pydantic>=2.12,<3",
@@ -45,9 +48,22 @@ tool = "accelerator.cli:app"
 [tool.hatch.build.targets.wheel]
 packages = ["src/accelerator"]
 
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+etl-migration-core = { workspace = true }
+etl-portfolio-assessment = { workspace = true }
+etl-target-fabric = { workspace = true }
+
 [tool.pytest.ini_options]
-addopts = "--strict-markers --strict-config --cov=accelerator --cov-report=term-missing"
-testpaths = ["tests"]
+addopts = "--strict-markers --strict-config --cov=accelerator --cov=etl_migration_core --cov=etl_portfolio_assessment --cov=etl_target_fabric --cov-report=term-missing"
+testpaths = [
+  "tests",
+  "packages/etl-migration-core/tests",
+  "packages/etl-portfolio-assessment/tests",
+  "packages/etl-target-fabric/tests",
+]
 
 [tool.ruff]
 line-length = 100
@@ -57,10 +73,24 @@ extend-exclude = ["generated-fabric-workflows"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
+[tool.ruff.lint.isort]
+known-first-party = [
+  "accelerator",
+  "etl_migration_core",
+  "etl_portfolio_assessment",
+  "etl_target_fabric",
+]
+
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["src", "tests"]
+files = ["src", "packages", "tests"]
+mypy_path = [
+  "src",
+  "packages/etl-migration-core/src",
+  "packages/etl-portfolio-assessment/src",
+  "packages/etl-target-fabric/src",
+]
 
 [[tool.mypy.overrides]]
 module = ["webview", "webview.*"]

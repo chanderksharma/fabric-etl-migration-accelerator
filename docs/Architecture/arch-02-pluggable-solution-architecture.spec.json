@@ -1,0 +1,344 @@
+{
+  "meta": {
+    "title": "Figure ARCH-02 — Pluggable & Extensible ETL Migration Solution Architecture",
+    "subtitle": "Target-neutral portfolio assessment, pure canonical IR core, independent target-platform provider PyPI bundles, IDE/BI consumers, and CI/CD governance plane",
+    "audience": "tech",
+    "layout": "box",
+    "canvas": [1940, 1040],
+    "icons": "none"
+  },
+  "root": {
+    "type": "zone",
+    "style": "none",
+    "dir": "row",
+    "gap": 24,
+    "children": [
+      {
+        "id": "z_stack",
+        "type": "zone",
+        "style": "none",
+        "dir": "col",
+        "span": 4.35,
+        "gap": 14,
+        "children": [
+          {
+            "id": "z_consumers",
+            "label": "Consumer & Serving Layer",
+            "sub": "Analysts, leadership & devs",
+            "style": "side",
+            "side_w": 205,
+            "color": "purple",
+            "dir": "row",
+            "gap": 14,
+            "children": [
+              {
+                "id": "c_web_ui",
+                "label": "React Portfolio & Desktop UI",
+                "sub": "Intake, comparison & evidence"
+              },
+              {
+                "id": "c_fabric_app",
+                "label": "Fabric App & Power BI",
+                "sub": "Direct Lake & Wave 1-4 executive BI"
+              },
+              {
+                "id": "c_vscode_ext",
+                "label": "VS Code Developer Extension",
+                "sub": "DAG preview, scaffold fixes & @fema",
+                "status": "proposed"
+              },
+              {
+                "id": "c_cli_sdk",
+                "label": "Typer CLI & Artifact Downloads",
+                "sub": "Batch automation & parity sign-off"
+              }
+            ]
+          },
+          {
+            "id": "z_hosts",
+            "label": "Orchestration & Runtimes",
+            "sub": "accelerator, Spark & IDE stdio",
+            "style": "side",
+            "side_w": 205,
+            "color": "blue",
+            "dir": "row",
+            "gap": 14,
+            "children": [
+              {
+                "id": "c_runservice",
+                "label": "FastAPI & SQLite WAL RunService",
+                "sub": "Snapshots, lease fencing & caching",
+                "emphasis": true
+              },
+              {
+                "id": "c_spark_host",
+                "label": "Fabric Runtime 2.0 Notebook",
+                "sub": "OneLake intake & Delta persistence"
+              },
+              {
+                "id": "c_pkg_orchestrator",
+                "label": "Pluggable Stage Orchestrator",
+                "sub": "Assess -> Compare -> Generate -> Deploy",
+                "status": "proposed"
+              },
+              {
+                "id": "c_stdio_worker",
+                "label": "Stateless Stdio JSON-RPC Worker",
+                "sub": "Single-asset CLI/LSP bridge for IDEs",
+                "status": "proposed"
+              }
+            ]
+          },
+          {
+            "id": "z_targets",
+            "label": "Target Platform Providers",
+            "sub": "Fabric + extensible SPI",
+            "style": "side",
+            "side_w": 205,
+            "color": "teal",
+            "dir": "row",
+            "gap": 14,
+            "children": [
+              {
+                "id": "c_fabric_provider",
+                "label": "Microsoft Fabric Provider",
+                "sub": "etl-target-fabric: Fit, F-SKUs, M & PySpark",
+                "emphasis": true
+              },
+              {
+                "id": "c_dbx_provider",
+                "label": "Databricks (Placeholder)",
+                "sub": "etl-target-databricks: Fit, DBU & Lakeflow",
+                "status": "proposed"
+              },
+              {
+                "id": "c_synapse_provider",
+                "label": "Azure Synapse (Placeholder)",
+                "sub": "etl-target-synapse: DWU & Spark SPI",
+                "status": "proposed"
+              },
+              {
+                "id": "c_snowflake_provider",
+                "label": "Snowflake (Placeholder)",
+                "sub": "etl-target-snowflake: Snowpark & SQL SPI",
+                "status": "proposed"
+              }
+            ]
+          },
+          {
+            "id": "z_assessment",
+            "label": "Portfolio Assessment",
+            "sub": "etl-portfolio-assessment",
+            "style": "side",
+            "side_w": 205,
+            "color": "green",
+            "dir": "row",
+            "gap": 14,
+            "children": [
+              {
+                "id": "c_neutral_assess",
+                "label": "Source-Neutral Assessment Engine",
+                "sub": "Inventory, complexity, waves & risk",
+                "emphasis": true
+              },
+              {
+                "id": "c_effort_evidence",
+                "label": "Effort & Redacted Evidence",
+                "sub": "Intrinsic effort & bounded graph DAG"
+              },
+              {
+                "id": "c_workload_profile",
+                "label": "Target-Neutral Workload Profile",
+                "sub": "Operator counts & schedule metadata",
+                "status": "proposed"
+              }
+            ]
+          },
+          {
+            "id": "z_ir_sources",
+            "label": "Canonical IR & Source SPI",
+            "sub": "etl-migration-core PyPI",
+            "style": "side",
+            "side_w": 205,
+            "color": "orange",
+            "dir": "row",
+            "gap": 14,
+            "children": [
+              {
+                "id": "c_intake",
+                "label": "Secure Discovery & Staging",
+                "sub": "ZIP-bomb, path & defusedxml guards"
+              },
+              {
+                "id": "c_ir_model",
+                "label": "Pure Canonical ETL IR & SPI",
+                "sub": "EtlPackage, DAG & zero target leakage",
+                "emphasis": true
+              },
+              {
+                "id": "c_built_in_src",
+                "label": "Built-In Source Adapters",
+                "sub": "Unified Alteryx, PowerCenter & IDMC"
+              },
+              {
+                "id": "c_ext_src",
+                "label": "Future Source Plugins",
+                "sub": "SSIS, Talend & DataStage wheels",
+                "status": "proposed"
+              }
+            ]
+          },
+          {
+            "id": "z_estates",
+            "label": "Legacy ETL Source Estates",
+            "sub": "Untrusted exports & XML",
+            "style": "side",
+            "side_w": 205,
+            "color": "gray",
+            "dir": "row",
+            "gap": 14,
+            "children": [
+              {
+                "id": "c_src_ayx",
+                "label": "Alteryx Designer",
+                "sub": ".yxmd, .yxmc, .yxwz & .yxzp",
+                "status": "existing"
+              },
+              {
+                "id": "c_src_pc",
+                "label": "Informatica PowerCenter",
+                "sub": "Repository XML (powrmart.dtd)",
+                "status": "existing"
+              },
+              {
+                "id": "c_src_idmc",
+                "label": "Informatica IDMC",
+                "sub": "Export ZIPs & REST API",
+                "status": "existing"
+              },
+              {
+                "id": "c_src_future",
+                "label": "Future ETL Platforms",
+                "sub": "SSIS, Talend, DataStage",
+                "status": "proposed"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "z_control_pillar",
+        "type": "zone",
+        "style": "boundary",
+        "color": "blue",
+        "dir": "col",
+        "span": 1.45,
+        "gap": 14,
+        "label": "Cross-Cutting Control & Extension Plane",
+        "sub": "Plugin discovery, CI/CD & security",
+        "children": [
+          {
+            "id": "z_delivery_cicd",
+            "type": "zone",
+            "style": "header",
+            "color": "orange",
+            "dir": "col",
+            "justify": "top",
+            "gap": 10,
+            "label": "Delivery & Secretless CI/CD",
+            "sub": "Dispatch-only target deployers",
+            "children": [
+              {
+                "type": "zone",
+                "style": "none",
+                "dir": "row",
+                "gap": 10,
+                "children": [
+                  {
+                    "id": "cp_github",
+                    "label": "GitHub Actions",
+                    "sub": "Workflow dispatch"
+                  },
+                  {
+                    "id": "cp_gitlab",
+                    "label": "GitLab CI / AzDO",
+                    "sub": "Pipeline dispatch"
+                  }
+                ]
+              },
+              {
+                "id": "cp_oidc",
+                "label": "Microsoft Entra OIDC Federation",
+                "sub": "Secretless JWT exchange & ALM promotion",
+                "emphasis": true
+              }
+            ]
+          },
+          {
+            "id": "z_spi_gov",
+            "type": "zone",
+            "style": "header",
+            "color": "teal",
+            "dir": "col",
+            "justify": "top",
+            "gap": 10,
+            "label": "Extensibility & Contract SPI",
+            "sub": "Zero-core-edit plugin loading",
+            "children": [
+              {
+                "id": "cp_entrypoints",
+                "label": "Target & Source Registry SPI",
+                "sub": "Evaluator, Codegen & importlib.metadata",
+                "status": "proposed"
+              },
+              {
+                "id": "cp_abi",
+                "label": "Versioned IR & Provider ABI",
+                "sub": "SemVer, capability & provenance tags"
+              },
+              {
+                "id": "cp_failclosed",
+                "label": "Fail-Closed Scaffolds & Parity",
+                "sub": "Explicit diagnostics on gaps"
+              }
+            ]
+          },
+          {
+            "id": "z_pkg_sdl",
+            "type": "zone",
+            "style": "header",
+            "color": "gray",
+            "dir": "col",
+            "justify": "top",
+            "gap": 10,
+            "label": "PyPI Packaging & Chrysalis SDL",
+            "sub": "3 core libs + provider bundles",
+            "children": [
+              {
+                "id": "cp_pypi",
+                "label": "uv Workspace PyPI Packages",
+                "sub": "core, assessment, target-* & app",
+                "status": "proposed"
+              },
+              {
+                "id": "cp_sdl",
+                "label": "Chrysalis SDL & Zero-Exec Guard",
+                "sub": "CodeQL, pip-audit & synthetic tests"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "edges": [
+    { "from": "z_estates", "to": "z_ir_sources", "step": 1, "label": "Ingest", "kind": "data" },
+    { "from": "z_ir_sources", "to": "z_assessment", "step": 2, "label": "Canonical IR", "kind": "data" },
+    { "from": "z_assessment", "to": "z_targets", "step": 3, "label": "Evaluate & compile", "kind": "data" },
+    { "from": "z_targets", "to": "z_hosts", "step": 4, "label": "Envelopes & receipts", "kind": "data" },
+    { "from": "z_hosts", "to": "z_consumers", "step": 5, "label": "Results & IDE UX", "kind": "data" },
+    { "from": "z_hosts", "to": "z_delivery_cicd", "label": "Deploy dispatch", "kind": "control" },
+    { "from": "z_spi_gov", "to": "z_targets", "label": "Plugin SPI", "kind": "control" },
+    { "from": "z_pkg_sdl", "to": "z_ir_sources", "label": "PyPI & SDL", "kind": "control" }
+  ]
+}

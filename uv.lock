@@ -6,6 +6,14 @@ resolution-markers = [
     "python_full_version < '3.15'",
 ]
 
+[manifest]
+members = [
+    "etl-migration-core",
+    "etl-portfolio-assessment",
+    "etl-target-fabric",
+    "fabric-etl-migration-accelerator",
+]
+
 [[package]]
 name = "altgraph"
 version = "0.17.5"
@@ -384,6 +392,52 @@ wheels = [
 ]
 
 [[package]]
+name = "etl-migration-core"
+version = "1.0.0"
+source = { editable = "packages/etl-migration-core" }
+dependencies = [
+    { name = "defusedxml" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "defusedxml", specifier = ">=0.7.1,<1" },
+    { name = "pydantic", specifier = ">=2.12,<3" },
+]
+
+[[package]]
+name = "etl-portfolio-assessment"
+version = "1.0.0"
+source = { editable = "packages/etl-portfolio-assessment" }
+dependencies = [
+    { name = "etl-migration-core" },
+]
+
+[package.optional-dependencies]
+fabric = [
+    { name = "etl-target-fabric" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "etl-migration-core", editable = "packages/etl-migration-core" },
+    { name = "etl-target-fabric", marker = "extra == 'fabric'", editable = "packages/etl-target-fabric" },
+]
+provides-extras = ["fabric"]
+
+[[package]]
+name = "etl-target-fabric"
+version = "1.0.0"
+source = { editable = "packages/etl-target-fabric" }
+dependencies = [
+    { name = "etl-migration-core" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "etl-migration-core", editable = "packages/etl-migration-core" }]
+
+[[package]]
 name = "executing"
 version = "2.3.0"
 source = { registry = "https://packagefeedproxy.microsoft.io/pypi/simple/" }
@@ -398,6 +452,9 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "defusedxml" },
+    { name = "etl-migration-core" },
+    { name = "etl-portfolio-assessment" },
+    { name = "etl-target-fabric" },
     { name = "fastapi" },
     { name = "pydantic" },
     { name = "pyjwt", extra = ["crypto"] },
@@ -430,6 +487,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1,<1" },
+    { name = "etl-migration-core", editable = "packages/etl-migration-core" },
+    { name = "etl-portfolio-assessment", editable = "packages/etl-portfolio-assessment" },
+    { name = "etl-target-fabric", editable = "packages/etl-target-fabric" },
     { name = "fastapi", specifier = ">=0.120,<1" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28,<1" },
     { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=7,<8" },

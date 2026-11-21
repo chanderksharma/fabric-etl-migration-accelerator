@@ -1,0 +1,90 @@
+{
+  "spec": "C:\\code\\github2\\fabric-etl-migration-accelerator\\docs\\Architecture\\arch-02-pluggable-solution-architecture.spec.json",
+  "files": {
+    "vsdx": "C:\\code\\github2\\fabric-etl-migration-accelerator\\docs\\Architecture\\arch-02-pluggable-solution-architecture.vsdx",
+    "vsdx-png": "C:\\code\\github2\\fabric-etl-migration-accelerator\\docs\\Architecture\\arch-02-pluggable-solution-architecture.vsdx.png",
+    "vsdx-fig": "C:\\code\\github2\\fabric-etl-migration-accelerator\\docs\\Architecture\\arch-02-pluggable-solution-architecture.vsdx.fig.png"
+  },
+  "lint": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "findings": [],
+  "problems": [],
+  "alt_text": {
+    "short": "Diagram that shows figure ARCH-02 \u2014 Pluggable & Extensible ETL Migration Solution Architecture.",
+    "long": "Consumer & Serving Layer: React Portfolio & Desktop UI, Fabric App & Power BI, VS Code Developer Extension, Typer CLI & Artifact Downloads. Orchestration & Runtimes: FastAPI & SQLite WAL RunService, Fabric Runtime 2.0 Notebook, Pluggable Stage Orchestrator, Stateless Stdio JSON-RPC Worker. Target Platform Providers: Microsoft Fabric Provider, Databricks (Placeholder), Azure Synapse (Placeholder), Snowflake (Placeholder). Portfolio Assessment: Source-Neutral Assessment Engine, Effort & Redacted Evidence, Target-Neutral Workload Profile. Canonical IR & Source SPI: Secure Discovery & Staging, Pure Canonical ETL IR & SPI, Built-In Source Adapters, Future Source Plugins. Legacy ETL Source Estates: Alteryx Designer, Informatica PowerCenter, Informatica IDMC, Future ETL Platforms. Delivery & Secretless CI/CD: Microsoft Entra OIDC Federation. Extensibility & Contract SPI: Target & Source Registry SPI, Versioned IR & Provider ABI, Fail-Closed Scaffolds & Parity. PyPI Packaging & Chrysalis SDL: uv Workspace PyPI Packages, Chrysalis SDL & Zero-Exec Guard. Flows: z_estates to z_ir_sources (Ingest); z_ir_sources to z_assessment (Canonical IR); z_assessment to z_targets (Evaluate & compile); z_targets to z_hosts (Envelopes & receipts); z_hosts to z_consumers (Results & IDE UX); z_hosts to z_delivery_cicd (Deploy dispatch); z_spi_gov to z_targets (Plugin SPI); z_pkg_sdl to z_ir_sources (PyPI & SDL).",
+    "zones": [
+      "Consumer & Serving Layer",
+      "Orchestration & Runtimes",
+      "Target Platform Providers",
+      "Portfolio Assessment",
+      "Canonical IR & Source SPI",
+      "Legacy ETL Source Estates",
+      "Cross-Cutting Control & Extension Plane",
+      "Delivery & Secretless CI/CD",
+      "Extensibility & Contract SPI",
+      "PyPI Packaging & Chrysalis SDL"
+    ],
+    "cards": 31
+  },
+  "verify": {
+    "ok": true,
+    "pages": 1,
+    "shapes": 80,
+    "connectors": 8,
+    "glued_connectors": 8,
+    "page_in": [
+      20.2083,
+      10.8333
+    ],
+    "layers": [],
+    "problems": [],
+    "texts": 64,
+    "fonts": {
+      "Segoe UI": 64
+    },
+    "expected": {
+      "archkit_shapes": 80,
+      "archkit_connectors": 8
+    },
+    "background_pages": 1,
+    "move_test": {
+      "ok": true,
+      "connector": "e1",
+      "moved_shape": "z_ir_sources",
+      "begin_end_before": [
+        7.0938,
+        1.6597,
+        7.0938,
+        2.2431
+      ],
+      "begin_end_after": [
+        7.0938,
+        1.6597,
+        7.4938,
+        1.9431
+      ],
+      "rerouted_local_points": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.16
+        ],
+        [
+          0.4,
+          0.16
+        ],
+        [
+          0.4,
+          0.283
+        ]
+      ],
+      "geom_rows_before": 3,
+      "detail": ""
+    }
+  }
+}

@@ -404,3 +404,11 @@ def test_workspace_installer_fresh_and_idempotent_upgrade(tmp_path: Path) -> Non
     assert any(
         "/semanticModels/" in u and u.endswith("/updateDefinition") for u in update_uris
     )
+
+
+def test_fabric_environment_excludes_web_server_dependencies() -> None:
+    env_text = (ROOT / "scripts" / "fabric-environment.yml").read_text(encoding="utf-8")
+    for forbidden in ("fastapi", "uvicorn", "typer", "pyjwt", "python-multipart"):
+        assert forbidden not in env_text.casefold()
+    assert "defusedxml" in env_text
+    assert "pydantic" in env_text

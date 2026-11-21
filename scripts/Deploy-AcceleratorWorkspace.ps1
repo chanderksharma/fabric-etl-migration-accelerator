@@ -507,7 +507,7 @@ function Wait-EnvironmentIdle {
     throw "Timed out waiting for environment $EnvironmentId publish state."
 }
 
-function Resolve-WheelArtifact {
+function Resolve-WheelArtifacts {
     [CmdletBinding()]
     param(
         [string]$ExplicitPath,
@@ -519,19 +519,19 @@ function Resolve-WheelArtifact {
         if (-not (Test-Path -LiteralPath $ExplicitPath -PathType Leaf)) {
             throw "WheelPath not found: $ExplicitPath"
         }
-        return (Resolve-Path -LiteralPath $ExplicitPath).Path
+        return @((Resolve-Path -LiteralPath $ExplicitPath).Path)
     }
 
     $DistDir = Join-Path $RepoRoot 'dist'
     if (-not $SkipBuild -and -not $IsDryRun) {
         if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-            throw 'uv is required to build the Python wheel (or pass -WheelPath / -SkipWheelBuild).'
+            throw 'uv is required to build the Python wheels (or pass -WheelPath / -SkipWheelBuild).'
         }
         Push-Location $RepoRoot
         try {
-            & uv build --wheel
+            & uv build --all-packages --wheel
             if ($LASTEXITCODE -ne 0) {
-                throw 'uv build --wheel failed.'
+                throw 'uv build --all-packages --wheel failed.'
             }
         }
         finally {
@@ -540,18 +540,29 @@ function Resolve-WheelArtifact {
     }
 
     if (Test-Path -LiteralPath $DistDir -PathType Container) {
-        $Latest = Get-ChildItem -LiteralPath $DistDir -Filter 'fabric_etl_migration_accelerator-*.whl' -File |
-            Sort-Object LastWriteTimeUtc -Descending |
-            Select-Object -First 1
-        if ($Latest) {
-            return $Latest.FullName
+        $WheelPatterns = @(
+            'etl_migration_core-*.whl',
+            'etl_portfolio_assessment-*.whl',
+            'etl_target_fabric-*.whl'
+        )
+        $Selected = [System.Collections.Generic.List[string]]::new()
+        foreach ($Pattern in $WheelPatterns) {
+            $Latest = Get-ChildItem -LiteralPath $DistDir -Filter $Pattern -File |
+                Sort-Object LastWriteTimeUtc -Descending |
+                Select-Object -First 1
+            if ($Latest) {
+                $Selected.Add($Latest.FullName)
+            }
+        }
+        if ($Selected.Count -gt 0) {
+            return $Selected.ToArray()
         }
     }
 
     if ($IsDryRun) {
-        return '<built via uv build --wheel>'
+        return @('<built via uv build --all-packages --wheel>')
     }
-    throw "No accelerator wheel found in $DistDir. Run 'uv build --wheel' or pass -WheelPath."
+    throw "No workspace wheels found in $DistDir. Run 'uv build --all-packages --wheel' or pass -WheelPath."
 }
 
 function New-RandomSecretHex {
@@ -581,7 +592,8 @@ if (-not $SkipEnvironmentPublish -and -not (Test-Path -LiteralPath $EnvironmentY
     throw "Environment YAML file missing: $EnvironmentYmlPath"
 }
 
-$ResolvedWheel = Resolve-WheelArtifact -ExplicitPath $WheelPath -SkipBuild:$SkipWheelBuild -IsDryRun:$DryRun
+$ResolvedWheels = @(Resolve-WheelArtifacts -ExplicitPath $WheelPath -SkipBuild:$SkipWheelBuild -IsDryRun:$DryRun)
+$ResolvedWheel = $ResolvedWheels[-1]
 
 $TempDir = Join-Path ([IO.Path]::GetTempPath()) ("fabric-etl-deploy-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
@@ -671,10 +683,12 @@ try {
             -Uri "$FabricApi/workspaces/$WsId/environments/$($Environment.id)/staging/sparkcompute?beta=false" `
             -Token $Token -SkillName 'spark-cli' -Body $SparkComputeBody
 
-        $WheelFileName = [IO.Path]::GetFileName($ResolvedWheel)
-        $null = Invoke-FabricFileUpload `
-            -Uri "$FabricApi/workspaces/$WsId/environments/$($Environment.id)/staging/libraries/$WheelFileName" `
-            -FilePath $ResolvedWheel -Token $Token -SkillName 'spark-cli' -Mode OctetStream
+        foreach ($WheelArtifact in $ResolvedWheels) {
+            $WheelFileName = [IO.Path]::GetFileName($WheelArtifact)
+            $null = Invoke-FabricFileUpload `
+                -Uri "$FabricApi/workspaces/$WsId/environments/$($Environment.id)/staging/libraries/$WheelFileName" `
+                -FilePath $WheelArtifact -Token $Token -SkillName 'spark-cli' -Mode OctetStream
+        }
 
         $null = Invoke-FabricFileUpload `
             -Uri "$FabricApi/workspaces/$WsId/environments/$($Environment.id)/staging/libraries/importExternalLibraries" `
@@ -688,7 +702,8 @@ try {
         if ($FinalState -ne 'Success') {
             throw "Environment publish ended in state '$FinalState' for $($Environment.id)."
         }
-        Write-Host "Environment published successfully (Runtime 2.0 + $WheelFileName)."
+        $UploadedNames = ($ResolvedWheels | ForEach-Object { [IO.Path]::GetFileName($_) }) -join ', '
+        Write-Host "Environment published successfully (Runtime 2.0 + $UploadedNames)."
     }
 
     # 3. Assessment Notebook bound to Lakehouse + Environment

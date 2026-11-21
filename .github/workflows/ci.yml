@@ -21,9 +21,14 @@ jobs:
           enable-cache: true
       - run: uv python install 3.13
       - run: uv sync --extra dev --locked
-      - run: uv run ruff check src tests
+      - run: uv run ruff check src packages tests
       - run: uv run mypy
       - run: uv run pytest --cov-fail-under=80
+      - run: uv build --all-packages --wheel
+      - name: Verify isolated library wheels
+        run: |
+          uv run --isolated --no-project --with dist/etl_migration_core-*.whl --with dist/etl_portfolio_assessment-*.whl python -c "import sys; from pathlib import Path; from etl_portfolio_assessment.application import PortfolioAssessmentApplication; res = PortfolioAssessmentApplication().assess_neutral(Path('alteryx-workflows')); assert res.workflow_count > 0 and 'fastapi' not in sys.modules"
+          uv run --isolated --no-project --with dist/etl_migration_core-*.whl --with dist/etl_target_fabric-*.whl python -c "import sys; from etl_migration_core.targets import create_target_registry; reg = create_target_registry(); assert reg.require_implemented('fabric', capability='codegen').platform_id == 'fabric'; assert 'fastapi' not in sys.modules"
 
   web:
     runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["self-hosted", "Windows", "X64"]') }}

@@ -1,5 +1,5 @@
-"""Alteryx source adapter."""
+"""Compatibility re-export of Alteryx source adapter."""
 
-from accelerator.sources.alteryx.adapter import AlteryxSourceAdapter
-
-__all__ = ["AlteryxSourceAdapter"]
+from etl_migration_core.sources.alteryx import (
+    AlteryxSourceAdapter as AlteryxSourceAdapter,
+)

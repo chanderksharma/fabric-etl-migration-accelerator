@@ -12,6 +12,8 @@
       href: docs/Guides/capacity-planning.md
     - name: Fabric CI/CD Setup (OIDC)
       href: docs/Guides/fabric-ci-cd-setup.md
+    - name: Building Source & Target Plugins
+      href: docs/Guides/building-plugins.md
     - name: Troubleshooting
       href: docs/Guides/troubleshooting.md
 - name: Architecture & Design
@@ -30,6 +32,8 @@
       href: docs/Planning/pluggable-architecture-analysis-and-approach.md
     - name: Pluggable Architecture Delivery Team Draft
       href: docs/Planning/pluggable-architecture-delivery-team-draft.md
+    - name: Pluggable Architecture Implementation Plan
+      href: docs/Planning/pluggable-architecture-implementation-plan.md
 - name: Security & Quality
   items:
     - name: Threat Model (STRIDE)

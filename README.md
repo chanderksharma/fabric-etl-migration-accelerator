@@ -77,10 +77,21 @@ data-location, WebView2, deployment-authentication, and security details.
 ```powershell
 uv run tool preview .\alteryx-workflows
 uv run tool assess .\alteryx-workflows
+uv run tool targets
 uv run tool generate <completed-run-id> --target all --output generated-fabric-workflows
 ```
 
-`assess` emits full assessment JSON (`exit 1` if any workflow fails parsing; `exit 2` on input/configuration rejection). `--target` accepts `dataflow`, `notebook`, `pipeline`, `both` (`dataflow` + `notebook`), or `all`.
+`assess` emits full assessment JSON (`exit 1` if any workflow fails parsing; `exit 2` on input/configuration rejection). `targets` lists registered destination platforms (`fabric` ready plus fail-closed `databricks`, `synapse`, and `snowflake` placeholders). `--target` accepts `dataflow`, `notebook`, `pipeline`, `both` (`dataflow` + `notebook`), or `all`.
+
+### Modular PyPI Packages & Stateless CLIs
+
+The repository is structured as a `uv` workspace producing independent wheels with minimal runtime dependencies (`pydantic` and `defusedxml` only):
+
+* `packages/etl-migration-core` (`etl-migration-core`): Canonical ETL IR, secure discovery, built-in source adapters, and plugin SPI (`etl_migration.sources` and `etl_migration.targets` entry points).
+* `packages/etl-portfolio-assessment` (`etl-portfolio-assessment`): Target-neutral assessment engine and stateless `etl-assess` CLI (`etl-assess preview|assess|evidence <path>`).
+* `packages/etl-target-fabric` (`etl-target-fabric`): Microsoft Fabric provider, F-SKU capacity model, M/PySpark/Pipeline compilers, artifact writer, and stateless `etl-fabric` CLI (`etl-fabric evaluate|compile <path>`).
+
+See [Building Source and Target Plugins](docs/Guides/building-plugins.md) and [Figure ARCH-02](docs/Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png).
 
 ### Local Loopback Container
 
@@ -114,7 +125,7 @@ pwsh -NoProfile -File scripts\Deploy-AcceleratorWorkspace.ps1 `
 To build a self-contained bundle for the in-Fabric [`Deploy_FEMA.ipynb`](notebooks/Deploy_FEMA.ipynb) installer:
 
 ```powershell
-uv build --wheel
+uv build --all-packages --wheel
 node scripts\build-fema-bundle.mjs --require-wheel
 ```
 
@@ -123,7 +134,7 @@ See [Installation and Runtime Modes](docs/Guides/installation.md) for workspace 
 ### Local Development & Verification
 
 ```powershell
-uv run --extra dev ruff check src tests
+uv run --extra dev ruff check src packages tests
 uv run --extra dev mypy
 uv run --extra dev pytest --cov-fail-under=80
 uvx pip-audit --strict

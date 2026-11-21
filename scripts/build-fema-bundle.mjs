@@ -45,13 +45,15 @@ for (const [srcRel, destRel] of copies) {
   });
 }
 
-// Copy built accelerator wheel(s) if available
+// Copy built workspace wheel(s) if available
 const distDir = path.join(root, "dist");
 let wheelCount = 0;
 try {
   const distEntries = await readdir(distDir, { withFileTypes: true });
+  const wheelPattern =
+    /^(etl_migration_core|etl_portfolio_assessment|etl_target_fabric)-.*\.whl$/i;
   const wheels = distEntries
-    .filter((entry) => entry.isFile() && /^fabric_etl_migration_accelerator-.*\.whl$/i.test(entry.name))
+    .filter((entry) => entry.isFile() && wheelPattern.test(entry.name))
     .map((entry) => entry.name)
     .sort();
   if (wheels.length > 0) {
@@ -63,11 +65,13 @@ try {
     }
   }
 } catch {
-  // dist/ may not exist yet before `uv build --wheel`
+  // dist/ may not exist yet before `uv build --all-packages`
 }
 
 if (options.requireWheel && wheelCount === 0) {
-  throw new Error("No accelerator wheel found in dist/. Run 'uv build --wheel' first.");
+  throw new Error(
+    "No accelerator/library wheels found in dist/. Run 'uv build --all-packages' first.",
+  );
 }
 
 // Verify zero leftover local/secret files or unresolved tenant GUID leaks in bundle metadata

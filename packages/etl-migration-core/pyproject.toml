@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "etl-migration-core"
+version = "1.0.0"
+description = "Canonical ETL intermediate representation, secure archive staging, source adapters, and target-platform SPI"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "defusedxml>=0.7.1,<1",
+  "pydantic>=2.12,<3",
+]
+classifiers = [
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/etl_migration_core"]

@@ -1,0 +1,58 @@
+name: Publish Python Packages
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["self-hosted", "Windows", "X64"]') }}
+    timeout-minutes: 30
+    env:
+      UV_PYTHON_DOWNLOADS: automatic
+      UV_PYTHON_PREFERENCE: only-managed
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --extra dev --locked
+      - run: uv build --all-packages
+      - name: Verify isolated assessment wheel
+        run: |
+          uv run --isolated --no-project --with dist/etl_migration_core-*.whl --with dist/etl_portfolio_assessment-*.whl python -c "import sys; from pathlib import Path; from etl_portfolio_assessment.application import PortfolioAssessmentApplication; res = PortfolioAssessmentApplication().assess_neutral(Path('alteryx-workflows')); assert res.workflow_count > 0 and 'fastapi' not in sys.modules"
+      - name: Verify isolated Fabric target wheel
+        run: |
+          uv run --isolated --no-project --with dist/etl_migration_core-*.whl --with dist/etl_target_fabric-*.whl python -c "import sys; from etl_migration_core.targets import create_target_registry; reg = create_target_registry(); assert reg.require_implemented('fabric', capability='codegen').platform_id == 'fabric'; assert 'fastapi' not in sys.modules"
+      - name: Validate distribution metadata
+        run: uvx twine check dist/*.whl dist/*.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e9174a0285d879b571 # v4.6.2
+        with:
+          name: python-distributions
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+
+  publish-pypi:
+    needs: build-and-verify
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PYPI_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b975a62079c35fd1e62705af # v4.3.0
+        with:
+          name: python-distributions
+          path: dist
+      - name: Publish packages using OIDC Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32e83a2cac7e7652f810523a # v1.13.0
+        with:
+          packages-dir: dist

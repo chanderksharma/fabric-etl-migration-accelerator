@@ -44,6 +44,12 @@ from accelerator.gitlab_deployment import (
 from accelerator.graph import WorkflowGraph
 from accelerator.runs import Run, RunService, SnapshotPreview
 from accelerator.schemas import DiscoverySummaryResponse, EstateAssessmentResponse
+from accelerator.spi import TargetPlatformInfo
+from accelerator.targets import (
+    TargetPlatformRegistry,
+    UnknownTargetPlatformError,
+    create_default_target_registry,
+)
 
 load_dotenv()
 
@@ -302,6 +308,31 @@ def tool_registry() -> dict[str, object]:
         "rules_version": RULES_VERSION,
         "entries": registry_entries(),
     }
+
+
+def target_registry() -> TargetPlatformRegistry:
+    if not hasattr(app.state, "target_registry"):
+        app.state.target_registry = create_default_target_registry()
+    registry: TargetPlatformRegistry = app.state.target_registry
+    return registry
+
+
+@app.get("/api/targets")
+def list_target_platforms() -> dict[str, object]:
+    return {
+        "targets": [
+            info.model_dump(mode="json")
+            for info in target_registry().list_providers()
+        ]
+    }
+
+
+@app.get("/api/targets/{platform_id}", response_model=TargetPlatformInfo)
+def get_target_platform(platform_id: str) -> TargetPlatformInfo:
+    try:
+        return target_registry().get(platform_id).info()
+    except UnknownTargetPlatformError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.post("/api/snapshots/browse-folder", response_model=FolderSelectionResponse)
