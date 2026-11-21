@@ -7,7 +7,7 @@ export const connection = "assessmentmodel";
 export { query };
 
 export const columnMetadata: ColumnMetadataMap = {
-  "WorkflowAssessment[MigrationWave]": { name: "MigrationWave", displayName: "Migration wave" },
+  "[MigrationWave]": { name: "MigrationWave", displayName: "Migration wave" },
   "[Assets]": { name: "Assets", displayName: "Assets", format: "#,##0" },
 };
 
@@ -18,7 +18,7 @@ export const vegaLiteSpec: VisualizationSpec = {
     x: {
       field: "MigrationWave",
       type: "nominal",
-      sort: ["Wave 1", "Wave 2", "Pilot", "Redesign"],
+      sort: ["Wave 1", "Wave 2", "Wave 3", "Wave 4"],
       title: null,
     },
     y: { field: "Assets", type: "quantitative", title: "Assets" },

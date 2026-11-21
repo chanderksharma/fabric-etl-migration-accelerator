@@ -6,10 +6,30 @@ table WorkflowAssessment
 		formatString: #,##0
 		displayFolder: Portfolio
 
+	/// Number of workflows with a compiler-grounded Fabric route.
+	measure 'Native-Ready Assets' = [Assessed Assets] - [Manual Review Assets]
+		formatString: #,##0
+		displayFolder: Portfolio
+
+	/// Share of assessed workflows with a compiler-grounded Fabric route.
+	measure 'Native-Ready %' = DIVIDE([Native-Ready Assets], [Assessed Assets])
+		formatString: 0.0%
+		displayFolder: Portfolio
+
 	/// Number of workflows classified as high complexity.
 	measure 'High Complexity Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(WorkflowAssessment[ComplexityBand] = "High"))
 		formatString: #,##0
 		displayFolder: Portfolio
+
+	/// Number of workflows assigned to Wave 1 or Wave 2.
+	measure 'Quick-Win Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(WorkflowAssessment[MigrationWave] IN {"Wave 1", "Wave 2"}))
+		formatString: #,##0
+		displayFolder: Migration Plan
+
+	/// Share of assessed workflows assigned to Wave 1 or Wave 2.
+	measure 'Quick-Win %' = DIVIDE([Quick-Win Assets], [Assessed Assets])
+		formatString: 0.0%
+		displayFolder: Migration Plan
 
 	/// Number of workflows assigned to a pilot migration wave.
 	measure 'Pilot Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(CONTAINSSTRING(LOWER(WorkflowAssessment[MigrationWave]), "pilot")))
@@ -25,6 +45,78 @@ table WorkflowAssessment
 	measure 'Manual Review Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(CONTAINSSTRING(LOWER(WorkflowAssessment[RecommendedTarget]), "manual")))
 		formatString: #,##0
 		displayFolder: Portfolio
+
+	/// Number of workflows in Wave 1 (low-complexity native foundation).
+	measure 'Wave 1 Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(WorkflowAssessment[MigrationWave] = "Wave 1"))
+		formatString: #,##0
+		displayFolder: Migration Plan
+
+	/// Number of workflows in Wave 2 (high-complexity controlled pilot; engine value Pilot).
+	measure 'Wave 2 Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(CONTAINSSTRING(LOWER(WorkflowAssessment[MigrationWave]), "pilot")))
+		formatString: #,##0
+		displayFolder: Migration Plan
+
+	/// Number of workflows in Wave 3 (medium-complexity scale-out; engine value Wave 2).
+	measure 'Wave 3 Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(WorkflowAssessment[MigrationWave] = "Wave 2"))
+		formatString: #,##0
+		displayFolder: Migration Plan
+
+	/// Number of workflows in Wave 4 (manual redesign; engine value Redesign).
+	measure 'Wave 4 Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(CONTAINSSTRING(LOWER(WorkflowAssessment[MigrationWave]), "redesign")))
+		formatString: #,##0
+		displayFolder: Migration Plan
+
+	measure 'Wave 1 KPI' = COALESCE([Wave 1 Assets], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	measure 'Wave 2 KPI' = COALESCE([Wave 2 Assets], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	measure 'Wave 3 KPI' = COALESCE([Wave 3 Assets], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	measure 'Wave 4 KPI' = COALESCE([Wave 4 Assets], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	/// Normalized stage label (Wave 1 through Wave 4) matching the analyst workbench.
+	measure 'Migration Stage Label' = SWITCH(SELECTEDVALUE(WorkflowAssessment[MigrationWave]), "Wave 1", "Wave 1", "Pilot", "Wave 2", "Wave 2", "Wave 3", "Redesign", "Wave 4", SELECTEDVALUE(WorkflowAssessment[MigrationWave]))
+		displayFolder: Migration Plan
+
+	measure 'Assessed Assets KPI' = COALESCE([Assessed Assets], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	measure 'Native-Ready % KPI' = COALESCE([Native-Ready %], 0)
+		formatString: 0.0%
+		displayFolder: KPIs
+
+	measure 'High Complexity KPI' = COALESCE([High Complexity Assets], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	measure 'Quick-Win Assets KPI' = COALESCE([Quick-Win Assets], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	measure 'Quick-Win % KPI' = COALESCE([Quick-Win %], 0)
+		formatString: 0.0%
+		displayFolder: KPIs
+
+	measure 'Pilot Assets KPI' = COALESCE([Pilot Assets], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	measure 'Redesign Assets KPI' = COALESCE([Redesign Assets], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	measure 'Manual Review KPI' = COALESCE([Manual Review Assets], 0)
+		formatString: #,##0
+		displayFolder: KPIs
 
 	/// Mean deterministic complexity score for filtered workflows.
 	measure 'Average Complexity Score' = AVERAGE(WorkflowAssessment[ComplexityScore])

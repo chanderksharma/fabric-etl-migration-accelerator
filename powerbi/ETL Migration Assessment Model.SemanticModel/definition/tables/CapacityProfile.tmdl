@@ -1,6 +1,85 @@
 /// Bounded static capacity-profile metrics by workflow and run (no effort estimates or raw expressions).
 table CapacityProfile
 
+	/// Sum of weighted static complexity units across filtered workflows.
+	measure 'Total Complexity Units' = SUM(CapacityProfile[ComplexityUnits])
+		formatString: #,##0.0
+		displayFolder: Capacity Sizing
+
+	/// Sum of notebook-bound transformation steps across filtered workflows.
+	measure 'Notebook Steps' = SUM(CapacityProfile[NotebookSteps])
+		formatString: #,##0
+		displayFolder: Capacity Sizing
+
+	/// Sum of pipeline orchestration steps across filtered workflows.
+	measure 'Pipeline Steps' = SUM(CapacityProfile[PipelineSteps])
+		formatString: #,##0
+		displayFolder: Capacity Sizing
+
+	/// Sum of heavy transformation steps across filtered workflows.
+	measure 'Heavy Transform Steps' = SUM(CapacityProfile[HeavySteps])
+		formatString: #,##0
+		displayFolder: Capacity Sizing
+
+	/// Sum of active non-container workflow steps across filtered workflows.
+	measure 'Total Active Steps' = SUM(CapacityProfile[TotalSteps])
+		formatString: #,##0
+		displayFolder: Capacity Sizing
+
+	/// Calibrated + heuristic Fabric CU-seconds per run (3.1.0 daily baseline: 1k rows/run, 8 Spark vCores).
+	measure 'Est CU-Seconds / Run' = SUMX(CapacityProfile, VAR _targets = CapacityProfile[TargetComponents] VAR _hasDf = CONTAINSSTRING(_targets, "Dataflow Gen2") VAR _hasNb = CONTAINSSTRING(_targets, "Fabric Notebook") VAR _hasPl = CONTAINSSTRING(_targets, "Fabric Pipeline") VAR _qSec = MAX(39.18196452145214, CapacityProfile[ComplexityUnits] * 5.231236918751955) + CapacityProfile[HeavySteps] * 1.255806863185154 VAR _dfCu = IF(_hasDf, (MIN(_qSec, 600) * 12 + MAX(_qSec - 600, 0) * 1.5), 0) VAR _nbWeight = IF(_hasDf, MAX(1, CapacityProfile[NotebookSteps] * 1.5 + MAX(CapacityProfile[TotalSteps] - CapacityProfile[NotebookSteps], 0) * 0.15), MAX(1, CapacityProfile[ComplexityUnits])) VAR _nbSec = MAX(60, 45 + _nbWeight * 4 + 0.1 + CapacityProfile[HeavySteps] * 0.5) VAR _nbCu = IF(_hasNb, 4 * _nbSec, 0) VAR _plChildren = IF(_hasDf, 1, 0) + IF(_hasNb, 1, 0) VAR _plActs = MAX(_plChildren, 1) + CapacityProfile[PipelineSteps] VAR _plHasCopy = CapacityProfile[PipelineSteps] > 0 || NOT(_hasDf || _hasNb) VAR _plCu = IF(_hasPl, _plActs * 20 + IF(_plHasCopy, 15.1 * 1.5, 0), 0) RETURN (_dfCu + _nbCu + _plCu) * 1.01)
+		formatString: #,##0.0
+		displayFolder: Fabric Capacity
+
+	/// Estimated monthly CU-hours for daily execution across 31 days.
+	measure 'Est Monthly CU-Hours' = [Est CU-Seconds / Run] * 31 / 3600
+		formatString: #,##0.00
+		displayFolder: Fabric Capacity
+
+	/// Balanced Fabric CU requirement combining steady-state utilization and 5-minute burst smoothing.
+	measure 'Required CUs (Balanced)' = VAR _totalCuSec = [Est CU-Seconds / Run] VAR _maxRunCuSec = MAXX(CapacityProfile, VAR _targets = CapacityProfile[TargetComponents] VAR _hasDf = CONTAINSSTRING(_targets, "Dataflow Gen2") VAR _hasNb = CONTAINSSTRING(_targets, "Fabric Notebook") VAR _hasPl = CONTAINSSTRING(_targets, "Fabric Pipeline") VAR _qSec = MAX(39.18196452145214, CapacityProfile[ComplexityUnits] * 5.231236918751955) + CapacityProfile[HeavySteps] * 1.255806863185154 VAR _dfCu = IF(_hasDf, (MIN(_qSec, 600) * 12 + MAX(_qSec - 600, 0) * 1.5), 0) VAR _nbWeight = IF(_hasDf, MAX(1, CapacityProfile[NotebookSteps] * 1.5 + MAX(CapacityProfile[TotalSteps] - CapacityProfile[NotebookSteps], 0) * 0.15), MAX(1, CapacityProfile[ComplexityUnits])) VAR _nbSec = MAX(60, 45 + _nbWeight * 4 + 0.1 + CapacityProfile[HeavySteps] * 0.5) VAR _nbCu = IF(_hasNb, 4 * _nbSec, 0) VAR _plChildren = IF(_hasDf, 1, 0) + IF(_hasNb, 1, 0) VAR _plActs = MAX(_plChildren, 1) + CapacityProfile[PipelineSteps] VAR _plHasCopy = CapacityProfile[PipelineSteps] > 0 || NOT(_hasDf || _hasNb) VAR _plCu = IF(_hasPl, _plActs * 20 + IF(_plHasCopy, 15.1 * 1.5, 0), 0) RETURN (_dfCu + _nbCu + _plCu) * 1.01) VAR _bgCu = _totalCuSec / 86400 VAR _interactiveAvg = 2 * 3600 * 0.3 / 86400 VAR _interactivePeak = 0.6 VAR _avgNeed = (_bgCu + _interactiveAvg) / 0.8 VAR _optimized = MAX(_avgNeed, _maxRunCuSec / 300 + _interactivePeak) VAR _peak = MAX(_avgNeed, _totalCuSec / 300 + _interactivePeak) RETURN IF(ISBLANK(_totalCuSec), BLANK(), _optimized + (_peak - _optimized) * 0.5)
+		formatString: #,##0.0
+		displayFolder: Fabric Capacity
+
+	/// Recommended Microsoft Fabric capacity SKU tier based on balanced CU requirement.
+	measure 'Recommended Fabric SKU' = VAR _cu = [Required CUs (Balanced)] RETURN SWITCH(TRUE(), ISBLANK(_cu), BLANK(), _cu <= 2, "F2", _cu <= 4, "F4", _cu <= 8, "F8", _cu <= 16, "F16", _cu <= 32, "F32", _cu <= 64, "F64", _cu <= 128, "F128", _cu <= 256, "F256", _cu <= 512, "F512", _cu <= 1024, "F1024", "F2048+")
+		displayFolder: Fabric Capacity
+
+	measure 'Est CU-Seconds / Run KPI' = COALESCE([Est CU-Seconds / Run], 0)
+		formatString: #,##0.0
+		displayFolder: KPIs
+
+	measure 'Est Monthly CU-Hours KPI' = COALESCE([Est Monthly CU-Hours], 0)
+		formatString: #,##0.00
+		displayFolder: KPIs
+
+	measure 'Required CUs (Balanced) KPI' = COALESCE([Required CUs (Balanced)], 0)
+		formatString: #,##0.0
+		displayFolder: KPIs
+
+	measure 'Recommended Fabric SKU KPI' = COALESCE([Recommended Fabric SKU], "F2")
+		displayFolder: KPIs
+
+	measure 'Total Complexity Units KPI' = COALESCE([Total Complexity Units], 0)
+		formatString: #,##0.0
+		displayFolder: KPIs
+
+	measure 'Notebook Steps KPI' = COALESCE([Notebook Steps], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	measure 'Pipeline Steps KPI' = COALESCE([Pipeline Steps], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	measure 'Heavy Transform Steps KPI' = COALESCE([Heavy Transform Steps], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
+	measure 'Total Active Steps KPI' = COALESCE([Total Active Steps], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
 	column RunId
 		dataType: string
 		isHidden

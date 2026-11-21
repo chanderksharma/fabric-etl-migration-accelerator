@@ -4,6 +4,7 @@ import { ArrowRight, X } from "lucide-react";
 import { DataState, Panel, Pill, SimpleTable } from "@/components/assessment-ui";
 import { useQueryRecords, type QueryRecord } from "@/hooks/use-query-records";
 import { formatValue } from "@/lib/format-value";
+import { waveLabel } from "@/lib/migration-wave";
 import { PageFrame } from "@/pages/portfolio.page";
 import { workflows } from "@/queries";
 
@@ -79,7 +80,7 @@ export function WorkflowsPage({
               { key: "SourcePlatform", label: "Source" },
               { key: "ComplexityBand", label: "Complexity", render: (record) => <Pill tone={record.ComplexityBand === "High" ? "danger" : record.ComplexityBand === "Medium" ? "warning" : "success"}>{formatValue(record.ComplexityBand)}</Pill> },
               { key: "RecommendedTarget", label: "Fabric target" },
-              { key: "MigrationWave", label: "Wave" },
+              { key: "MigrationWave", label: "Wave", render: (record) => waveLabel(record.MigrationWave) },
               { key: "RecommendationReason", label: "Key issue" },
             ]}
           />
@@ -186,7 +187,7 @@ function SummaryTab({ workflow }: { workflow: QueryRecord }) {
     <div className="grid gap-3 sm:grid-cols-3">
       <SummaryMetric label="Complexity" value={`${formatValue(workflow.ComplexityBand)} · ${formatValue(workflow.ComplexityScore)} points`} />
       <SummaryMetric label="Recommended target" value={formatValue(workflow.RecommendedTarget)} />
-      <SummaryMetric label="Migration wave" value={formatValue(workflow.MigrationWave)} />
+      <SummaryMetric label="Migration wave" value={waveLabel(workflow.MigrationWave)} />
     </div>
     <Panel title="Source metadata"><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{items.map(([label, value]) => <div key={label as string}><dt className="text-100 uppercase text-muted-foreground">{label as string}</dt><dd className="mt-1 break-words font-semibold">{formatValue(value)}</dd></div>)}</dl></Panel>
     <div className="rounded-lg border p-4 text-200 text-muted-foreground">Static assessment evidence only. Runtime, throughput, production volume, ownership, and failure history are not measured.</div>

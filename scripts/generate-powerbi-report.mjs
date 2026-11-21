@@ -14,172 +14,320 @@ const pageSchema =
 
 const pageDefinitions = [
   {
-    key: "portfolio",
-    name: "Portfolio Migration Summary",
-    latestOnly: true,
+    key: "executive",
+    name: "Executive Summary",
     visuals: [
-      title("portfolio-title", "Portfolio Migration Summary", "Estate readiness and recommended Fabric targets"),
-      slicer("portfolio-run", 24, 72, 280, "AssessmentRun", "RunLabel", "Assessment run"),
-      slicer("portfolio-source", 320, 72, 240, "WorkflowAssessment", "SourcePlatform", "Source platform"),
-      cards("portfolio-kpis", 24, 168, 1232, [
-        ["WorkflowAssessment", "Assessed Assets"],
-        ["WorkflowAssessment", "High Complexity Assets"],
-        ["WorkflowAssessment", "Pilot Assets"],
-        ["WorkflowAssessment", "Redesign Assets"],
-      ]),
-      chart("portfolio-complexity", "Complexity distribution", "barChart", 24, 304, 392, 216, "WorkflowAssessment", "ComplexityBand", measure("WorkflowAssessment", "Assessed Assets")),
-      chart("portfolio-targets", "Recommended Fabric targets", "barChart", 432, 304, 392, 216, "WorkflowAssessment", "RecommendedTarget", measure("WorkflowAssessment", "Assessed Assets")),
-      chart("portfolio-waves", "Migration wave distribution", "columnChart", 840, 304, 416, 216, "WorkflowAssessment", "MigrationWave", measure("WorkflowAssessment", "Assessed Assets")),
-      table("portfolio-register", 24, 536, 1232, 160, [
-        column("WorkflowAssessment", "WorkflowPath"),
-        column("WorkflowAssessment", "ComplexityScore"),
-        column("WorkflowAssessment", "ComplexityBand"),
-        column("WorkflowAssessment", "RecommendedTarget"),
-        column("WorkflowAssessment", "MigrationWave"),
-      ]),
-    ],
-  },
-  {
-    key: "register",
-    name: "Workflow Assessment Register",
-    latestOnly: true,
-    visuals: [
-      title("register-title", "Workflow Assessment Register", "Filter and rank the governed workflow assessment inventory"),
-      slicer("register-run", 24, 72, 280, "AssessmentRun", "RunLabel", "Assessment run"),
-      slicer("register-path", 320, 72, 480, "WorkflowAssessment", "WorkflowPath", "Workflow"),
-      slicer("register-source", 816, 72, 208, "WorkflowAssessment", "SourcePlatform", "Source platform"),
-      slicer("register-complexity", 1040, 72, 216, "WorkflowAssessment", "ComplexityBand", "Complexity"),
-      table("register-table", 24, 168, 1232, 528, [
-        column("WorkflowAssessment", "WorkflowPath"),
-        column("WorkflowAssessment", "SourcePlatform"),
-        column("WorkflowAssessment", "AssetType"),
-        column("WorkflowAssessment", "ToolCount"),
-        column("WorkflowAssessment", "ConnectionCount"),
-        column("WorkflowAssessment", "ComplexityScore"),
-        column("WorkflowAssessment", "ComplexityBand"),
-        column("WorkflowAssessment", "RecommendedTarget"),
-        column("WorkflowAssessment", "MigrationWave"),
-      ]),
-    ],
-  },
-  {
-    key: "plan",
-    name: "Evidence-Based Migration Plan",
-    latestOnly: true,
-    visuals: [
-      title("plan-title", "Evidence-Based Migration Plan", "Sequence migration work from deterministic complexity and compiler routing"),
-      slicer("plan-run", 24, 72, 280, "AssessmentRun", "RunLabel", "Assessment run"),
-      slicer("plan-source", 320, 72, 240, "WorkflowAssessment", "SourcePlatform", "Source platform"),
-      cards("plan-kpis", 24, 168, 1232, [
-        ["WorkflowAssessment", "Assessed Assets"],
-        ["WorkflowAssessment", "Pilot Assets"],
-        ["WorkflowAssessment", "Redesign Assets"],
-        ["WorkflowAssessment", "Manual Review Assets"],
+      title(
+        "exec-title",
+        "Executive Portfolio Summary",
+        "Automation readiness, wave composition, and priority migration candidates across retained assessments",
+      ),
+      slicer("exec-run", 696, 12, 316, "AssessmentRun", "RunLabel", "Assessment run"),
+      slicer("exec-source", 1028, 12, 228, "WorkflowAssessment", "SourcePlatform", "Source platform"),
+      cards("exec-kpis", 24, 96, 1232, [
+        ["WorkflowAssessment", "Assessed Assets KPI", "Assessed Workflows"],
+        ["WorkflowAssessment", "Native-Ready % KPI", "Native-Ready %"],
+        ["WorkflowAssessment", "Quick-Win % KPI", "Quick-Win %"],
+        ["WorkflowAssessment", "High Complexity KPI", "High Complexity"],
+        ["CapacityProfile", "Total Complexity Units KPI", "Complexity Units"],
       ]),
       chart(
-        "plan-target-wave",
-        "Targets by migration wave",
-        "columnChart",
+        "exec-wave-target",
+        "Migration waves (Wave 1–4) by recommended target",
+        "barChart",
         24,
-        304,
-        600,
-        216,
+        228,
+        604,
+        232,
         "WorkflowAssessment",
-        "MigrationWave",
+        "RecommendedTarget",
+        [
+          measure("WorkflowAssessment", "Wave 1 Assets", "Wave 1"),
+          measure("WorkflowAssessment", "Wave 2 Assets", "Wave 2"),
+          measure("WorkflowAssessment", "Wave 3 Assets", "Wave 3"),
+          measure("WorkflowAssessment", "Wave 4 Assets", "Wave 4"),
+        ],
+        undefined,
+      ),
+      chart(
+        "exec-platform-band",
+        "Estate complexity by source platform",
+        "barChart",
+        652,
+        228,
+        604,
+        232,
+        "WorkflowAssessment",
+        "SourcePlatform",
         measure("WorkflowAssessment", "Assessed Assets"),
+        column("WorkflowAssessment", "ComplexityBand"),
+      ),
+      table(
+        "exec-priority-table",
+        24,
+        476,
+        1232,
+        224,
+        "Priority & high-complexity workflows",
+        [
+          column("WorkflowAssessment", "WorkflowPath", "Workflow", 290),
+          column("WorkflowAssessment", "ComplexityBand", "Band", 90),
+          column("WorkflowAssessment", "ComplexityScore", "Score", 70),
+          column("WorkflowAssessment", "RecommendedTarget", "Fabric Target", 165),
+          measure("WorkflowAssessment", "Migration Stage Label", "Wave", 90),
+          column("WorkflowAssessment", "RecommendationReason", "Rationale", 495),
+        ],
+        undefined,
+        descendingColumnSort("WorkflowAssessment", "ComplexityScore"),
+      ),
+    ],
+  },
+  {
+    key: "waves",
+    name: "Wave Plan",
+    visuals: [
+      title(
+        "wave-title",
+        "Wave & Delivery Plan",
+        "Mobilization sequencing normalized to Wave 1 (Foundation), Wave 2 (Pilot), Wave 3 (Scale-out), and Wave 4 (Redesign)",
+      ),
+      slicer("wave-run", 696, 12, 316, "AssessmentRun", "RunLabel", "Assessment run"),
+      slicer("wave-filter", 1028, 12, 228, "WorkflowAssessment", "RecommendedTarget", "Fabric target"),
+      cards("wave-kpis", 24, 96, 1232, [
+        ["WorkflowAssessment", "Wave 1 KPI", "Wave 1 (Foundation)"],
+        ["WorkflowAssessment", "Wave 2 KPI", "Wave 2 (Pilot)"],
+        ["WorkflowAssessment", "Wave 3 KPI", "Wave 3 (Scale-out)"],
+        ["WorkflowAssessment", "Wave 4 KPI", "Wave 4 (Redesign)"],
+      ]),
+      matrix(
+        "wave-matrix",
+        "Wave 1–4 breakdown by target & platform",
+        24,
+        228,
+        604,
+        224,
+        [column("WorkflowAssessment", "RecommendedTarget"), column("WorkflowAssessment", "SourcePlatform")],
+        [],
+        [
+          measure("WorkflowAssessment", "Wave 1 Assets", "Wave 1"),
+          measure("WorkflowAssessment", "Wave 2 Assets", "Wave 2"),
+          measure("WorkflowAssessment", "Wave 3 Assets", "Wave 3"),
+          measure("WorkflowAssessment", "Wave 4 Assets", "Wave 4"),
+          measure("WorkflowAssessment", "Assessed Assets", "Total"),
+        ],
+      ),
+      chart(
+        "wave-support",
+        "Component automation coverage",
+        "barChart",
+        652,
+        228,
+        604,
+        224,
+        "ToolInventory",
+        "SupportCategory",
+        measure("ToolInventory", "Mapped Components"),
+        undefined,
+        undefined,
+        descendingMeasureSort("ToolInventory", "Mapped Components"),
+      ),
+      table(
+        "wave-backlog",
+        24,
+        468,
+        1232,
+        232,
+        "Sequenced migration backlog",
+        [
+          column("WorkflowAssessment", "WorkflowPath", "Workflow", 300),
+          measure("WorkflowAssessment", "Migration Stage Label", "Wave", 95),
+          column("WorkflowAssessment", "RecommendedTarget", "Fabric Target", 170),
+          column("WorkflowAssessment", "ComplexityScore", "Score", 75),
+          column("WorkflowAssessment", "RecommendationReason", "Rationale", 560),
+        ],
+        undefined,
+        descendingColumnSort("WorkflowAssessment", "ComplexityScore"),
+      ),
+    ],
+  },
+  {
+    key: "blockers",
+    name: "Blockers & Risks",
+    visuals: [
+      title(
+        "risk-title",
+        "Portfolio Blockers & Risks",
+        "Unsupported legacy tools, manual engineering effort drivers, and parser findings",
+      ),
+      slicer("risk-run", 696, 12, 316, "AssessmentRun", "RunLabel", "Assessment run"),
+      slicer("risk-source", 1028, 12, 228, "WorkflowAssessment", "SourcePlatform", "Source platform"),
+      cards("risk-kpis", 24, 96, 1232, [
+        ["WorkflowAssessment", "Manual Review KPI", "Manual Review Workflows"],
+        ["ToolInventory", "Manual Tool Components KPI", "Manual Tool Components"],
+        ["Dependency", "Dependencies KPI", "Dependencies"],
+        ["Finding", "Static Findings KPI", "Static Findings"],
+      ]),
+      chart(
+        "risk-manual-tools",
+        "Source tools requiring manual engineering",
+        "barChart",
+        24,
+        228,
+        460,
+        232,
+        "ToolInventory",
+        "ToolName",
+        measure("ToolInventory", "Manual Tool Components"),
+        undefined,
+        [categoricalFilter("ToolInventory", "SupportCategory", ["manual", "unsupported"], "risk-support-cat")],
+        descendingMeasureSort("ToolInventory", "Manual Tool Components"),
+      ),
+      table(
+        "risk-workflow-summary",
+        500,
+        228,
+        756,
+        232,
+        "Workflows with blockers & findings",
+        [
+          column("WorkflowAssessment", "WorkflowPath", "Workflow", 310),
+          column("WorkflowAssessment", "RecommendedTarget", "Fabric Target", 165),
+          measure("ToolInventory", "Manual Tool Components", "Manual Tools", 120),
+          measure("Finding", "Static Findings", "Findings", 110),
+        ],
+        undefined,
+        descendingMeasureSort("Finding", "Static Findings"),
+      ),
+      table(
+        "risk-findings",
+        24,
+        476,
+        1232,
+        224,
+        "Parser & unsupported-tool findings",
+        [
+          column("WorkflowAssessment", "WorkflowPath", "Workflow", 310),
+          column("Finding", "FindingType", "Type", 145),
+          column("Finding", "FindingText", "Finding Detail", 745),
+        ],
+        [categoricalFilter("Finding", "FindingType", ["UnsupportedTool", "Parser"], "risk-finding-types")],
+      ),
+    ],
+  },
+  {
+    key: "capacity",
+    name: "Fabric Capacity",
+    visuals: [
+      title(
+        "cap-title",
+        "Fabric Capacity & F-SKU Sizing",
+        "Recommended Fabric F-SKU, balanced CUs needed, and monthly CU-hours (daily baseline: 1k rows/run, 80% utilization)",
+      ),
+      slicer("cap-run", 696, 12, 316, "AssessmentRun", "RunLabel", "Assessment run"),
+      slicer("cap-target", 1028, 12, 228, "WorkflowAssessment", "RecommendedTarget", "Fabric target"),
+      cards("cap-kpis", 24, 96, 1232, [
+        ["CapacityProfile", "Recommended Fabric SKU KPI", "Recommended SKU"],
+        ["CapacityProfile", "Required CUs (Balanced) KPI", "Balanced CUs Needed"],
+        ["CapacityProfile", "Est Monthly CU-Hours KPI", "Est. Monthly CU-Hours"],
+        ["CapacityProfile", "Est CU-Seconds / Run KPI", "Est. CU-Sec / Run"],
+        ["CapacityProfile", "Total Complexity Units KPI", "Complexity Units"],
+      ]),
+      scatter(
+        "cap-scatter",
+        "Workflow compute footprint (Active Steps vs. Est. CU-Seconds / Run)",
+        24,
+        228,
+        604,
+        236,
+        column("WorkflowAssessment", "WorkflowPath"),
+        measure("CapacityProfile", "Total Active Steps"),
+        measure("CapacityProfile", "Est CU-Seconds / Run"),
         column("WorkflowAssessment", "RecommendedTarget"),
       ),
-      chart("plan-wave-mix", "Migration wave mix", "barChart", 640, 304, 616, 216, "WorkflowAssessment", "MigrationWave", measure("WorkflowAssessment", "Assessed Assets")),
-      table("plan-backlog", 24, 536, 1232, 160, [
-        column("WorkflowAssessment", "WorkflowPath"),
-        column("WorkflowAssessment", "MigrationWave"),
-        column("WorkflowAssessment", "RecommendedTarget"),
-        column("WorkflowAssessment", "ComplexityScore"),
-        column("WorkflowAssessment", "RecommendationReason"),
-      ]),
-    ],
-  },
-  {
-    key: "technical",
-    name: "Technical Assessment Evidence",
-    latestOnly: true,
-    visuals: [
-      title("technical-title", "Technical Assessment Evidence", "Inspect bounded parser evidence, mappings, findings, and source connections"),
-      slicer("technical-run", 24, 72, 280, "AssessmentRun", "RunLabel", "Assessment run"),
-      slicer("technical-workflow", 320, 72, 560, "WorkflowAssessment", "WorkflowPath", "Workflow"),
-      cards("technical-components", 24, 168, 296, [["WorkflowAssessment", "Source Components"]]),
-      cards("technical-connections-card", 336, 168, 296, [["WorkflowAssessment", "Connections"]]),
-      cards("technical-dependencies", 648, 168, 296, [["Dependency", "Dependencies"]]),
-      cards("technical-findings-card", 960, 168, 296, [["Finding", "Static Findings"]]),
-      chart("technical-mapping", "Tool mappings by support category", "barChart", 24, 304, 560, 216, "ToolInventory", "SupportCategory", measure("ToolInventory", "Mapped Components")),
-      table("technical-findings", 600, 304, 656, 216, [
-        column("WorkflowAssessment", "WorkflowPath"),
-        column("Finding", "FindingType"),
-        column("Finding", "FindingText"),
-      ]),
-      table("technical-connections", 24, 536, 1232, 160, [
-        column("WorkflowAssessment", "WorkflowPath"),
-        column("WorkflowConnection", "SourceNodeId"),
-        column("WorkflowConnection", "TargetNodeId"),
-        column("WorkflowConnection", "SourceAnchor"),
-        column("WorkflowConnection", "TargetAnchor"),
-      ]),
-    ],
-  },
-  {
-    key: "detail",
-    name: "Workflow Assessment Detail",
-    latestOnly: true,
-    visuals: [
-      title("detail-title", "Workflow Assessment Detail", "Drill into one workflow's route, complexity, mappings, findings, and graph evidence"),
-      slicer("detail-run", 24, 72, 280, "AssessmentRun", "RunLabel", "Assessment run"),
-      slicer("detail-workflow", 320, 72, 704, "WorkflowAssessment", "WorkflowPath", "Workflow"),
-      cards("detail-assessed", 24, 168, 296, [["WorkflowAssessment", "Assessed Assets"]]),
-      cards("detail-complexity", 336, 168, 296, [["WorkflowAssessment", "Average Complexity Score"]]),
-      cards("detail-components", 648, 168, 296, [["WorkflowAssessment", "Source Components"]]),
-      cards("detail-connections-card", 960, 168, 296, [["WorkflowAssessment", "Connections"]]),
-      table("detail-summary", 24, 304, 1232, 104, [
-        column("WorkflowAssessment", "WorkflowPath"),
-        column("WorkflowAssessment", "ComplexityScore"),
-        column("WorkflowAssessment", "ComplexityBand"),
-        column("WorkflowAssessment", "RecommendedTarget"),
-        column("WorkflowAssessment", "MigrationWave"),
-      ]),
-      table("detail-connections", 24, 424, 600, 272, [
-        column("WorkflowConnection", "SourceNodeId"),
-        column("WorkflowConnection", "TargetNodeId"),
-        column("WorkflowConnection", "SourceAnchor"),
-        column("WorkflowConnection", "TargetAnchor"),
-      ]),
-      table("detail-mappings", 640, 424, 616, 272, [
-        column("ToolInventory", "ToolName"),
-        column("ToolInventory", "ToolCount"),
-        column("ToolInventory", "SupportCategory"),
-      ]),
+      chart(
+        "cap-target-units",
+        "Est. CU-Seconds / Run by Fabric target",
+        "barChart",
+        652,
+        228,
+        604,
+        236,
+        "WorkflowAssessment",
+        "RecommendedTarget",
+        measure("CapacityProfile", "Est CU-Seconds / Run"),
+        undefined,
+        undefined,
+        descendingMeasureSort("CapacityProfile", "Est CU-Seconds / Run"),
+      ),
+      table(
+        "cap-table",
+        24,
+        480,
+        1232,
+        220,
+        "Workflow Fabric capacity & CU sizing",
+        [
+          column("WorkflowAssessment", "WorkflowPath", "Workflow", 280),
+          column("CapacityProfile", "TargetComponents", "Fabric Components", 230),
+          measure("CapacityProfile", "Est CU-Seconds / Run", "Est. CU-Sec / Run", 125),
+          measure("CapacityProfile", "Est Monthly CU-Hours", "Monthly CU-Hours", 125),
+          column("CapacityProfile", "ComplexityUnits", "Complexity Units", 120),
+          column("CapacityProfile", "TotalSteps", "Active Steps", 100),
+          column("CapacityProfile", "HeavySteps", "Heavy Steps", 100),
+          column("CapacityProfile", "DestCount", "Outputs", 90),
+        ],
+        undefined,
+        descendingMeasureSort("CapacityProfile", "Est CU-Seconds / Run"),
+      ),
     ],
   },
   {
     key: "history",
-    name: "Assessment Run History",
-    latestOnly: false,
+    name: "Run History",
     visuals: [
-      title("history-title", "Assessment Run History", "Compare retained assessment executions across completed runs"),
-      slicer("history-run", 24, 72, 320, "AssessmentRun", "RunLabel", "Assessment run"),
-      slicer("history-source", 360, 72, 240, "WorkflowAssessment", "SourcePlatform", "Source platform"),
-      cards("history-kpis", 24, 168, 1232, [
-        ["WorkflowAssessment", "Assessed Assets"],
-        ["WorkflowAssessment", "High Complexity Assets"],
-        ["WorkflowAssessment", "Manual Review Assets"],
-        ["WorkflowAssessment", "Average Complexity Score"],
+      title(
+        "hist-title",
+        "Assessment Run History",
+        "Compare volume, native automation readiness, and complexity across retained runs",
+      ),
+      slicer("hist-run", 696, 12, 316, "AssessmentRun", "RunLabel", "Assessment run"),
+      slicer("hist-source", 1028, 12, 228, "WorkflowAssessment", "SourcePlatform", "Source platform"),
+      cards("hist-kpis", 24, 96, 1232, [
+        ["WorkflowAssessment", "Assessed Assets KPI", "Assessed Workflows"],
+        ["WorkflowAssessment", "Native-Ready % KPI", "Native-Ready %"],
+        ["WorkflowAssessment", "High Complexity KPI", "High Complexity"],
+        ["WorkflowAssessment", "Average Complexity Score", "Avg Complexity"],
       ]),
-      chart("history-volume", "Assessed assets by run", "columnChart", 24, 304, 600, 216, "AssessmentRun", "RunLabel", measure("WorkflowAssessment", "Assessed Assets")),
-      chart("history-complexity", "Average complexity by run", "columnChart", 640, 304, 616, 216, "AssessmentRun", "RunLabel", measure("WorkflowAssessment", "Average Complexity Score")),
-      table("history-runs", 24, 536, 1232, 160, [
+      chart(
+        "hist-volume",
+        "Assessed workflows by run",
+        "columnChart",
+        24,
+        228,
+        604,
+        232,
+        "AssessmentRun",
+        "RunLabel",
+        measure("WorkflowAssessment", "Assessed Assets"),
+      ),
+      lineWithSecondary(
+        "hist-trend",
+        "Native-ready % & average complexity by run",
+        652,
+        228,
+        604,
+        232,
+        column("AssessmentRun", "RunLabel"),
+        measure("WorkflowAssessment", "Native-Ready %"),
+        measure("WorkflowAssessment", "Average Complexity Score"),
+      ),
+      table("hist-ledger", 24, 476, 1232, 224, "Assessment execution ledger", [
         column("AssessmentRun", "RunLabel"),
         column("AssessmentRun", "Status"),
         column("AssessmentRun", "RulesVersion"),
         column("AssessmentRun", "IsLatestCompletedRun"),
         measure("WorkflowAssessment", "Assessed Assets"),
+        measure("WorkflowAssessment", "Native-Ready %"),
         measure("WorkflowAssessment", "High Complexity Assets"),
         measure("WorkflowAssessment", "Manual Review Assets"),
       ]),
@@ -195,7 +343,7 @@ function literal(value) {
   return { expr: { Literal: { Value: value } } };
 }
 
-function column(tableName, property) {
+function column(tableName, property, displayName, width) {
   return {
     field: {
       Column: {
@@ -205,10 +353,12 @@ function column(tableName, property) {
     },
     queryRef: `${tableName}.${property}`,
     nativeQueryRef: property,
+    ...(displayName ? { displayName } : {}),
+    ...(width ? { _width: width } : {}),
   };
 }
 
-function measure(tableName, property) {
+function measure(tableName, property, displayName, width) {
   return {
     field: {
       Measure: {
@@ -218,7 +368,17 @@ function measure(tableName, property) {
     },
     queryRef: `${tableName}.${property}`,
     nativeQueryRef: property,
+    ...(displayName ? { displayName } : {}),
+    ...(width ? { _width: width } : {}),
   };
+}
+
+function cleanProjections(projections) {
+  return projections.map((p) => {
+    const copy = { ...p };
+    delete copy._width;
+    return copy;
+  });
 }
 
 function aggregation(tableName, property, functionId) {
@@ -240,17 +400,18 @@ function aggregation(tableName, property, functionId) {
   };
 }
 
-function baseVisual(key, x, y, width, height, visual) {
+function baseVisual(key, x, y, width, height, visual, filters) {
   return {
     $schema: visualSchema,
     name: id(key),
     position: { x, y, z: 1000, height, width, tabOrder: 1000 },
     visual,
+    ...(filters ? { filterConfig: { filters } } : {}),
   };
 }
 
 function title(key, heading, subtitle) {
-  return baseVisual(key, 24, 16, 1232, 48, {
+  return baseVisual(key, 24, 12, 656, 68, {
     visualType: "textbox",
     objects: {
       general: [
@@ -263,13 +424,18 @@ function title(key, heading, subtitle) {
                     value: heading,
                     textStyle: {
                       fontFamily: "Aptos Display",
-                      fontSize: "22px",
+                      fontSize: "20px",
                       fontWeight: "bold",
-                      color: "#202020",
+                      color: "#1F1F1F",
                     },
                   },
+                ],
+                horizontalTextAlignment: "left",
+              },
+              {
+                textRuns: [
                   {
-                    value: `  ${subtitle}`,
+                    value: subtitle,
                     textStyle: {
                       fontFamily: "Aptos",
                       fontSize: "11px",
@@ -302,7 +468,7 @@ function title(key, heading, subtitle) {
 }
 
 function slicer(key, x, y, width, tableName, property, displayName) {
-  return baseVisual(key, x, y, width, 80, {
+  return baseVisual(key, x, y, width, 76, {
     visualType: "slicer",
     query: {
       queryState: {
@@ -324,8 +490,8 @@ function slicer(key, x, y, width, tableName, property, displayName) {
       padding: [
         {
           properties: {
-            top: literal("8D"),
-            bottom: literal("8D"),
+            top: literal("4D"),
+            bottom: literal("4D"),
             left: literal("8D"),
             right: literal("8D"),
           },
@@ -336,12 +502,14 @@ function slicer(key, x, y, width, tableName, property, displayName) {
 }
 
 function cards(key, x, y, width, fields) {
-  return baseVisual(key, x, y, width, 120, {
+  return baseVisual(key, x, y, width, 116, {
     visualType: "cardVisual",
     query: {
       queryState: {
         Data: {
-          projections: fields.map(([tableName, property]) => measure(tableName, property)),
+          projections: fields.map(([tableName, property, displayName]) =>
+            measure(tableName, property, displayName),
+          ),
         },
       },
     },
@@ -349,47 +517,215 @@ function cards(key, x, y, width, fields) {
       value: [{ properties: { fontSize: literal("22D") }, selector: { id: "default" } }],
       label: [{ properties: { fontSize: literal("10D") }, selector: { id: "default" } }],
       padding: [{ properties: { paddingUniform: literal("8D") }, selector: { id: "default" } }],
-      layout: [{ properties: { paddingUniform: literal("0D") }, selector: { id: "default" } }],
-    },
-  });
-}
-
-function chart(key, titleText, visualType, x, y, width, height, categoryTable, categoryProperty, value, series) {
-  const queryState = {
-    Category: { projections: [{ ...column(categoryTable, categoryProperty), active: true }] },
-    Y: { projections: [value] },
-  };
-  if (series) {
-    queryState.Series = { projections: [series] };
-  }
-  return baseVisual(key, x, y, width, height, {
-    visualType,
-    query: { queryState },
-    visualContainerObjects: {
-      title: [
+      layout: [
         {
           properties: {
-            show: literal("true"),
-            text: literal(`'${titleText}'`),
-            heading: literal("'Heading3'"),
-            titleWrap: literal("true"),
-            fontSize: literal("12D"),
-            bold: literal("true"),
+            columnCount: literal(`${fields.length}D`),
+            rowCount: literal("1D"),
+            maxTiles: literal(`${fields.length}D`),
+            autoGrid: literal("true"),
+            paddingUniform: literal("0D"),
           },
+          selector: { id: "default" },
         },
       ],
     },
   });
 }
 
-function table(key, x, y, width, height, projections) {
+function chartTitle(titleText) {
+  return {
+    title: [
+      {
+        properties: {
+          show: literal("true"),
+          text: literal(`'${titleText}'`),
+          heading: literal("'Heading3'"),
+          titleWrap: literal("true"),
+          fontSize: literal("12D"),
+          bold: literal("true"),
+        },
+      },
+    ],
+    subTitle: [
+      {
+        properties: {
+          show: literal("false"),
+        },
+      },
+    ],
+  };
+}
+
+function descendingMeasureSort(tableName, property) {
+  return {
+    sort: [
+      {
+        field: {
+          Measure: {
+            Expression: { SourceRef: { Entity: tableName } },
+            Property: property,
+          },
+        },
+        direction: "Descending",
+      },
+    ],
+  };
+}
+
+function descendingColumnSort(tableName, property) {
+  return {
+    sort: [
+      {
+        field: {
+          Column: {
+            Expression: { SourceRef: { Entity: tableName } },
+            Property: property,
+          },
+        },
+        direction: "Descending",
+      },
+    ],
+  };
+}
+
+function chart(key, titleText, visualType, x, y, width, height, categoryTable, categoryProperty, value, series, filters, sortDefinition) {
+  const yProjections = Array.isArray(value) ? value : [value];
+  const queryState = {
+    Category: { projections: [{ ...column(categoryTable, categoryProperty), active: true }] },
+    Y: { projections: yProjections },
+  };
+  if (series) {
+    queryState.Series = { projections: [series] };
+  }
+  const objects = {
+    categoryAxis: [
+      {
+        properties: {
+          maxMarginFactor: literal("45D"),
+          fontSize: literal("10D"),
+        },
+      },
+    ],
+    labels: [
+      {
+        properties: {
+          show: literal("true"),
+        },
+      },
+    ],
+  };
+  if (series || yProjections.length > 1) {
+    objects.legend = [
+      {
+        properties: {
+          show: literal("true"),
+          position: literal("'Top'"),
+        },
+      },
+    ];
+  }
+  return baseVisual(
+    key,
+    x,
+    y,
+    width,
+    height,
+    {
+      visualType,
+      query: {
+        queryState,
+        ...(sortDefinition ? { sortDefinition } : {}),
+      },
+      objects,
+      visualContainerObjects: chartTitle(titleText),
+    },
+    filters,
+  );
+}
+
+function lineWithSecondary(key, titleText, x, y, width, height, categoryField, primaryMeasure, secondaryMeasure) {
   return baseVisual(key, x, y, width, height, {
-    visualType: "tableEx",
+    visualType: "lineChart",
     query: {
       queryState: {
-        Values: { projections },
+        Category: { projections: [{ ...categoryField, active: true }] },
+        Y: { projections: [primaryMeasure] },
+        Y2: { projections: [secondaryMeasure] },
       },
     },
+    objects: {
+      categoryAxis: [
+        {
+          properties: {
+            maxMarginFactor: literal("40D"),
+            fontSize: literal("10D"),
+          },
+        },
+      ],
+      legend: [
+        {
+          properties: {
+            show: literal("true"),
+            position: literal("'Top'"),
+          },
+        },
+      ],
+      labels: [
+        {
+          properties: {
+            show: literal("true"),
+          },
+        },
+      ],
+    },
+    visualContainerObjects: chartTitle(titleText),
+  });
+}
+
+function scatter(key, titleText, x, y, width, height, categoryField, xMeasure, yMeasure, seriesField) {
+  return baseVisual(key, x, y, width, height, {
+    visualType: "scatterChart",
+    query: {
+      queryState: {
+        Category: { projections: [{ ...categoryField, active: true }] },
+        Series: { projections: [seriesField] },
+        X: { projections: [xMeasure] },
+        Y: { projections: [yMeasure] },
+      },
+    },
+    objects: {
+      bubbles: [
+        {
+          properties: {
+            bubbleSize: literal("12D"),
+          },
+        },
+      ],
+      legend: [
+        {
+          properties: {
+            show: literal("true"),
+            position: literal("'Top'"),
+          },
+        },
+      ],
+    },
+    visualContainerObjects: chartTitle(titleText),
+  });
+}
+
+function matrix(key, titleText, x, y, width, height, rows, columns, values) {
+  const queryState = {
+    Rows: { projections: rows },
+    Values: { projections: values },
+  };
+  if (columns.length > 0) {
+    queryState.Columns = { projections: columns };
+  }
+  return baseVisual(key, x, y, width, height, {
+    visualType: "pivotTable",
+    query: { queryState },
     objects: {
       columnHeaders: [
         {
@@ -399,23 +735,77 @@ function table(key, x, y, width, height, projections) {
           },
         },
       ],
+      values: [
+        {
+          properties: {
+            wordWrap: literal("true"),
+          },
+        },
+      ],
     },
+    visualContainerObjects: chartTitle(titleText),
   });
 }
 
-function latestCompletedFilter(scopeKey) {
+function table(key, x, y, width, height, titleText, projections, filters, sortDefinition) {
+  const hasWidths = projections.some((p) => typeof p._width === "number");
+  const columnWidth = projections
+    .filter((p) => typeof p._width === "number")
+    .map((p) => ({
+      properties: { value: { expr: { Literal: { Value: `${p._width}D` } } } },
+      selector: { metadata: p.queryRef },
+    }));
+  return baseVisual(
+    key,
+    x,
+    y,
+    width,
+    height,
+    {
+      visualType: "tableEx",
+      query: {
+        queryState: {
+          Values: { projections: cleanProjections(projections) },
+        },
+        ...(sortDefinition ? { sortDefinition } : {}),
+      },
+      objects: {
+        columnHeaders: [
+          {
+            properties: {
+              columnAdjustment: literal(hasWidths ? "'fixedWidth'" : "'growToFit'"),
+              autoSizeColumnWidth: literal(hasWidths ? "false" : "true"),
+            },
+          },
+        ],
+        ...(columnWidth.length > 0 ? { columnWidth } : {}),
+        values: [
+          {
+            properties: {
+              wordWrap: literal("true"),
+            },
+          },
+        ],
+      },
+      visualContainerObjects: chartTitle(titleText),
+    },
+    filters,
+  );
+}
+
+function categoricalFilter(tableName, property, allowedValues, scopeKey) {
   return {
-    name: `Filter${id(`latest-completed-run-${scopeKey}`)}`,
+    name: `Filter${id(scopeKey)}`,
     field: {
       Column: {
-        Expression: { SourceRef: { Entity: "AssessmentRun" } },
-        Property: "IsLatestCompletedRun",
+        Expression: { SourceRef: { Entity: tableName } },
+        Property: property,
       },
     },
     type: "Categorical",
     filter: {
       Version: 2,
-      From: [{ Name: "a", Entity: "AssessmentRun", Type: 0 }],
+      From: [{ Name: "t", Entity: tableName, Type: 0 }],
       Where: [
         {
           Condition: {
@@ -423,20 +813,20 @@ function latestCompletedFilter(scopeKey) {
               Expressions: [
                 {
                   Column: {
-                    Expression: { SourceRef: { Source: "a" } },
-                    Property: "IsLatestCompletedRun",
+                    Expression: { SourceRef: { Source: "t" } },
+                    Property: property,
                   },
                 },
               ],
-              Values: [[{ Literal: { Value: "true" } }]],
+              Values: allowedValues.map((v) => [{ Literal: { Value: `'${v}'` } }]),
             },
           },
         },
       ],
     },
     howCreated: "User",
-    isHiddenInViewMode: true,
-    isLockedInViewMode: true,
+    isHiddenInViewMode: false,
+    isLockedInViewMode: false,
   };
 }
 
@@ -463,7 +853,6 @@ for (const pageDefinition of pageDefinitions) {
     displayOption: "FitToPage",
     height: 720,
     width: 1280,
-    ...(pageDefinition.latestOnly ? { filterConfig: { filters: [latestCompletedFilter(pageDefinition.key)] } } : {}),
   });
   const seenVisuals = new Set();
   for (const visual of pageDefinition.visuals) {

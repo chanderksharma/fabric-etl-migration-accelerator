@@ -41,6 +41,7 @@ def test_assessment_notebook_supports_schema_bootstrap_and_matches_tmdl() -> Non
             code_by_id[cell_id] = source
 
     assert "INITIALIZE_SCHEMA_ONLY = False" in code_by_id["parameters"]
+    assert "REFRESH_SEMANTIC_MODEL = True" in code_by_id["parameters"]
     for guarded_id in ("preview", "assess"):
         assert "INITIALIZE_SCHEMA_ONLY" in code_by_id[guarded_id]
     for source in code_by_id.values():
@@ -48,6 +49,7 @@ def test_assessment_notebook_supports_schema_bootstrap_and_matches_tmdl() -> Non
 
     persist_src = code_by_id["persist-delta"]
     assert "mode('ignore').saveAsTable(table_name)" in persist_src
+    assert "_refresh_direct_lake_model" in persist_src
 
     # Verify every TMDL table column matches the Spark StructType schema in persist-delta.
     tmdl_dir = (

@@ -1,0 +1,192 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.9.0/schema.json",
+  "name": "86fbfc480435de229c83",
+  "position": {
+    "x": 24,
+    "y": 96,
+    "z": 1000,
+    "height": 116,
+    "width": 1232,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "cardVisual",
+    "query": {
+      "queryState": {
+        "Data": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "CapacityProfile"
+                    }
+                  },
+                  "Property": "Recommended Fabric SKU KPI"
+                }
+              },
+              "queryRef": "CapacityProfile.Recommended Fabric SKU KPI",
+              "nativeQueryRef": "Recommended Fabric SKU KPI",
+              "displayName": "Recommended SKU"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "CapacityProfile"
+                    }
+                  },
+                  "Property": "Required CUs (Balanced) KPI"
+                }
+              },
+              "queryRef": "CapacityProfile.Required CUs (Balanced) KPI",
+              "nativeQueryRef": "Required CUs (Balanced) KPI",
+              "displayName": "Balanced CUs Needed"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "CapacityProfile"
+                    }
+                  },
+                  "Property": "Est Monthly CU-Hours KPI"
+                }
+              },
+              "queryRef": "CapacityProfile.Est Monthly CU-Hours KPI",
+              "nativeQueryRef": "Est Monthly CU-Hours KPI",
+              "displayName": "Est. Monthly CU-Hours"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "CapacityProfile"
+                    }
+                  },
+                  "Property": "Est CU-Seconds / Run KPI"
+                }
+              },
+              "queryRef": "CapacityProfile.Est CU-Seconds / Run KPI",
+              "nativeQueryRef": "Est CU-Seconds / Run KPI",
+              "displayName": "Est. CU-Sec / Run"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "CapacityProfile"
+                    }
+                  },
+                  "Property": "Total Complexity Units KPI"
+                }
+              },
+              "queryRef": "CapacityProfile.Total Complexity Units KPI",
+              "nativeQueryRef": "Total Complexity Units KPI",
+              "displayName": "Complexity Units"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {
+      "value": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "22D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "label": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "10D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "paddingUniform": {
+              "expr": {
+                "Literal": {
+                  "Value": "8D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ],
+      "layout": [
+        {
+          "properties": {
+            "columnCount": {
+              "expr": {
+                "Literal": {
+                  "Value": "5D"
+                }
+              }
+            },
+            "rowCount": {
+              "expr": {
+                "Literal": {
+                  "Value": "1D"
+                }
+              }
+            },
+            "maxTiles": {
+              "expr": {
+                "Literal": {
+                  "Value": "5D"
+                }
+              }
+            },
+            "autoGrid": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "paddingUniform": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          },
+          "selector": {
+            "id": "default"
+          }
+        }
+      ]
+    }
+  }
+}

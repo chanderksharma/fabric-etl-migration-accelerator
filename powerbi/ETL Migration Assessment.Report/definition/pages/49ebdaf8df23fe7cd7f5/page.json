@@ -1,0 +1,8 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "49ebdaf8df23fe7cd7f5",
+  "displayName": "Blockers & Risks",
+  "displayOption": "FitToPage",
+  "height": 720,
+  "width": 1280
+}

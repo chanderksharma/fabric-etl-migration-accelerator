@@ -6,6 +6,15 @@ table ToolInventory
 		formatString: #,##0
 		displayFolder: Technical Evidence
 
+	/// Parsed source components requiring manual or unsupported engineering work.
+	measure 'Manual Tool Components' = CALCULATE(SUM(ToolInventory[ToolCount]), KEEPFILTERS(ToolInventory[SupportCategory] IN {"manual", "unsupported"}))
+		formatString: #,##0
+		displayFolder: Blockers & Risks
+
+	measure 'Manual Tool Components KPI' = COALESCE([Manual Tool Components], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
 	column RunId
 		dataType: string
 		isHidden

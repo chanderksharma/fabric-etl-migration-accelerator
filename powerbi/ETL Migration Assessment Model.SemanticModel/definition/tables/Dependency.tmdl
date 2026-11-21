@@ -6,6 +6,10 @@ table Dependency
 		formatString: #,##0
 		displayFolder: Technical Evidence
 
+	measure 'Dependencies KPI' = COALESCE([Dependencies], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
 	column RunId
 		dataType: string
 		isHidden

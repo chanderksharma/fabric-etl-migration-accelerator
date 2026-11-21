@@ -6,6 +6,10 @@ table Finding
 		formatString: #,##0
 		displayFolder: Technical Evidence
 
+	measure 'Static Findings KPI' = COALESCE([Static Findings], 0)
+		formatString: #,##0
+		displayFolder: KPIs
+
 	column RunId
 		dataType: string
 		isHidden

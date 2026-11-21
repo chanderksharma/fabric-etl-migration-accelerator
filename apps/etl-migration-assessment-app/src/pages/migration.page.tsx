@@ -1,38 +1,37 @@
 import { MetricCards, SemanticChart } from "@/components/semantic-visuals";
 import { DataState, Panel, Pill, SimpleTable } from "@/components/assessment-ui";
 import { useQueryRecords } from "@/hooks/use-query-records";
+import { waveDefinitions, waveLabel } from "@/lib/migration-wave";
 import { PageFrame } from "@/pages/portfolio.page";
 import { portfolio, workflows } from "@/queries";
 
 export function MigrationPage() {
   const workflowQuery = useQueryRecords(workflows.register);
-  const waveGroups = Object.entries(
-    workflowQuery.records.reduce<Record<string, typeof workflowQuery.records>>((groups, record) => {
-      const wave = String(record.MigrationWave || "Unassigned");
-      (groups[wave] ??= []).push(record);
-      return groups;
-    }, {}),
-  ).sort(([left], [right]) => left.localeCompare(right));
+  const countsByWave = workflowQuery.records.reduce<Record<string, number>>((counts, record) => {
+    const label = waveLabel(record.MigrationWave);
+    counts[label] = (counts[label] ?? 0) + 1;
+    return counts;
+  }, {});
 
   return (
     <PageFrame
       title="Migration plan"
-      subtitle="Sequence work from compiler routing, complexity, and migration-wave evidence."
+      subtitle="Sequence work from compiler routing, complexity, and Wave 1 through Wave 4 delivery stages."
     >
       <MetricCards
         definition={portfolio.summary}
         metrics={[
-          { rawName: "[Pilot Assets]", title: "Pilot", subtitle: "Validate implementation patterns" },
-          { rawName: "[Redesign Assets]", title: "Redesign", subtitle: "Requires engineering changes" },
-          { rawName: "[Manual Review Assets]", title: "Manual review", subtitle: "Unsupported or ambiguous" },
-          { rawName: "[Average Complexity Score]", title: "Average complexity", subtitle: "Portfolio technical score" },
+          { rawName: "[Wave 1 Assets]", title: "Wave 1", subtitle: "Foundation & prerequisites" },
+          { rawName: "[Wave 2 Assets]", title: "Wave 2", subtitle: "Controlled pilot" },
+          { rawName: "[Wave 3 Assets]", title: "Wave 3", subtitle: "Medium-complexity scale-out" },
+          { rawName: "[Wave 4 Assets]", title: "Wave 4", subtitle: "Manual engineering redesign" },
         ]}
       />
       <div className="grid gap-(--grid-gap) xl:grid-cols-2">
         <SemanticChart
           definition={portfolio.waveDistribution}
           title="Migration wave mix"
-          subtitle="Asset allocation across the delivery sequence"
+          subtitle="Asset allocation across Wave 1 through Wave 4"
         />
         <SemanticChart
           definition={portfolio.targetDistribution}
@@ -40,15 +39,15 @@ export function MigrationPage() {
           subtitle="Recommended Microsoft Fabric targets"
         />
       </div>
-      <Panel title="Evidence-based delivery sequence" subtitle="Wave allocations from the latest completed assessment">
+      <Panel title="Evidence-based delivery sequence" subtitle="Wave allocations normalized to Wave 1 through Wave 4">
         <DataState isLoading={workflowQuery.isLoading} error={workflowQuery.error} empty={!workflowQuery.records.length} />
-        {!!waveGroups.length && (
+        {!!workflowQuery.records.length && (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {waveGroups.map(([wave, records], index) => (
-              <div key={wave} className="rounded-lg border p-4">
-                <div className="flex items-center justify-between"><Pill>{index + 1}</Pill><strong>{records.length} workflows</strong></div>
-                <h3 className="mt-3 font-semibold">{wave}</h3>
-                <p className="mt-1 text-200 text-muted-foreground">{waveGuidance(wave)}</p>
+            {waveDefinitions.map((wave, index) => (
+              <div key={wave.label} className="rounded-lg border p-4">
+                <div className="flex items-center justify-between"><Pill>{index + 1}</Pill><strong>{countsByWave[wave.label] ?? 0} workflows</strong></div>
+                <h3 className="mt-3 font-semibold">{wave.label}</h3>
+                <p className="mt-1 text-200 text-muted-foreground">{wave.guidance}</p>
               </div>
             ))}
           </div>
@@ -78,19 +77,11 @@ export function MigrationPage() {
             { key: "WorkflowPath", label: "Workflow" },
             { key: "ComplexityBand", label: "Complexity" },
             { key: "RecommendedTarget", label: "Fabric target" },
-            { key: "MigrationWave", label: "Wave" },
+            { key: "MigrationWave", label: "Wave", render: (record) => waveLabel(record.MigrationWave) },
             { key: "RecommendationReason", label: "Rationale" },
           ]}
         />
       </Panel>
     </PageFrame>
   );
-}
-
-function waveGuidance(wave: string): string {
-  const value = wave.toLowerCase();
-  if (value.includes("pilot")) return "Prove representative transformations and operational controls.";
-  if (value.includes("redesign")) return "Resolve unsupported or specialist workflow semantics.";
-  if (value.includes("1")) return "Resolve shared prerequisites and agree source bindings.";
-  return "Apply reviewed patterns with measured exit evidence.";
 }

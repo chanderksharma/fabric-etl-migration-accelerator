@@ -55,8 +55,8 @@ export function PortfolioPage() {
         metrics={[
           { rawName: "[Assessed Assets]", title: "Assessed assets", subtitle: "Latest completed run" },
           { rawName: "[High Complexity Assets]", title: "High complexity", subtitle: "Requires focused design" },
-          { rawName: "[Pilot Assets]", title: "Pilot assets", subtitle: "Validate first" },
-          { rawName: "[Redesign Assets]", title: "Redesign assets", subtitle: "Manual engineering path" },
+          { rawName: "[Wave 2 Assets]", title: "Wave 2 (Pilot)", subtitle: "Validate first" },
+          { rawName: "[Wave 4 Assets]", title: "Wave 4 (Redesign)", subtitle: "Manual engineering path" },
         ]}
       />
       <div className="grid gap-(--grid-gap) xl:grid-cols-3">

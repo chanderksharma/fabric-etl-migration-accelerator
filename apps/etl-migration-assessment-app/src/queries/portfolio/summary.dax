@@ -3,6 +3,10 @@ CALCULATETABLE(
     ROW(
         "Assessed Assets", [Assessed Assets],
         "High Complexity Assets", [High Complexity Assets],
+        "Wave 1 Assets", [Wave 1 Assets],
+        "Wave 2 Assets", [Wave 2 Assets],
+        "Wave 3 Assets", [Wave 3 Assets],
+        "Wave 4 Assets", [Wave 4 Assets],
         "Pilot Assets", [Pilot Assets],
         "Redesign Assets", [Redesign Assets],
         "Manual Review Assets", [Manual Review Assets],
