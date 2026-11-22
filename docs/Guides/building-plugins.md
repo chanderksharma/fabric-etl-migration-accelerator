@@ -112,7 +112,11 @@ and is not a pluggable capability. Use
 `etl_migration_core.contracts.testing` to validate metadata consistency, determinism,
 stream probing, and unsupported-IR rejection in plugin test suites. For completed local runs,
 `POST /api/runs/{run_id}/targets/{platform_id}/evaluate` evaluates each confirmed
-canonical asset and returns separate results without changing the existing assessment;
+canonical asset and returns separate results. For a plugin target the stored
+assessment is not changed. The one exception is Fabric on built-in sources:
+its stored evaluation is the fit stage, and `GET /api/runs/{run_id}` applies it to the
+target, wave, and effort fields and reports `routing_basis: compiler_confirmed`
+(see [Stage separation](../Architecture/system-architecture.md#stage-separation));
 `POST /api/runs/{run_id}/targets/{platform_id}/generate?target_kind=...` and
 `GET /api/runs/{run_id}/targets/{platform_id}/capacity` invoke registered `codegen`
 and `capacity` providers.
@@ -136,6 +140,10 @@ intentionally declare the host contract. An incompatible value, including
 failure. Built-in adapters keep loading because they omit the attribute.
 The optional `AlteryxPathTargetEvaluator`
 protocol preserves the legacy path-based Fabric method for existing integrations.
+`TargetPlatformRegistry.evaluate_alteryx_path` calls it with the same capability,
+fault, and platform-identity checks as `evaluate_asset`, and a provider without the
+protocol fails closed. It exists because Alteryx fit still reads the staged workflow
+rather than canonical IR; a new target should implement `evaluate_asset`.
 Completed runs save a neutral baseline alongside the existing Fabric-focused assessment.
 Retrieve it with `GET /api/runs/{run_id}/neutral-assessment`. To generate or refresh
 the baseline for an older completed run, use `POST` on the same path. The portal
@@ -165,9 +173,10 @@ External snapshots record the selected adapter identity and its adapter, parser,
 registry, and rules versions. Changing any of these requires a new preview. Older
 external snapshots without component versions also require a new preview. Plugin
 authors must increment the appropriate version when its behavior changes; version
-strings do not verify the installed code. Select **Installed plugins** in the
-portal to assess external sources separately from built-in sources. The neutral
-workspace does not generate or deploy target artifacts. An unsupported Fabric
+strings do not verify the installed code. The portal intake page currently offers only
+Alteryx and Informatica. A run whose sources come from a plugin, for example one
+created through the API, opens in a target-neutral workspace that does not generate or
+deploy target artifacts. An unsupported Fabric
 assessment is reported separately from the neutral baseline and registered-target
 evaluations. See the
 [developer contribution guide](developer-contribution-guide.md#extend-a-source-system).

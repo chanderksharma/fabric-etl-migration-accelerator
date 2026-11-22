@@ -19,6 +19,7 @@ type FabricDeploymentPageProps = {
   candidates: Candidate[];
   generating: boolean;
   generate: (target: Target) => Promise<void>;
+  confirmingFit?: boolean;
   request: (path: string, init?: RequestInit) => Promise<Response>;
   preselectedWorkflowPath?: string;
   onStartIntake: () => void;
@@ -31,6 +32,7 @@ export function FabricDeploymentPage({
   candidates,
   generating,
   generate,
+  confirmingFit = false,
   request,
   preselectedWorkflowPath,
   onStartIntake,
@@ -137,6 +139,13 @@ export function FabricDeploymentPage({
             Start an assessment
           </button>{" "}
           to generate Fabric definitions and dispatch deployments.
+        </div>
+      )}
+
+      {confirmingFit && (
+        <div className="notice" role="status">
+          Confirming Fabric routing with the compiler. Targets, waves, and effort update when it
+          finishes.
         </div>
       )}
 
@@ -386,7 +395,7 @@ export function FabricDeploymentPage({
 
           {selectedItem && (
             <Deployment
-              key={selectedItem.path}
+              key={`${selectedItem.path}:${selectedItem.recommended_target}`}
               item={selectedItem}
               candidates={candidates}
               runId={runId}

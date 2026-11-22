@@ -105,8 +105,10 @@ export function useCapacity(
   runId: string | null,
   snapshotId: string | undefined,
   request: Request,
+  // Capacity follows Fabric routing, so a different routing basis is a different estimate.
+  routingBasis?: string,
 ) {
-  const key = runId ? `${runId}:${snapshotId ?? ""}` : null;
+  const key = runId ? `${runId}:${snapshotId ?? ""}:${routingBasis ?? ""}` : null;
   const [state, setState] = useState<CapacityState>({
     key: null,
     estimate: null,

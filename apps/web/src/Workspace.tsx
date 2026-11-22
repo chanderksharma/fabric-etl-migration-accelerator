@@ -37,6 +37,7 @@ type Props = {
   candidates: Candidate[];
   generating: boolean;
   generate: (target: Target) => Promise<void>;
+  confirmingFit?: boolean;
   theme: string;
   toggleTheme: () => void;
   request: (path: string, init?: RequestInit) => Promise<Response>;
@@ -57,6 +58,8 @@ const detailTabs = [
   ["summary", "Summary"], ["flow", "Source Workflow"], ["design", "Fabric design"],
   ["findings", "Risk assessment"], ["validation", "Validation"], ["deploy", "Fabric deployment"],
 ] as const;
+// Pages whose Fabric target, wave, effort, or capacity figures depend on how routing was decided.
+const routingPages: Page[] = ["executive-summary", "workflows", "migration-plan", "capacity-planning"];
 
 function Icon({name}: {name: string}) {
   return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -91,6 +94,7 @@ export function Workspace(props: Props) {
     props.run?.status === "completed" ? props.runId : null,
     props.run?.snapshot_id,
     props.request,
+    props.run?.routing_basis,
   );
   const [search, setSearch] = useState("");
   const [complexity, setComplexity] = useState("");
@@ -282,6 +286,16 @@ export function Workspace(props: Props) {
         }}>Assessment guide</button><button className="icon-button" onClick={props.toggleTheme} aria-label="Switch color theme"><Icon name="moon"/></button></div>
       </header>
       {props.status}
+      {props.run?.status === "completed" && routingPages.includes(page)
+        && props.run.routing_basis === "static_mapping" && <div className="notice" role="note" data-testid="routing-basis">
+        <strong>Routing basis: static mapping.</strong> Assessment does not generate code, so Fabric
+        targets, waves, effort, and capacity come from the support matrix. Open{" "}
+        <button className="link-button" onClick={() => jump("fabric-deployment")}>Fabric Deployment</button>{" "}
+        to confirm each route with the compiler. These figures update when it finishes.
+      </div>}
+      {props.run?.status === "completed" && routingPages.includes(page)
+        && props.run.routing_basis === "compiler_confirmed"
+        && <p className="hint" data-testid="routing-basis">Routing basis: compiler-confirmed Fabric fit.</p>}
       <div hidden={page !== "intake"}>{props.children}</div>
       <div className="content" hidden={page === "intake"}>
         <section
@@ -536,7 +550,7 @@ export function Workspace(props: Props) {
               </div>
               <div className="output-group">
                 <h3>2. Code generation &amp; Fabric deployment</h3>
-                <p>Generate Dataflow, Notebook, and Pipeline definitions or trigger CI/CD from the dedicated Fabric Deployment tab.</p>
+                <p>Confirm Fabric routing with the compiler, then generate Dataflow, Notebook, and Pipeline definitions or trigger CI/CD from the dedicated Fabric Deployment tab.</p>
                 <div className="deploy-actions">
                   <button className="primary-button" onClick={() => jump("fabric-deployment")}>Open Fabric Deployment →</button>
                 </div>
@@ -592,6 +606,7 @@ export function Workspace(props: Props) {
           candidates={props.candidates}
           generating={props.generating}
           generate={props.generate}
+          confirmingFit={props.confirmingFit}
           request={props.request}
           preselectedWorkflowPath={deployWorkflowPath}
           onStartIntake={() => jump("intake")}

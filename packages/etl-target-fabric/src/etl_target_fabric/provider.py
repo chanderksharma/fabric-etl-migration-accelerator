@@ -15,10 +15,6 @@ from etl_migration_core.contracts.spi import (
     TargetGenerationResult,
     TargetPlatformInfo,
 )
-from etl_target_fabric.assessment.evaluator import (
-    evaluate_alteryx_native_route,
-    evaluate_etl_native_route,
-)
 from etl_target_fabric.assessment.ir_assessment import assess_package
 from etl_target_fabric.capacity.model import (
     CAPACITY_MODEL_VERSION,
@@ -31,6 +27,10 @@ from etl_target_fabric.compilers.ir import (
     SUPPORTED_IR_VERSIONS,
     CompilationTarget,
     compile_asset,
+)
+from etl_target_fabric.evaluation.native_route import (
+    evaluate_alteryx_native_route,
+    evaluate_etl_native_route,
 )
 
 

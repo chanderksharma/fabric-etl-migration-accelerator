@@ -36,7 +36,7 @@ from etl_migration_core.sources.defaults import create_default_registry
 from etl_migration_core.sources.registry import SourceAdapterFaultError, SourceAdapterRegistry
 from etl_migration_core.targets import TargetPlatformRegistry, create_target_registry
 from etl_portfolio_assessment.service.application import PortfolioAssessmentApplication
-from etl_target_fabric.assessment.portfolio import FabricAssessmentApplication
+from etl_target_fabric.application import FabricAssessmentApplication
 
 SAMPLE = Path(__file__).parents[1] / "alteryx-workflows" / "sample_alteryx_workflow.yxmd"
 DAY = 24 * 60 * 60

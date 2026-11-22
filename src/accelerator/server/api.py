@@ -78,9 +78,7 @@ from etl_migration_core.intake.discovery import InputRejectedError
 from etl_migration_core.sources.alteryx.graph import WorkflowGraph
 from etl_portfolio_assessment.evidence.extractor import EvidenceResponse
 from etl_portfolio_assessment.service.schemas import NeutralEstateAssessmentResponse
-from etl_target_fabric.assessment.portfolio import (
-    FabricAssessmentApplication as AssessmentApplication,
-)
+from etl_target_fabric.application import FabricAssessmentApplication as AssessmentApplication
 from etl_target_fabric.assessment.schemas import DiscoverySummaryResponse, EstateAssessmentResponse
 from etl_target_fabric.assessment.workflow import REGISTRY_VERSION, RULES_VERSION, registry_entries
 from etl_target_fabric.capacity.model import CapacityPortfolioEstimate, CapacityUpdate, capacity_csv
@@ -670,16 +668,18 @@ def export_run(identity: str, format: Literal["json", "csv"] = "json") -> Respon
     run = get_run(identity)
     if run.result is None:
         raise HTTPException(status_code=409, detail="Run has no assessment results")
+    # The files are fixed contracts, so the routing basis travels beside them as a header.
+    basis = {"X-Routing-Basis": run.routing_basis}
     if format == "csv":
         return Response(
             run_service().export_csv(identity),
             media_type="text/csv",
-            headers={"Content-Disposition": 'attachment; filename="assessment.csv"'},
+            headers={"Content-Disposition": 'attachment; filename="assessment.csv"', **basis},
         )
     return Response(
         run.result.model_dump_json(indent=2),
         media_type="application/json",
-        headers={"Content-Disposition": 'attachment; filename="assessment.json"'},
+        headers={"Content-Disposition": 'attachment; filename="assessment.json"', **basis},
     )
 
 

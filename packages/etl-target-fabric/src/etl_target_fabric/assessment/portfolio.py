@@ -1,118 +1,22 @@
-"""Shared application use cases."""
+"""Serializable assessment responses built from static, compiler-free assessments."""
 
-from dataclasses import replace
-from pathlib import Path
+from typing import Any
 
-from etl_migration_core.contracts.ir import SourcePlatform
-from etl_migration_core.intake.discovery import DiscoveryService
-from etl_migration_core.sources.alteryx import AlteryxSourceAdapter
-from etl_migration_core.sources.defaults import create_default_registry
-from etl_target_fabric.assessment.evaluator import apply_alteryx_native_route, apply_native_route
-from etl_target_fabric.assessment.ir_assessment import EtlAssessment, assess_package
+from etl_target_fabric.assessment.ir_assessment import EtlAssessment
 from etl_target_fabric.assessment.schemas import (
-    DiscoverySummaryResponse,
-    EstateAssessmentResponse,
-    SkippedItemResponse,
     ToolInventoryResponse,
     WorkflowAssessmentResponse,
-    WorkflowCandidateResponse,
 )
-from etl_target_fabric.assessment.workflow import WorkflowParseError, assess_workflow
-from etl_target_fabric.capacity.model import (
-    CapacityStaticProfile,
-    build_capacity_profile,
-    build_informatica_capacity_profile,
-)
+from etl_target_fabric.capacity.model import CapacityStaticProfile
 
 
-class FabricAssessmentApplication:
-    """Coordinate discovery for all product entry points."""
+def __getattr__(name: str) -> Any:
+    """Resolve the relocated application lazily so this package never imports a compiler."""
+    if name == "FabricAssessmentApplication":
+        from etl_target_fabric.application import FabricAssessmentApplication
 
-    def __init__(self, discovery: DiscoveryService | None = None) -> None:
-        self._discovery = discovery or DiscoveryService()
-        self._source_registry = create_default_registry()
-
-    def preview(self, path: Path) -> DiscoverySummaryResponse:
-        """Build a pre-run summary for an untrusted local path."""
-        summary = self._discovery.discover(path)
-        return DiscoverySummaryResponse(
-            input_path=summary.input_path,
-            input_kind=summary.input_kind,
-            workflow_count=summary.workflow_count,
-            skipped_count=summary.skipped_count,
-            total_size_bytes=summary.total_size_bytes,
-            workflows=[
-                WorkflowCandidateResponse.model_validate(candidate)
-                for candidate in summary.workflows
-            ],
-            skipped=[SkippedItemResponse.model_validate(item) for item in summary.skipped],
-        )
-
-    def assess(
-        self, path: Path, *, route_alteryx: bool = False
-    ) -> EstateAssessmentResponse:
-        """Assess every discovered workflow with per-file fault isolation."""
-        summary = self._discovery.discover(path)
-        assessments: list[WorkflowAssessmentResponse] = []
-        failures: list[str] = []
-        for candidate in summary.workflows:
-            try:
-                with self._discovery.staged_workflow(candidate) as workflow_path:
-                    if candidate.source_platform is SourcePlatform.ALTERYX:
-                        graph = AlteryxSourceAdapter().legacy_graph(workflow_path)
-                        assessment = assess_workflow(workflow_path, graph=graph)
-                        if route_alteryx:
-                            assessment = apply_alteryx_native_route(
-                                workflow_path, assessment, graph=graph
-                            )
-                        assessment = replace(assessment, path=candidate.display_path)
-                        assessments.append(
-                            WorkflowAssessmentResponse.model_validate(assessment).model_copy(
-                                update={
-                                    "capacity_profile": build_capacity_profile(
-                                        workflow_path, graph=graph
-                                    )
-                                }
-                            )
-                        )
-                    else:
-                        detected = self._source_registry.detect(
-                            workflow_path,
-                            candidate.display_path,
-                        )
-                        package = self._source_registry.parse(
-                            workflow_path,
-                            detected.match,
-                        )
-                        assessments.extend(
-                            assessment_response(
-                                candidate.display_path,
-                                apply_native_route(package, asset, item),
-                                capacity_profile=build_informatica_capacity_profile(
-                                    package, asset
-                                ),
-                            )
-                            for asset, item in zip(
-                                package.assets,
-                                assess_package(package),
-                                strict=True,
-                            )
-                        )
-            except WorkflowParseError as error:
-                failures.append(str(error))
-            except ValueError as error:
-                failures.append(f"{candidate.display_path}: {error}")
-        return EstateAssessmentResponse(
-            workflow_count=len(assessments),
-            failed_count=len(failures),
-            assessments=assessments,
-            failures=failures,
-            workflows=[
-                WorkflowCandidateResponse.model_validate(candidate)
-                for candidate in summary.workflows
-            ],
-            skipped=[SkippedItemResponse.model_validate(item) for item in summary.skipped],
-        )
+        return FabricAssessmentApplication
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def assessment_response(

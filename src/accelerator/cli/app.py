@@ -14,9 +14,7 @@ from etl_migration_core.host import PluginHost
 from etl_migration_core.intake.discovery import InputRejectedError
 from etl_migration_core.sources.defaults import create_default_registry
 from etl_portfolio_assessment.service.application import PortfolioAssessmentApplication
-from etl_target_fabric.assessment.portfolio import (
-    FabricAssessmentApplication as AssessmentApplication,
-)
+from etl_target_fabric.application import FabricAssessmentApplication as AssessmentApplication
 from etl_target_fabric.compilers.alteryx import Target
 
 app = typer.Typer(no_args_is_help=True)

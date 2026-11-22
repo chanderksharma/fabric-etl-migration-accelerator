@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { App } from "./App";
@@ -107,7 +107,7 @@ test("accepts Informatica input after selecting Informatica", async () => {
     .toBeInTheDocument();
 });
 
-test("directs external sources to the installed plugins intake", async () => {
+test("rejects external-source assets on the built-in intake", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue({
@@ -136,24 +136,21 @@ test("directs external sources to the installed plugins intake", async () => {
   });
 
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Select Installed plugins to assess external sources",
+    "External source plugins cannot be assessed from this page yet",
   );
   expect(screen.queryByRole("heading", {name: "Ready for assessment"}))
     .not.toBeInTheDocument();
 });
 
-test("assesses a plugin archive neutrally and evaluates an installed target", async () => {
+test("evaluates an installed target for a restored external-source run", async () => {
+  sessionStorage.setItem("accelerator-run-v6", "plugin-run");
+  window.location.hash = "#fabric-deployment";
   const workflow = {
     display_path: "package.dtsx",
     sha256: "abc",
     source_platform: "ssis",
   };
   const responses: Record<string, unknown> = {
-    "/api/snapshots/upload": {
-      snapshot_id: "snapshot", workflow_count: 1, skipped_count: 0,
-      total_size_bytes: 12, workflows: [workflow], skipped: [],
-    },
-    "/api/runs": {id: "plugin-run", status: "queued", result: null},
     "/api/runs/plugin-run/status": {
       id: "plugin-run", status: "completed", processed: 1, total: 1,
       error: null, result: {workflow_count: 0, failed_count: 1, assessments: [],
@@ -199,12 +196,6 @@ test("assesses a plugin archive neutrally and evaluates an installed target", as
   });
   vi.stubGlobal("fetch", fetchMock);
   render(<App />);
-  fireEvent.click(screen.getByRole("radio", {name: /Installed plugins/}));
-  fireEvent.click(screen.getByRole("radio", {name: /Select ZIP/}));
-  fireEvent.change(screen.getByLabelText("Choose zip"), {
-    target: {files: [new File(["zip"], "plugin.zip")]},
-  });
-  fireEvent.click(await screen.findByRole("button", {name: "Confirm and assess"}));
 
   expect(await screen.findByRole("heading", {name: "Target-neutral assessment"}))
     .toBeInTheDocument();
@@ -331,28 +322,16 @@ test("polls the lightweight run status and loads the full result once", async ()
   expect(requests.filter(request => request === "GET /api/runs/saved-run")).toHaveLength(1);
 });
 
-test("lists installed plugins and warns when a plugin failed to load", async () => {
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
-    const url = String(input);
-    if (url === "/api/sources") return {ok: true, json: async () => ({sources: [
-      {adapter_id: "alteryx", product: "Alteryx Designer", origin: "builtin",
-        supported_extensions: []},
-      {adapter_id: "synthetic-ssis", product: "Synthetic SSIS example", origin: "plugin:ssis",
-        supported_extensions: [".dtsx"]},
-    ]})};
-    if (url === "/api/plugins") return {ok: true, json: async () => ({
-      allowlist: null, failed_count: 1, plugins: [],
-    })};
-    throw new Error(`Unexpected request: ${url}`);
-  }));
+test("offers only the Alteryx and Informatica workflow types", () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
   render(<App />);
 
-  fireEvent.click(screen.getByRole("radio", {name: /Installed plugins/}));
-
-  const summary = await screen.findByTestId("plugin-sources");
-  expect(summary).toHaveTextContent("Installed: Synthetic SSIS example (.dtsx).");
-  expect(summary).toHaveTextContent("1 installed plugin failed to load");
-  expect(screen.getByLabelText("Choose files")).toHaveAttribute("accept", ".dtsx");
+  const types = within(screen.getByRole("radiogroup", {name: "Workflow type"}))
+    .getAllByRole("radio");
+  expect(types).toHaveLength(2);
+  expect(screen.queryByRole("radio", {name: /Installed plugins/})).not.toBeInTheDocument();
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 test("recursively reads a dropped folder and preserves upload paths", async () => {
@@ -788,6 +767,144 @@ test("discards a late generation response after the analyst changes selection", 
   });
   expect(screen.queryByText("stale code")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Browse folder" })).toBeInTheDocument();
+});
+
+function routedRun(basis: "static_mapping" | "compiler_confirmed") {
+  const run = completedRun();
+  const confirmed = basis === "compiler_confirmed";
+  return {
+    ...run,
+    routing_basis: basis,
+    result: {
+      ...run.result,
+      assessments: [{
+        ...run.result.assessments[0],
+        recommended_target: confirmed ? "Fabric Notebook" : "Dataflow Gen2",
+        target_components: confirmed ? ["Fabric Notebook"] : ["Dataflow Gen2"],
+        recommendation_reason: confirmed ? "Confirmed by the compiler" : "Static recommendation",
+        estimated_effort_days: confirmed ? 1.4 : 0.6,
+      }],
+    },
+  };
+}
+
+// Serves the run as static until the Fabric evaluation is requested, as the API does.
+function stubFitApi(options: { failEvaluate?: () => boolean } = {}) {
+  let confirmed = false;
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/targets/fabric/evaluate") && init?.method === "POST") {
+      if (options.failEvaluate?.()) {
+        return {
+          ok: false, status: 409, headers: new Headers({"content-type": "application/json"}),
+          json: async () => ({detail: "Fabric fit failed"}),
+        };
+      }
+      confirmed = true;
+      return {ok: true, json: async () => []};
+    }
+    if (url.includes("/api/targets")) return {ok: true, json: async () => targetCatalog()};
+    if (url.includes("/capacity")) {
+      return {ok: true, json: async () => ({scenarios: [], workflows: [], assumptions: []})};
+    }
+    return {ok: true, json: async () => routedRun(confirmed ? "compiler_confirmed" : "static_mapping")};
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return {
+    fetchMock,
+    evaluations: () => fetchMock.mock.calls.filter(([url, init]) =>
+      String(url).endsWith("/targets/fabric/evaluate") && init?.method === "POST"),
+  };
+}
+
+function openPage(name: string) {
+  fireEvent.click(within(screen.getByRole("navigation", {name: "Primary"})).getByRole(
+    "link", {name},
+  ));
+}
+
+// jsdom queues fragment navigations. Without this, ones left by an earlier test can arrive
+// after this app changes the hash and send it back to the previous page.
+async function settleNavigation() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+test("keeps portfolio assessment static until the analyst opens the Fabric step", async () => {
+  await settleNavigation();
+  sessionStorage.setItem("accelerator-run-v6", "saved-run");
+  const api = stubFitApi();
+  render(<App />);
+
+  await screen.findByRole("heading", {name: "Portfolio Migration Summary"});
+  expect(screen.getByTestId("routing-basis")).toHaveTextContent("Routing basis: static mapping");
+  expect(screen.getByTestId("routing-basis")).toHaveTextContent("does not generate code");
+  expect(api.evaluations()).toHaveLength(0);
+
+  openPage("Workflows");
+  await screen.findByRole("heading", {name: "Workflow Assessment Register"});
+  expect(api.evaluations()).toHaveLength(0);
+});
+
+test("confirms Fabric routing once when the Fabric step opens and updates the portfolio", async () => {
+  await settleNavigation();
+  sessionStorage.setItem("accelerator-run-v6", "saved-run");
+  const api = stubFitApi();
+  render(<App />);
+  await screen.findByRole("heading", {name: "Portfolio Migration Summary"});
+
+  openPage("Fabric Deployment");
+  await waitFor(() => expect(api.evaluations()).toHaveLength(1));
+
+  openPage("Portfolio");
+  expect(await screen.findByText("Routing basis: compiler-confirmed Fabric fit."))
+    .toBeInTheDocument();
+  expect(screen.getAllByText("Fabric Notebook").length).toBeGreaterThan(0);
+
+  openPage("Fabric Deployment");
+  openPage("Portfolio");
+  expect(api.evaluations()).toHaveLength(1);
+});
+
+test("does not confirm routing for a run that has no recorded routing basis", async () => {
+  await settleNavigation();
+  sessionStorage.setItem("accelerator-run-v6", "saved-run");
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => ({
+    ok: true, json: async () => String(input).includes("/api/targets") ? targetCatalog() : completedRun(),
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  render(<App />);
+  await screen.findByRole("heading", {name: "Portfolio Migration Summary"});
+  expect(screen.queryByTestId("routing-basis")).not.toBeInTheDocument();
+
+  openPage("Fabric Deployment");
+  await screen.findByRole("heading", {name: "Fabric Code Generation & Deployment"});
+
+  expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/targets/fabric/evaluate")))
+    .toBe(false);
+});
+
+test("reports a failed Fabric confirmation and retries on the next visit", async () => {
+  await settleNavigation();
+  sessionStorage.setItem("accelerator-run-v6", "saved-run");
+  let failing = true;
+  const api = stubFitApi({failEvaluate: () => failing});
+  render(<App />);
+  await screen.findByRole("heading", {name: "Portfolio Migration Summary"});
+
+  openPage("Fabric Deployment");
+  expect((await screen.findAllByText("Fabric fit failed")).length).toBeGreaterThan(0);
+  expect(api.evaluations()).toHaveLength(1);
+
+  failing = false;
+  openPage("Portfolio");
+  openPage("Fabric Deployment");
+  await waitFor(() => expect(api.evaluations()).toHaveLength(2));
+  openPage("Portfolio");
+  expect(await screen.findByText("Routing basis: compiler-confirmed Fabric fit."))
+    .toBeInTheDocument();
 });
 
 test("uses local folder picker without browser upload input when available and falls back on 501", async () => {

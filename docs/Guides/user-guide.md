@@ -71,7 +71,7 @@ Open `<http://127.0.0.1:8050>` in your browser, or pass `-Desktop` (`pwsh -NoPro
 
 ### Step 1: Preview and confirm intake
 
-1. Open **New assessment** and pick **Alteryx**, **Informatica**, or **Installed plugins**.
+1. Open **New assessment** and pick **Alteryx** or **Informatica**.
 2. Choose **Files**, **ZIP / Package**, or **Folder** (use the repository's synthetic `alteryx-workflows` or `tests/fixtures` folders for a safe walkthrough).
 3. Review the pre-run discovery summary showing accepted candidates, SHA-256 deduplicated skips, and any rejected paths (UNC paths, symlinks, and ZIP-bomb violations are blocked).
 4. Click **Confirm and assess** to start a durable SQLite WAL run. The scheduler
@@ -79,18 +79,21 @@ Open `<http://127.0.0.1:8050>` in your browser, or pass `-Desktop` (`pwsh -NoPro
    restarts. Cancellation stops additional scheduling when observed; it does not
    interrupt a parser already running.
 
-For **Installed plugins**, install and register the source adapter first. Select its
-files, an archive, or a folder separately from built-in sources. The resulting
-target-neutral workspace shows source facts and manual-review findings, and can
-evaluate registered targets that advertise evaluation support. It does not generate
-or deploy artifacts. The synthetic plugin examples demonstrate the integration,
-not production SSIS or Databricks support.
+The portal intake offers Alteryx and Informatica only. A selection that contains assets
+from an external source plugin is rejected with a message. Source and target plugins
+still load, and `uv run tool plugins` and `GET /api/plugins` report their status. A run
+created through the API from a plugin source opens in a target-neutral workspace that
+shows source facts and manual-review findings, and can evaluate registered targets that
+advertise evaluation support. It does not generate or deploy artifacts. The synthetic
+plugin examples demonstrate the integration, not production SSIS or Databricks support.
 
 The remaining steps apply to the existing Alteryx and Informatica Fabric workspace.
 
 ### Step 2: Inspect the portfolio and 6-tab workflow drawer
 
 1. Open **Portfolio** to filter assessed workflows by platform, complexity band, target component, or migration wave (**Wave 1** through **Wave 4**), export assessment JSON/CSV reports, or click **Open Fabric Deployment** when ready to generate target code.
+
+   Portfolio assessment is static: it never generates code. Until you open **Fabric Deployment**, the Fabric target, wave, and remaining effort come from the support matrix, and a banner on **Portfolio**, **Workflows**, **Migration Plan**, and **Capacity Planning** reads **Routing basis: static mapping**. Opening **Fabric Deployment** asks the compilers to confirm each route. Those figures then update and the banner reads **compiler-confirmed Fabric fit**. Complexity, tool counts, and findings do not change. Expect the confirmed view to be stricter. For the synthetic sample estate, a workflow the support matrix maps to Dataflow Gen2 can be downgraded to **Manual rework**.
 2. Open **Workflows** and select any workflow row to open its six-tab inspection drawer:
    * Summary tab showing complexity score, migration wave, residual effort estimate, and recommendation rationale
    * Canvas Graph tab showing the visual DAG reconstructed from redacted node and edge evidence
@@ -102,9 +105,15 @@ The remaining steps apply to the existing Alteryx and Informatica Fabric workspa
 
 ### Step 3: Model Fabric capacity
 
-Open **Capacity Sizing** (see [Fabric Capacity Planning](capacity-planning.md)) to adjust operational assumptions such as refresh interval, source rows per run, Spark vCores, target utilization, and Spark billing mode (`capacity` vs `autoscale`). The calculator produces **Optimized**, **Balance**, and **Peak** F-SKU recommendations (`F2` through `F8192`) and exports a formula-defused capacity CSV.
+Open **Capacity Sizing** (see [Fabric Capacity Planning](capacity-planning.md)) to adjust operational assumptions such as refresh interval, source rows per run, Spark vCores, target utilization, and Spark billing mode (`capacity` vs `autoscale`). The calculator produces **Optimized**, **Balance**, and **Peak** F-SKU recommendations (`F2` through `F8192`) and exports a formula-defused capacity CSV. Capacity follows Fabric routing, so it is computed from the static mapping until the route is confirmed and is recalculated when you confirm it. Your saved inputs are kept.
 
 ### Step 4: Generate artifacts and dispatch CI/CD
+
+Opening **Fabric Deployment** starts the Fabric fit stage, once per run, and shows a status line while it runs. A failure appears as an error and is retried the next time you open the tab. The API equivalent is `POST /api/runs/{run_id}/targets/fabric/evaluate`. It is idempotent and reads only the stored static assessment. `GET /api/runs/{run_id}` reports the result as `routing_basis`: `static_mapping` before the fit and `compiler_confirmed` after it. Confirmation is also applied automatically by every route that builds an artifact tree (`generate`, previews, package downloads, publications, and deployment planning) and by `tool generate`, because those use the confirmed target components. Generation jobs and the per-workflow candidates route do not.
+
+Assessment exports (`GET /api/runs/{run_id}/export`) keep their file formats and carry the basis in the `X-Routing-Basis` response header. A confirmed fit is used only while the compiler, rules, and support-table versions that produced it are still installed. After an upgrade the run reads as `static_mapping` again until you open **Fabric Deployment** again. A run assessed by an earlier release is shown as it was stored.
+
+`tool assess` and `etl-assess` are static. The Fabric-native notebook confirms routing during its run.
 
 1. Open the **Fabric Deployment** tab in the sidebar, verify **Microsoft Fabric** is selected in **Target Platform** (roadmap placeholders for Azure Databricks, Azure Synapse Analytics, and Snowflake are shown as disabled), and generate Fabric definitions (`Dataflow Gen2`, `Fabric Notebook`, `Data Pipeline`), inspect filterable code/scaffold previews, or download target/workflow ZIP packages. You can also generate definitions via CLI:
 
@@ -204,7 +213,7 @@ uv run tool plugins
 ```
 
 `tool plugins` (and `GET /api/plugins`) also reports every installed plugin as `loaded`,
-`failed`, or `skipped` with the reason, so a plugin that does not appear in the portal can
+`failed`, or `skipped` with the reason, so a plugin that fails to load can
 be diagnosed without reading logs. See [Troubleshooting](troubleshooting.md#plugins-faults-and-local-state).
 
 See [Building Source and Target Plugins](building-plugins.md) to register custom source adapters or implement providers for Databricks, Azure Synapse, or Snowflake, and [PyPI Packages and Publishing Guide](pypi-packages.md) for installation, build, and release instructions.

@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-LATEST_SCHEMA_VERSION = 7
+LATEST_SCHEMA_VERSION = 8
 MAX_IDLE_CONNECTIONS = 8
 CACHE_TOUCH_INTERVAL_SECONDS = 24 * 60 * 60
 TERMINAL_STATUSES = ("completed", "failed", "cancelled")
@@ -138,6 +138,15 @@ def _add_generation_jobs(connection: sqlite3.Connection) -> None:
     )
 
 
+def _add_run_assessment_basis(connection: sqlite3.Connection) -> None:
+    """Record how a run's Fabric routing was decided.
+
+    Runs stored before this step have no value: their results were routed with the
+    compilers during assessment and are kept as they are.
+    """
+    _add_column(connection, "runs", "assessment_basis TEXT")
+
+
 # Ordered, append-only. Each step is idempotent so a partially applied step can be retried,
 # and a step that has shipped must never change: add a new one instead.
 MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
@@ -145,6 +154,7 @@ MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
     (5, _add_ir_cache_and_retention),
     (6, _add_run_timings),
     (7, _add_generation_jobs),
+    (8, _add_run_assessment_basis),
 )
 
 

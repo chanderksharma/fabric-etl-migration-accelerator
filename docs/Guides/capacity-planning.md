@@ -1,7 +1,7 @@
 ---
 title: Fabric Capacity Planning
 description: Estimate preliminary Fabric capacity from assessed Alteryx Dataflow Gen2 workflows
-ms.date: 2026-11-20
+ms.date: 2026-11-22
 ms.topic: how-to
 ---
 
@@ -51,6 +51,21 @@ The initial values are one run per day, 1,000 source rows per run, and 8 Spark
 vCores (4 Fabric CUs) with automatic runtime estimation. The Portfolio and
 Capacity Planning views immediately display the assessment-based F-SKU labeled
 with **Default assumptions** until you update and save custom operating inputs.
+
+## Capacity and routing basis
+
+The Fabric route of each workflow decides which model applies to it. Before
+the route is confirmed, routes come from the static support-matrix mapping and
+the pages show **Routing basis: static mapping**. Opening **Fabric Deployment**
+confirms each route with the compilers (see
+[Step 4 of the user guide](user-guide.md#step-4-generate-artifacts-and-dispatch-cicd)),
+and the estimate is recalculated. On the synthetic sample estate of 15 Alteryx
+workflows, monthly demand moves from 68.6 to 65.7 CU-hours. Among the routes
+that change, two move from Dataflow Gen2 to Fabric Notebook, two gain a
+Pipeline component, and one becomes Manual rework. Treat an estimate taken
+before confirmation as provisional. Your saved
+inputs are stored per workflow, so they are kept when the route changes. A
+capacity export reflects the basis in effect when you export it.
 
 The Dataflow Gen2 formula uses the largest of minimum duration, complexity
 duration, and row-volume duration. Rows per run can therefore change without

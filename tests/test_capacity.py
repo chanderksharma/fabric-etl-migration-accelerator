@@ -226,6 +226,14 @@ def test_run_service_estimates_powercenter_and_idmc_packages(tmp_path: Path) -> 
     run = service.create_run(preview.snapshot_id)
     service.execute(run.id)
 
+    unconfirmed = {
+        item.workflow_path.split("!")[-1]: item for item in service.get_capacity(run.id).workflows
+    }
+    assert unconfirmed["Sales/wf_orders"].model_basis == "heuristic", (
+        "before Fabric fit is confirmed, sizing sees only the static mapping"
+    )
+
+    service.ensure_fabric_fit(run.id)
     estimate = service.get_capacity(run.id)
     by_name = {item.workflow_path.split("!")[-1]: item for item in estimate.workflows}
 

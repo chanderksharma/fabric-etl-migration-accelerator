@@ -26,7 +26,7 @@ semantic parity validation before promotion.
 | File, folder, archive, or XML intake | [Discovery service](../../packages/etl-migration-core/src/etl_migration_core/intake/discovery.py) and [intake domain](../../packages/etl-migration-core/src/etl_migration_core/intake/domain.py) | [Discovery tests](../../tests/test_discovery.py) |
 | Source parsing and canonical ETL graphs | [Source adapters](../../packages/etl-migration-core/src/etl_migration_core/sources/) and [IR contracts](../../packages/etl-migration-core/src/etl_migration_core/contracts/ir.py) | [Source adapter tests](../../tests/test_source_adapters.py) and product-specific adapter tests |
 | Target-neutral complexity, effort, or evidence | [Assessment engine](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/engine.py), [workload profile](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/workload_profile.py), and [evidence extractor](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/evidence/extractor.py) | [Assessment package tests](../../packages/etl-portfolio-assessment/tests/test_assessment_package.py) and [target tests](../../tests/test_targets.py) |
-| Fabric fit, capacity, or generated definitions | [Fabric assessment](../../packages/etl-target-fabric/src/etl_target_fabric/assessment/), [capacity model](../../packages/etl-target-fabric/src/etl_target_fabric/capacity/), and [compilers](../../packages/etl-target-fabric/src/etl_target_fabric/compilers/) | [ETL assessment](../../tests/test_etl_assessment.py), [capacity](../../tests/test_capacity.py), and [generation tests](../../tests/test_etl_generation.py) |
+| Fabric fit, capacity, or generated definitions | [Static Fabric assessment](../../packages/etl-target-fabric/src/etl_target_fabric/assessment/), [compiler-grounded fit](../../packages/etl-target-fabric/src/etl_target_fabric/evaluation/native_route.py), [application facade](../../packages/etl-target-fabric/src/etl_target_fabric/application.py), [capacity model](../../packages/etl-target-fabric/src/etl_target_fabric/capacity/), and [compilers](../../packages/etl-target-fabric/src/etl_target_fabric/compilers/) | [ETL assessment](../../tests/test_etl_assessment.py), [capacity](../../tests/test_capacity.py), [generation tests](../../tests/test_etl_generation.py), and [stage separation](../../tests/test_stage_separation.py) |
 | Local API, durable runs, or CLI | [API](../../src/accelerator/server/api.py) (routes), [upload staging](../../src/accelerator/server/uploads.py), [deployment resolution](../../src/accelerator/server/deployment.py), [run service](../../src/accelerator/runtime/runs.py) (orchestration), [SQLite store and retention](../../src/accelerator/runtime/store.py), [cache keys and snapshot IDs](../../src/accelerator/runtime/identity.py), [publications](../../src/accelerator/runtime/publication.py), [settings and logging](../../src/accelerator/settings.py), and [CLI](../../src/accelerator/cli/app.py) | [API](../../tests/test_api.py), [CLI](../../tests/test_cli.py), [resilience and retention](../../tests/test_runtime_resilience.py), and [multi-source application tests](../../tests/test_multisource_application.py) |
 | Generation jobs, candidate cache, or the neutral artifact projection | [Run service](../../src/accelerator/runtime/runs.py), [candidate cache keys](../../src/accelerator/runtime/identity.py), [ArtifactSet projection](../../src/accelerator/runtime/artifacts.py), and the [ArtifactSet contract](../../packages/etl-migration-core/src/etl_migration_core/contracts/artifacts.py) | [Generation hardening](../../tests/test_generation_hardening.py) and the [sample-estate digest](../../tests/test_golden_digest.py) |
 | Local analyst experience | [Web app](../../apps/web/src/) | [App tests](../../apps/web/src/App.test.tsx) and [workspace tests](../../apps/web/src/Workspace.test.tsx) |
@@ -143,7 +143,11 @@ working destination.
 2. Implement a target provider and evaluator using the
    [target SPI](../../packages/etl-migration-core/src/etl_migration_core/contracts/spi.py).
    Keep target fit and capacity separate from neutral portfolio facts.
-   Advertise only capabilities that are implemented and tested.
+   Advertise only capabilities that are implemented and tested. A new
+   target's evaluation is stored beside the assessment and does not change it.
+   Only the Fabric evaluation is applied to the legacy assessment fields, as a
+   compatibility overlay. See
+   [Keep assessment, fit, and generation separate](#keep-assessment-fit-and-generation-separate).
 3. Register the provider in the `etl_migration.targets` entry-point group.
    The [target registry](../../packages/etl-migration-core/src/etl_migration_core/targets/registry.py)
    can replace a placeholder when the implementing provider is installed.
@@ -170,10 +174,48 @@ examples and [PyPI Packages and Publishing](pypi-packages.md) for packaging.
 For a new wheel, review workspace dependencies, tests, build and publishing,
 and any local or Fabric runtime bundles that must include it.
 
+## Keep assessment, fit, and generation separate
+
+Portfolio assessment never runs a compiler. Fabric routing is confirmed in a
+separate fit stage, and generation is a third stage. See
+[Stage separation](../Architecture/system-architecture.md#stage-separation) for
+the model. The rules below keep it that way.
+
+1. Put a routing rule where it belongs. A rule that a static count can decide
+   belongs in the [support matrix](../../packages/etl-target-fabric/src/etl_target_fabric/assessment/support_matrix.py)
+   and the static assessment. A rule that needs to know whether a definition
+   compiles belongs in [`evaluation/native_route.py`](../../packages/etl-target-fabric/src/etl_target_fabric/evaluation/native_route.py).
+   Never import a compiler from `etl_target_fabric.assessment`.
+2. Choose the key to bump. Assessment results are keyed by
+   `assessment_cache_key`, which carries no compiler version, so changing a
+   compiler does not invalidate them. Fit results carry `fabric_fit_key`, and
+   candidates use `candidate_cache_key`. Bump `COMPILER_VERSION` or
+   `ETL_COMPILER_VERSION` when compiler output changes, and the version rules
+   in [identity.py](../../src/accelerator/runtime/identity.py) mark stored fits
+   stale. If you change the support table, its fingerprint changes the
+   assessment key and the fit key.
+3. Do not edit the stored static result. The overlay is
+   `confirm_assessment`. It replaces only the target, components, reason,
+   effort, and wave, and it never compiles. `get_run` applies it while the stored
+   evaluation's key is current.
+4. Make a route that writes an artifact tree call `ensure_fabric_fit`, because
+   the writer takes its bundle from the confirmed target components. A route that
+   only compiles candidates must not. Tests in `test_stage_separation.py` cover
+   both.
+5. Treat the overlay as a compatibility layer. New consumers should read the
+   neutral baseline or a stored evaluation, not the Fabric fields in the
+   assessment, and they must say which `routing_basis` they used.
+
+Run `uv run --extra dev pytest --no-cov tests\test_stage_separation.py` after any
+change here. It fails if assessment compiles, if an assessment package imports a
+code-generation module, or if a confirmed run no longer reproduces compiler
+routing.
+
 ## Queue generation without writing files
 
 Use this path when you need candidates for a completed run and must not touch
-the shared artifact tree.
+the shared artifact tree. It does not confirm Fabric routing, because candidate
+compilation does not read the assessment.
 
 1. Confirm the assessment run is `completed`. Jobs and synchronous generate
    both reject an incomplete run.
@@ -198,8 +240,10 @@ source enum. Unsupported-source generation must keep raising `ValueError`.
 
 The run database is owned by the [SQLite store](../../src/accelerator/runtime/store.py)
 and lives in users' `.accelerator` folders, so a schema change must work on state that an
-earlier release already wrote. The current version is 7. Schema 7 appends
-`generation_jobs`. Candidate and ArtifactSet JSON stay in the existing `cache`
+earlier release already wrote. The current version is 8. Schema 7 appended
+`generation_jobs` and schema 8 appended `runs.assessment_basis`, which stays null
+for runs stored by earlier releases so they are served as stored. Candidate and
+ArtifactSet JSON stay in the existing `cache`
 table. Do not add those rows to the job table's writer.
 
 1. Append a step to `MIGRATIONS` with the next version number and raise

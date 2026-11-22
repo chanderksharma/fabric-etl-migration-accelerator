@@ -468,8 +468,9 @@ override the variables.
 
 ### Local state and retention
 
-The run database (`runs.db`, SQLite WAL, schema version 7) is migrated in place when the
-application starts. Schema 7 appends `generation_jobs`. A database written by a newer
+The run database (`runs.db`, SQLite WAL, schema version 8) is migrated in place when the
+application starts. Schema 7 appends `generation_jobs` and schema 8 appends
+`runs.assessment_basis`. A database written by a newer
 release is rejected rather than downgraded. Parsed IR, assessment caches, snapshots,
 publications, and generation jobs grow with every run, so apply the retention policy
 periodically with the portal stopped:

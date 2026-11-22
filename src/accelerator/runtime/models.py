@@ -12,6 +12,7 @@ from etl_target_fabric.assessment.schemas import DiscoverySummaryResponse, Estat
 from etl_target_fabric.compilers.alteryx import Candidate, Target
 
 RunState = Literal["queued", "running", "completed", "failed", "cancelled"]
+RoutingBasis = Literal["static_mapping", "compiler_confirmed"]
 
 
 class SnapshotPreview(DiscoverySummaryResponse):
@@ -27,6 +28,9 @@ class Run(BaseModel):
     cache_hits: int
     error: str | None = None
     timings: dict[str, float] | None = None
+    # How the Fabric target, wave, and effort in ``result`` were decided. Assessment alone
+    # is a static mapping; a stored Fabric evaluation confirms it with the compilers.
+    routing_basis: RoutingBasis = "static_mapping"
     result: EstateAssessmentResponse | None = None
 
 
@@ -52,6 +56,11 @@ class RunTargetEvaluation(BaseModel):
     ir_version: str
     provider_version: str
     evaluation: TargetEvaluation
+    # Join key to the portfolio assessment entry this evaluation confirms, and the
+    # versions it was computed with. Both are set for the Fabric evaluation of built-in
+    # sources and absent for other targets.
+    assessment_path: str | None = None
+    evaluation_key: str | None = None
 
 
 class GenerationJob(BaseModel):

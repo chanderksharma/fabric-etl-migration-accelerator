@@ -13,9 +13,7 @@ import pytest
 from accelerator.runtime.runs import RunService
 from accelerator.server import api
 from etl_migration_core.intake.discovery import DiscoveryService
-from etl_target_fabric.assessment.portfolio import (
-    FabricAssessmentApplication as AssessmentApplication,
-)
+from etl_target_fabric.application import FabricAssessmentApplication as AssessmentApplication
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -144,9 +142,16 @@ def test_fabric_notebook_assesses_and_exports_web_app_targets(
     service = RunService(tmp_path / "web-state")
     run = service.create_run(service.preview(source).snapshot_id)
     service.execute(run.id)
-    web_result = service.get_run(run.id).result
-    assert web_result is not None
+    static_result = service.get_run(run.id).result
+    assert static_result is not None
     baseline = AssessmentApplication().assess(source)
+    assert {item.path: item.model_dump() for item in baseline.assessments} == {
+        item.path: item.model_dump() for item in static_result.assessments
+    }, "portfolio assessment equals the static facade; neither runs a compiler"
+    # The notebook confirms routing with the compilers. The web runtime reaches the same
+    # answer through its separate Fabric evaluation stage.
+    web_result = service.ensure_fabric_fit(run.id).result
+    assert web_result is not None
     alteryx_baseline = next(item for item in baseline.assessments if item.path == "=orders.yxmd")
     assert alteryx_baseline.recommended_target == "Dataflow Gen2"
 
@@ -516,7 +521,15 @@ def test_multi_mapping_powercenter_workflow_writes_bundle_and_zip(
 
     completed = service.get_run(run.id)
     assert completed.result is not None
-    assessment = completed.result.assessments[0]
+    assert completed.routing_basis == "static_mapping"
+    assert completed.result.assessments[0].target_components == [
+        "Dataflow Gen2",
+        "Fabric Pipeline",
+    ]
+
+    confirmed = service.ensure_fabric_fit(run.id)
+    assert confirmed.result is not None
+    assessment = confirmed.result.assessments[0]
     assert assessment.recommended_target == "Mixed Fabric solution"
     assert assessment.target_components == ["Fabric Notebook", "Fabric Pipeline"]
     assert assessment.dependencies == ["m_a", "m_b"]

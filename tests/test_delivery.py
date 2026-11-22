@@ -27,9 +27,7 @@ from accelerator.server.api import app
 from etl_migration_core.intake.discovery import DiscoveryService, InputRejectedError
 from etl_migration_core.intake.domain import DiscoveryLimits
 from etl_portfolio_assessment.service.schemas import NeutralAssessmentResponse
-from etl_target_fabric.assessment.portfolio import (
-    FabricAssessmentApplication as AssessmentApplication,
-)
+from etl_target_fabric.application import FabricAssessmentApplication as AssessmentApplication
 from etl_target_fabric.assessment.schemas import (
     WorkflowAssessmentResponse,
     WorkflowCandidateResponse,
@@ -562,11 +560,18 @@ def test_api_dispatches_github_deployment(
     identity = response.json()["id"]
     completed = wait_for_run(local_client, identity)
     assert completed["status"] == "completed"
+    assert completed["routing_basis"] == "static_mapping"
     result = completed["result"]
     assert isinstance(result, dict)
     assessments = result["assessments"]
     assert isinstance(assessments, list)
-    routed = WorkflowAssessmentResponse.model_validate(assessments[0])
+    static = WorkflowAssessmentResponse.model_validate(assessments[0])
+    assert static.estimated_effort_days == 0.5, "assessment alone does not run a compiler"
+    confirmation = local_client.post(f"/api/runs/{identity}/targets/fabric/evaluate")
+    assert confirmation.status_code == 200, confirmation.text
+    confirmed = local_client.get(f"/api/runs/{identity}").json()
+    assert confirmed["routing_basis"] == "compiler_confirmed"
+    routed = WorkflowAssessmentResponse.model_validate(confirmed["result"]["assessments"][0])
     assert routed.recommended_target == "Dataflow Gen2"
     assert routed.target_components == ["Dataflow Gen2"]
     assert routed.estimated_effort_days == 1.4
@@ -1362,6 +1367,10 @@ def test_generation_parses_each_workflow_once_and_previews_compile_one_target(
 
         service.execute(service.create_run(service.preview(source).snapshot_id).id)
         assert parses == [], "a warm run reads results from the caches"
+
+        service.ensure_fabric_fit(run.id)
+        assert len(parses) == 1, "confirming Fabric fit parses the workflow once"
+        parses.clear()
 
         service.preview_candidates(run.id, "notebook")
         assert len(parses) == 1, "a one-target preview parses once"
@@ -2229,16 +2238,22 @@ def test_mixed_redesign_workflows_generate_three_item_bundles(
     service.execute(run.id)
     completed = service.get_run(run.id)
     assert completed.result is not None
-    assessment = completed.result.assessments[0]
+    assert completed.routing_basis == "static_mapping"
+    static = completed.result.assessments[0]
+    assert static.target_components == ["Dataflow Gen2", "Fabric Notebook"]
+
+    service.write_artifacts(run.id, "notebook")
+    service.write_artifacts(run.id, "dataflow")
+    confirmed = service.get_run(run.id)
+    assert confirmed.result is not None
+    assert confirmed.routing_basis == "compiler_confirmed", "generation confirms the fit it uses"
+    assessment = confirmed.result.assessments[0]
     assert assessment.recommended_target == "Mixed Fabric solution"
     assert assessment.target_components == [
         "Dataflow Gen2",
         "Fabric Notebook",
         "Fabric Pipeline",
     ]
-
-    service.write_artifacts(run.id, "notebook")
-    service.write_artifacts(run.id, "dataflow")
     folder = tmp_path / "artifacts" / source.stem
     bundle = json.loads((folder / "deployment-bundle.json").read_text(encoding="utf-8"))
     pipeline = json.loads(

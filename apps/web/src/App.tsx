@@ -7,7 +7,7 @@ import "./prototype.css";
 import "./workspace.css";
 
 type BrowseMode = "files" | "zip" | "folder";
-type SourceType = "alteryx" | "informatica" | "plugin";
+type SourceType = "alteryx" | "informatica";
 const RUN_STORAGE_KEY = "accelerator-run-v6";
 const NEUTRAL_RUN_KEY = "accelerator-neutral-run-v1";
 
@@ -46,6 +46,8 @@ export type RunResult = {
   total: number;
   cache_hits: number;
   error: string | null;
+  // How the Fabric target, wave, and effort in `result` were decided. Absent on older payloads.
+  routing_basis?: "static_mapping" | "compiler_confirmed";
   result: AssessmentResult | null;
   snapshot_id?: string;
 };
@@ -97,25 +99,7 @@ export type AssessmentResult = {
 const sourceTypes: Array<{ id: SourceType; title: string; detail: string }> = [
   { id: "alteryx", title: "Alteryx", detail: "Designer workflows, macros, apps, and packages" },
   { id: "informatica", title: "Informatica", detail: "PowerCenter XML and IDMC export packages" },
-  { id: "plugin", title: "Installed plugins", detail: "Registered external source adapters" },
 ];
-
-type InstalledPlugin = { product: string; supported_extensions: string[] };
-
-function parseInstalledPlugins(body: unknown): InstalledPlugin[] {
-  const sources = (body as { sources?: unknown } | null)?.sources;
-  if (!Array.isArray(sources)) return [];
-  return sources.flatMap((source: Record<string, unknown>) =>
-    typeof source?.origin === "string" && source.origin.startsWith("plugin:")
-      && typeof source.product === "string" && Array.isArray(source.supported_extensions)
-      ? [{
-        product: source.product,
-        supported_extensions: source.supported_extensions.filter(
-          (extension): extension is string => typeof extension === "string",
-        ),
-      }]
-      : []);
-}
 
 const modes: Record<SourceType, Array<{ id: BrowseMode; title: string; detail: string }>> = {
   alteryx: [
@@ -127,11 +111,6 @@ const modes: Record<SourceType, Array<{ id: BrowseMode; title: string; detail: s
     { id: "files", title: "Select XML", detail: "PowerCenter repository exports" },
     { id: "zip", title: "Select ZIP", detail: "PowerCenter or IDMC export packages" },
     { id: "folder", title: "Select folder", detail: "Scan Informatica exports recursively" },
-  ],
-  plugin: [
-    { id: "files", title: "Select file(s)", detail: "Formats supported by installed adapters" },
-    { id: "zip", title: "Select ZIP", detail: "Scan registered formats in an archive" },
-    { id: "folder", title: "Select folder", detail: "Scan registered formats recursively" },
   ],
 };
 
@@ -165,9 +144,8 @@ export function App() {
   const [neutralAssessment, setNeutralAssessment] = useState<NeutralAssessment | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [generating, setGenerating] = useState(false);
-  const [installedPlugins, setInstalledPlugins] = useState<InstalledPlugin[] | null>(null);
-  const [failedPlugins, setFailedPlugins] = useState(0);
-  const pluginsRequested = useRef(false);
+  const [confirmingFit, setConfirmingFit] = useState(false);
+  const fitRequested = useRef<string | null>(null);
   const [theme, setTheme] = useState(() => localStorage.getItem("accelerator-theme") ?? "light");
   const selectionEpoch = useRef(0);
   const activeRunId = useRef(runId);
@@ -200,23 +178,6 @@ export function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("accelerator-theme", theme);
   }, [theme]);
-
-  useEffect(() => {
-    if (sourceType !== "plugin" || pluginsRequested.current) return;
-    pluginsRequested.current = true;
-    void (async () => {
-      try {
-        const [sources, plugins] = await Promise.all([
-          apiRequest("/api/sources").then(response => response.json()),
-          apiRequest("/api/plugins").then(response => response.json()),
-        ]);
-        setInstalledPlugins(parseInstalledPlugins(sources));
-        setFailedPlugins(typeof plugins?.failed_count === "number" ? plugins.failed_count : 0);
-      } catch {
-        pluginsRequested.current = false;
-      }
-    })();
-  }, [sourceType]);
 
   useEffect(() => {
     if (!runId) return;
@@ -277,6 +238,35 @@ export function App() {
     };
   }, [runId]);
 
+  // Portfolio assessment is static and never compiles. Entering the Fabric step is where the
+  // analyst asks the compilers to confirm each route, once per run.
+  useEffect(() => {
+    if (neutralRun || activePage !== "fabric-deployment") return;
+    if (!runId || run?.status !== "completed" || run.routing_basis !== "static_mapping") return;
+    if (fitRequested.current === runId) return;
+    fitRequested.current = runId;
+    const epoch = selectionEpoch.current;
+    const current = () => epoch === selectionEpoch.current && activeRunId.current === runId;
+    void (async () => {
+      setConfirmingFit(true);
+      try {
+        await apiRequest(`/api/runs/${runId}/targets/fabric/evaluate`, { method: "POST" });
+        const response = await apiRequest(`/api/runs/${runId}`);
+        const confirmed: RunResult = await response.json();
+        if (!current()) return;
+        setRun(confirmed);
+        if (confirmed.result) setAssessment(confirmed.result);
+      } catch (caught) {
+        if (current()) {
+          fitRequested.current = null;
+          setError(caught instanceof Error ? caught.message : "Fabric routing could not be confirmed");
+        }
+      } finally {
+        if (current()) setConfirmingFit(false);
+      }
+    })();
+  }, [activePage, neutralRun, run, runId]);
+
   useEffect(() => {
     const updatePage = () => setActivePage(pageFromHash());
     window.addEventListener("hashchange", updatePage);
@@ -297,17 +287,15 @@ export function App() {
   }, [activePage]);
 
   const inputModes = modes[sourceType];
-  const pluginExtensions = installedPlugins?.flatMap(plugin => plugin.supported_extensions) ?? [];
-  const accept = sourceType === "plugin"
-    ? selectedMode === "zip" ? ".zip" : pluginExtensions.length ? pluginExtensions.join(",") : undefined
-    : sourceType === "alteryx"
-      ? selectedMode === "zip" ? ".zip,.yxzp" : ".yxmd,.yxmc,.yxwz,.yxzp"
-      : selectedMode === "zip" ? ".zip" : ".xml,.zip";
+  const accept = sourceType === "alteryx"
+    ? selectedMode === "zip" ? ".zip,.yxzp" : ".yxmd,.yxmc,.yxwz,.yxzp"
+    : selectedMode === "zip" ? ".zip" : ".xml,.zip";
   const browseLabel = selectedMode === "folder" ? "folder" : selectedMode;
 
   function clearSelection() {
     selectionEpoch.current += 1;
     activeRunId.current = null;
+    fitRequested.current = null;
     sessionStorage.removeItem(RUN_STORAGE_KEY);
     sessionStorage.removeItem(NEUTRAL_RUN_KEY);
     setRunId(null);
@@ -325,6 +313,7 @@ export function App() {
     setProcessing(false);
     setAssessing(false);
     setGenerating(false);
+    setConfirmingFit(false);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -393,17 +382,10 @@ export function App() {
     const supportedPlatforms = ["alteryx", "informatica_powercenter", "informatica_idmc"];
     const external = summary.workflows.some((workflow) =>
       !supportedPlatforms.includes(workflow.source_platform ?? "alteryx"));
-    const builtin = summary.workflows.some((workflow) =>
-      supportedPlatforms.includes(workflow.source_platform ?? "alteryx"));
-    if (sourceType === "plugin") {
-      if (builtin) {
-        throw new Error("Select Alteryx or Informatica separately for built-in source assets.");
-      }
-      return;
-    }
     if (external) {
       throw new Error(
-        "Select Installed plugins to assess external sources separately.",
+        "External source plugins cannot be assessed from this page yet. "
+        + "Select only Alteryx or Informatica assets.",
       );
     }
     const wrongType = summary.workflows.some((workflow) => {
@@ -547,10 +529,6 @@ export function App() {
       if (!isCurrent(epoch, identity)) return;
       setRun(current);
       sessionStorage.setItem(RUN_STORAGE_KEY, current.id);
-      if (sourceType === "plugin") {
-        sessionStorage.setItem(NEUTRAL_RUN_KEY, current.id);
-        setNeutralRun(true);
-      }
       activeRunId.current = current.id;
       setRunId(current.id);
     } catch (caught) {
@@ -616,7 +594,7 @@ export function App() {
       setActivePage(destination);
     }}
     assessment={assessment} run={run} runId={runId} candidates={candidates}
-    generating={generating} generate={generate} request={apiRequest}
+    generating={generating} generate={generate} confirmingFit={confirmingFit} request={apiRequest}
     theme={theme} toggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
     status={<>
       {error && activePage !== "intake" && <div className="errorMessage" role="alert">{error}</div>}
@@ -654,22 +632,12 @@ export function App() {
                   document.getElementById(`source-${next.id}`)?.focus();
                 }}
               >
-                <span className="modeIcon" aria-hidden="true">{source.id === "alteryx" ? "A" : source.id === "informatica" ? "I" : "+"}</span>
+                <span className="modeIcon" aria-hidden="true">{source.id === "alteryx" ? "A" : "I"}</span>
                 <strong>{source.title}</strong>
                 <small>{source.detail}</small>
               </button>
             ))}
           </div>
-
-          {sourceType === "plugin" && installedPlugins && (
-            <p className="hint" data-testid="plugin-sources">
-              {installedPlugins.length
-                ? `Installed: ${installedPlugins.map(plugin =>
-                  `${plugin.product} (${plugin.supported_extensions.join(", ")})`).join("; ")}.`
-                : "No source plugins are installed."}
-              {failedPlugins > 0 && ` ${failedPlugins} installed plugin${failedPlugins === 1 ? "" : "s"} failed to load; see /api/plugins.`}
-            </p>
-          )}
 
           <div className="modeGrid" role="radiogroup" aria-label="Input mode">
             {inputModes.map((mode) => (

@@ -47,13 +47,14 @@ Open **`http://127.0.0.1:8050`** in your browser.
 3. Select **Folder** and choose the repository's synthetic `alteryx-workflows` directory (or `tests/fixtures/powercenter` for Informatica).
 4. Review the pre-run discovery summary (discovered workflow count, byte totals, and any skipped files), then click **Confirm and assess**.
 5. Inspect the **Portfolio** dashboard:
+   - A banner reads **Routing basis: static mapping**. Assessment does not generate code, so the Fabric targets, waves, effort, and capacity are the support-matrix mapping until you open **Fabric Deployment** in the next section.
    - Export estate assessment summaries as **JSON** or formula-defused **CSV**, or click **Open Fabric Deployment** to proceed to code generation.
    - Open **Workflows** and click any workflow row to open the **six-tab workflow inspection drawer** (Summary, Canvas Graph, Source Register, Generated Code, Readiness & Diagnostics, and Fabric Deployment handoff).
    - Switch to **Technical Details** for filterable, paginated tool and endpoint registers, and **Capacity Sizing** to model Fabric F-SKU capacity.
 
 ## 3. Generate and Export Microsoft Fabric Artifacts
 
-Open the **Fabric Deployment** tab in the sidebar (or click **Continue to Fabric Deployment** from a workflow drawer):
+Open the **Fabric Deployment** tab in the sidebar (or click **Continue to Fabric Deployment** from a workflow drawer). Opening it first confirms each Fabric route with the compiler, once per run. Return to **Portfolio** afterwards and the figures read **compiler-confirmed Fabric fit**. Some workflows change target or wave, and capacity is recalculated. Then:
 
 - Select the target platform (**Microsoft Fabric** is ready; **Databricks**, **Azure Synapse**, and **Snowflake** appear as fail-closed roadmap placeholders).
 - Generate **Dataflow Gen2** (`mashup.pq` + `queryMetadata.json`), **Fabric Notebook** (`.ipynb`), and **Data Pipeline** (`pipeline-content.json`) previews, or download target/workflow ZIP packages.

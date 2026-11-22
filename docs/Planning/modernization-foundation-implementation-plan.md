@@ -47,9 +47,10 @@ also accept external source identifiers in IR `1.1.0` and use a generic workload
 Existing built-in sources retain IR `1.0.0`. Fabric
 rejects unrecognized sources until their semantics are certified. Adapters with declared
 extensions can participate in local-file and archive member discovery and neutral runs.
-The portal offers separate installed-plugin intake, neutral assessment, and evaluation
-with registered evaluate-capable targets; it does not offer plugin target generation
-or deployment. External snapshots bind the
+The portal's neutral workspace offers neutral assessment and evaluation with registered
+evaluate-capable targets for runs whose sources came from a plugin. The intake page no
+longer offers a plugin option (removed for now), and the portal does not offer plugin
+target generation or deployment. External snapshots bind the
 selected adapter identity and declared adapter, parser, registry, and rules versions;
 changes require a new preview. Earlier external snapshots without component versions
 also require a new preview. Built-in assessment cache keys include the currently
@@ -313,7 +314,41 @@ not run. The operator and developer guides now describe the job routes, the
 cache, `ArtifactSet`, and the SPI handshake. See
 [System Architecture](../Architecture/system-architecture.md#local-generation-runtime).
 
-**Still open.** Splitting `RunService` into collaborator objects is deliberately
+**Stage separation follow-up.** The work above still left portfolio assessment compiling
+every workflow with the Fabric compilers to choose its Fabric route, so assessment and
+code generation were not separate stages. That is corrected. Portfolio assessment is now
+static and runs no compiler. A separate Fabric fit stage confirms each route with the
+compilers and stores one evaluation per asset, with a key built from the provider,
+compiler, rules, and support-table versions. `get_run` applies a current evaluation to
+the legacy target, components, reason, effort, and wave fields and reports
+`routing_basis`; a stale one is ignored, and the stored static result is never edited.
+Compiler-grounded routing moved to `etl_target_fabric.evaluation`, the application facade
+to `etl_target_fabric.application`, and the old import paths forward lazily. Assessment
+cache keys no longer carry compiler versions. Schema 8 adds `runs.assessment_basis`, and
+a run stored before it is served as stored. Routes that build an artifact tree confirm the
+fit first because the writer takes its bundle from the confirmed components; candidate-only
+routes do not. The portal shows the basis, confirms once when **Fabric Deployment** opens,
+and refetches capacity when the basis changes. Exports keep their formats and add an
+`X-Routing-Basis` header. `tests/test_stage_separation.py` enforces the boundary: assessment
+runs with every compiler disabled, assessment packages import no code-generation module, and
+a confirmed run reproduces the routing the compilers produced before the split. Two of its
+guards were proved by temporarily reintroducing a compiler call and a compiler import. A live
+portal check on 2026-11-22 found zero candidate-cache rows and zero stored fits after
+assessment, confirmed 15 of 15 workflows (9 changed), and in a browser saw native-ready
+move from 15 to 14, remaining effort from 18.5 to 11.9 days, and capacity from 68.6 to
+65.7 CU-hours. That check also caught a defect fixed here: the capacity estimate stayed on
+the static figure after confirmation until the hook keyed on the basis. GitHub Actions and a live
+Fabric deployment were not run. See
+[System Architecture](../Architecture/system-architecture.md#stage-separation) and
+[ADR-L19](./local-architecture-decisions.md#adr-l19-static-portfolio-assessment-and-a-separate-fabric-fit-stage).
+
+**Still open.** The stages are separate but not independent. The static stage still uses
+Fabric vocabulary and the Fabric support matrix, so the target-free view is the neutral
+baseline. The fit and generation stages each run the compilers and only generation is
+cached. Alteryx fit and generation still read the legacy workflow graph rather than
+canonical IR, so the requirement that generators consume canonical IR is met for
+Informatica and the target SPI generator only. The run service still calls Fabric classes
+directly, and only Fabric evaluations are applied to the assessment. Splitting `RunService` into collaborator objects is deliberately
 deferred: many tests and the portal depend on its internal hooks, so it needs
 characterization tests first. A wholesale compiler split into handlers and emitters is
 also deferred; the golden digest is the safety net for that later change, not a claim

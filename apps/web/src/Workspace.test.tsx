@@ -217,6 +217,44 @@ test("provides a portfolio summary with readiness, decisions, actions, and risks
   expect(screen.getByText("F4 (2.20 CUs)")).toBeInTheDocument();
 });
 
+test("refetches capacity when Fabric routing is confirmed instead of keeping the static estimate", async () => {
+  const confirmed = {
+    ...capacityEstimate,
+    monthly_cu_hours: 3.3,
+    scenarios: [
+      {name: "Optimized" as const, required_cu: 1.9, recommended_sku: "F2"},
+      {name: "Balance" as const, required_cu: 2.4, recommended_sku: "F4"},
+      {name: "Peak" as const, required_cu: 3.0, recommended_sku: "F4"},
+    ],
+  };
+  const request = vi.fn()
+    .mockResolvedValueOnce({json: async () => capacityEstimate})
+    .mockResolvedValueOnce({json: async () => confirmed});
+  const view = (basis: "static_mapping" | "compiler_confirmed") =>
+    <Workspace page="executive-summary" navigate={vi.fn()} assessment={assessment} runId="test-ui"
+      run={{id: "test-ui", snapshot_id: "snapshot-ui", status: "completed", processed: 2, total: 2,
+        cache_hits: 0, error: null, routing_basis: basis, result: assessment}}
+      candidates={[]} generating={false} generate={vi.fn()} theme="light" toggleTheme={vi.fn()}
+      request={request}>
+      <h1>Intake</h1>
+    </Workspace>;
+  const rendered = render(view("static_mapping"));
+  const summary = document.getElementById("executive-summary");
+  if (!summary) throw new Error("Missing executive summary");
+  const projected = () => within(summary).getByText("Projected F-SKU", {
+    selector: ".metric-label",
+  }).parentElement;
+  expect(await screen.findByText("F4 (2.20 CUs)")).toBeInTheDocument();
+  expect(projected()).toHaveTextContent("4.1 CU-h/mo");
+  expect(request).toHaveBeenCalledTimes(1);
+
+  rendered.rerender(view("compiler_confirmed"));
+
+  expect(await screen.findByText("F2 (1.90 CUs)")).toBeInTheDocument();
+  expect(projected()).toHaveTextContent("3.3 CU-h/mo");
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
 test("edits and persists capacity inputs before presenting a preliminary SKU", async () => {
   const updated = {
     ...capacityEstimate,

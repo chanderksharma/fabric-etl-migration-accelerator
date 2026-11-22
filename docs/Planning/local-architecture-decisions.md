@@ -133,6 +133,32 @@ still fail the estate or the job. Plugin registration treats a missing
 does not split `RunService`, rewrite the compilers, or connect plugin
 generation to the portal.
 
+## ADR-L19 Static portfolio assessment and a separate Fabric fit stage
+
+Portfolio assessment must not generate code. Run assessment with the support
+matrix only, and record `static_mapping` as the routing basis on the run. Confirm
+each Fabric route in a separate fit stage that may run the compilers. Store that
+evaluation per asset with a key built from the provider, compiler, rules, and
+support-table versions. Leave the stored static result unedited.
+
+`get_run` applies a stored evaluation to the legacy target, components, reason,
+effort, and wave fields only while its key matches the installed versions, and
+reports `compiler_confirmed`. A run stored before this decision has no recorded
+basis and is served as stored. Routes that build an artifact tree confirm the fit
+first, because the writer takes its bundle from the confirmed components. Routes
+that only compile candidates do not.
+
+Assessment cache keys carry no compiler version. The packages enforce the
+boundary: `etl_target_fabric.assessment` imports no compiler, the neutral
+assessment package imports no target package, and the core imports neither. The
+old import paths forward lazily to the relocated code.
+
+Accepted costs: the fit and generation stages each run the compilers, the static
+stage keeps Fabric vocabulary, and Alteryx fit and generation still read the legacy
+workflow graph instead of canonical IR. Fabric is the only target whose
+evaluation is applied to the assessment. Exports keep their file formats and
+carry `X-Routing-Basis` as a response header.
+
 ## Requirement-to-test traceability
 
 | Requirement | Validation |
@@ -153,6 +179,11 @@ generation to the portal.
 | One generation fault does not drop the estate | `test_mixed_estate_keeps_the_good_workflow_and_reraises_os_error` |
 | SPI handshake | `test_spi_handshake_rejects_only_an_incompatible_declaration` |
 | Sample-estate compiler digest | `test_sample_estate_digest_matches_the_golden_fixture` |
+| Assessment never runs a compiler | `test_portfolio_assessment_never_runs_a_compiler`, `test_assessment_packages_do_not_depend_on_code_generation` |
+| A confirmed fit reproduces the earlier compiler routing | `test_confirmed_fit_reproduces_the_compiler_routing_it_replaced`, `test_the_stages_disagree_where_the_compiler_changes_the_route` |
+| A stale fit is ignored, a legacy run is untouched | `test_a_fit_computed_with_other_versions_is_ignored_then_recomputed`, `test_a_run_stored_before_the_basis_was_recorded_is_left_as_stored` |
+| Only routes that consume the fit confirm it | `test_only_routes_that_consume_the_fit_confirm_it`, `test_generation_confirms_the_fit_it_consumes_and_candidates_do_not` |
+| Exports state the routing basis | `test_exports_say_whether_the_fabric_routing_was_confirmed` |
 
 This matrix is extended with implementation tests. Existing tests alone do not
 prove real-estate performance, source/target parity, or production readiness.

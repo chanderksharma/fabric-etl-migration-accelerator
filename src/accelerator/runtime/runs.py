@@ -23,6 +23,7 @@ from accelerator.runtime.artifacts import project_candidate
 from accelerator.runtime.identity import (
     assessment_cache_key,
     candidate_cache_key,
+    fabric_fit_key,
     ir_cache_key,
     neutral_cache_key,
 )
@@ -58,6 +59,7 @@ from etl_migration_core.contracts.ir import (
 from etl_migration_core.contracts.spi import (
     TargetCapacityResult,
     TargetGenerationResult,
+    TargetPlatformProvider,
 )
 from etl_migration_core.intake.discovery import DiscoveryService, hash_idmc_directory
 from etl_migration_core.plugins import fault_detail
@@ -86,7 +88,6 @@ from etl_portfolio_assessment.service.schemas import (
 from etl_portfolio_assessment.service.schemas import (
     WorkflowCandidateResponse as NeutralWorkflowCandidateResponse,
 )
-from etl_target_fabric.assessment.evaluator import apply_alteryx_native_route, apply_native_route
 from etl_target_fabric.assessment.ir_assessment import (
     ASSESSMENT_RULES_VERSION,
     REGISTRY_VERSIONS,
@@ -132,6 +133,8 @@ from etl_target_fabric.delivery.artifact_writer import (
     build_workflow_package,
     write_candidates,
 )
+from etl_target_fabric.evaluation import confirm_assessment
+from etl_target_fabric.provider import FabricTargetProvider
 
 ASSESSMENT_LIST = TypeAdapter(list[WorkflowAssessmentResponse])
 NEUTRAL_LIST = TypeAdapter(list[NeutralAssessmentResponse])
@@ -140,6 +143,10 @@ LEASE_RENEWAL_INTERVAL_SECONDS = 60
 WORKER_POLL_SECONDS = 5
 MAX_RUN_ATTEMPTS = 5
 ALL_TARGETS: tuple[Target, ...] = ("dataflow", "notebook", "pipeline")
+FABRIC_PLATFORM_ID = "fabric"
+# Written when a run completes. Assessment never runs a compiler, so its Fabric routing is
+# the static support-matrix mapping until a stored Fabric evaluation confirms it.
+STATIC_ASSESSMENT_BASIS = "static_mapping"
 
 logger = logging.getLogger(__name__)
 
@@ -365,19 +372,22 @@ class RunService:
             )
         return self.get_run(identity)
 
-    def get_run(self, identity: str, *, include_result: bool = True) -> Run:
+    def _read_run(self, identity: str, *, include_result: bool) -> tuple[Run, str | None]:
+        """Read one run as stored, with the routing basis recorded when it completed."""
         with self._connection() as connection:
             columns = (
-                "id, snapshot, status, processed, total, cache_hits, error, timings, result"
+                "id, snapshot, status, processed, total, cache_hits, error, timings, "
+                "assessment_basis, result"
                 if include_result
-                else "id, snapshot, status, processed, total, cache_hits, error, timings"
+                else "id, snapshot, status, processed, total, cache_hits, error, timings, "
+                "assessment_basis"
             )
             row = connection.execute(
                 f"SELECT {columns} FROM runs WHERE id=?", (identity,)
             ).fetchone()
         if row is None:
             raise KeyError("Run not found")
-        return Run(
+        run = Run(
             id=row["id"],
             snapshot_id=row["snapshot"],
             status=row["status"],
@@ -392,6 +402,87 @@ class RunService:
                 else None
             ),
         )
+        return run, row["assessment_basis"]
+
+    def get_run(self, identity: str, *, include_result: bool = True) -> Run:
+        """Return a run, applying a current Fabric evaluation to its routing fields.
+
+        The stored assessment is static. When a Fabric evaluation computed with the current
+        compiler and rules exists, ``confirm_assessment`` overlays its target, wave, and
+        effort so consumers of the legacy fields keep working, and ``routing_basis``
+        says so. A run stored before assessment stopped compiling has no recorded basis and
+        is returned unchanged: its stored routing already came from the compilers.
+        """
+        run, basis = self._read_run(identity, include_result=include_result)
+        if run.result is None or run.status != "completed":
+            return run
+        if basis is None:
+            return run.model_copy(update={"routing_basis": "compiler_confirmed"})
+        confirmed = self._confirmed_result(identity, run.result)
+        if confirmed is None:
+            return run
+        return run.model_copy(update={"result": confirmed, "routing_basis": "compiler_confirmed"})
+
+    def _current_fabric_fit(self, identity: str) -> list[RunTargetEvaluation] | None:
+        """Return the Fabric evaluation, or None if absent or computed with other versions."""
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT evaluations_json FROM target_evaluations WHERE run_id=? AND platform_id=?",
+                (identity, FABRIC_PLATFORM_ID),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            evaluations = TARGET_EVALUATION_LIST.validate_json(row["evaluations_json"])
+        except ValidationError:
+            return None
+        key = fabric_fit_key(FabricTargetProvider.provider_version)
+        if any(item.evaluation_key != key for item in evaluations):
+            return None
+        return evaluations
+
+    def _confirmed_result(
+        self, identity: str, result: EstateAssessmentResponse
+    ) -> EstateAssessmentResponse | None:
+        """Apply a stored Fabric evaluation to a static result, or None if it does not cover it."""
+        evaluations = self._current_fabric_fit(identity)
+        if evaluations is None:
+            return None
+        by_path = {
+            item.assessment_path: item.evaluation
+            for item in evaluations
+            if item.assessment_path is not None
+        }
+        if any(assessment.path not in by_path for assessment in result.assessments):
+            return None
+        return result.model_copy(
+            update={
+                "assessments": [
+                    confirm_assessment(assessment, by_path[assessment.path])
+                    for assessment in result.assessments
+                ]
+            }
+        )
+
+    def ensure_fabric_fit(self, identity: str) -> Run:
+        """Return the run with Fabric routing confirmed, evaluating it first when needed.
+
+        Generation consumes the Fabric evaluation (the deployment bundle follows the confirmed
+        target components), so it asks for it here instead of reading assessment output that
+        was never routed. A run with nothing assessed has nothing to confirm.
+        """
+        run = self.get_run(identity)
+        if (
+            run.status == "completed"
+            and run.result is not None
+            and run.result.assessments
+            and run.routing_basis == "static_mapping"
+        ):
+            self.evaluate_target(
+                identity, FABRIC_PLATFORM_ID, TargetPlatformRegistry((FabricTargetProvider(),))
+            )
+            run = self.get_run(identity)
+        return run
 
     def get_run_status(self, identity: str) -> RunStatus:
         """Return lightweight run status without reading or validating result JSON."""
@@ -560,9 +651,16 @@ class RunService:
             }
             with self._connection() as connection:
                 updated = connection.execute(
-                    """UPDATE runs SET status='completed', result=?, timings=?, lease=0
+                    """UPDATE runs SET status='completed', result=?, timings=?,
+                    assessment_basis=?, lease=0
                     WHERE id=? AND epoch=? AND status='running'""",
-                    (result_json, json.dumps(timings), identity, epoch),
+                    (
+                        result_json,
+                        json.dumps(timings),
+                        STATIC_ASSESSMENT_BASIS,
+                        identity,
+                        epoch,
+                    ),
                 )
                 if updated.rowcount:
                     connection.execute(
@@ -746,14 +844,7 @@ class RunService:
                 graph = self._alteryx_graph(item)
                 assessments = [
                     WorkflowAssessmentResponse.model_validate(
-                        replace(
-                            apply_alteryx_native_route(
-                                path,
-                                assess_workflow(path, graph=graph),
-                                graph=graph,
-                            ),
-                            path=item.display_path,
-                        )
+                        replace(assess_workflow(path, graph=graph), path=item.display_path)
                     )
                 ]
             else:
@@ -761,10 +852,8 @@ class RunService:
                 assessments = [
                     assessment_response(
                         item.display_path,
-                        apply_native_route(parsed, asset, assessment),
-                        capacity_profile=build_informatica_capacity_profile(
-                            parsed, asset
-                        ),
+                        assessment,
+                        capacity_profile=build_informatica_capacity_profile(parsed, asset),
                     )
                     for asset, assessment in zip(
                         parsed.assets,
@@ -1089,31 +1178,31 @@ class RunService:
     def evaluate_target(
         self, identity: str, platform_id: str, registry: TargetPlatformRegistry
     ) -> list[RunTargetEvaluation]:
-        """Evaluate confirmed source assets with a registered target provider."""
-        run = self.get_run(identity)
+        """Evaluate confirmed source assets with a registered target provider.
+
+        This is the target-fit stage that follows portfolio assessment. For Fabric on
+        built-in sources it confirms every static assessment with the compilers and
+        stores the result for ``get_run`` to apply. It always reads the stored static
+        assessment, never the confirmed view, so repeating it gives the same answer.
+        """
+        run, basis = self._read_run(identity, include_result=True)
         if run.status != "completed":
             raise ValueError("Complete an assessment before evaluating a target")
         provider = registry.require_implemented(platform_id, capability="evaluate")
+        confirms = (
+            provider.platform_id.strip().casefold() == FABRIC_PLATFORM_ID
+            and basis is not None
+            and run.result is not None
+        )
+        static = (
+            {item.path: item for item in run.result.assessments}
+            if confirms and run.result is not None
+            else {}
+        )
+        key = fabric_fit_key(provider.provider_version) if confirms else None
         evaluations: list[RunTargetEvaluation] = []
         for item in self._snapshot(run.snapshot_id).workflows:
-            package = self._parse_item(item)
-            for asset in package.assets:
-                evaluation = registry.evaluate_asset(
-                    provider.platform_id,
-                    package,
-                    asset,
-                    base_reason=f"Evaluated {asset.name}",
-                )
-                evaluations.append(
-                    RunTargetEvaluation(
-                        source_path=item.display_path,
-                        asset_id=asset.native_id,
-                        asset_name=asset.name,
-                        ir_version=package.ir_version,
-                        provider_version=provider.provider_version,
-                        evaluation=evaluation,
-                    )
-                )
+            evaluations.extend(self._evaluate_item(item, provider, registry, static, key))
         with self._connection() as connection:
             connection.execute(
                 """INSERT INTO target_evaluations
@@ -1130,6 +1219,78 @@ class RunService:
                 ),
             )
         return evaluations
+
+    def _evaluate_item(
+        self,
+        item: WorkflowCandidateResponse,
+        provider: TargetPlatformProvider,
+        registry: TargetPlatformRegistry,
+        static: dict[str, WorkflowAssessmentResponse],
+        key: str | None,
+    ) -> list[RunTargetEvaluation]:
+        """Evaluate the assets of one workflow.
+
+        With ``key`` set, this confirms the stored static assessments of a built-in
+        source: Alteryx through the provider's staged-path evaluator, because Alteryx
+        generation reads the legacy workflow graph, and other sources through canonical IR.
+        Without it, assets are evaluated generically from canonical IR.
+        """
+        built_in = isinstance(item.source_platform, SourcePlatform)
+        try:
+            package = self._parse_item(item)
+        except (WorkflowParseError, ValueError):
+            if key is not None and built_in:
+                return []  # Assessment already failed this workflow; there is nothing to confirm.
+            raise
+        alteryx = item.source_platform is SourcePlatform.ALTERYX
+        assets = package.assets[:1] if key is not None and alteryx else package.assets
+        records: list[RunTargetEvaluation] = []
+        for asset in assets:
+            assessed: WorkflowAssessmentResponse | None = None
+            assessment_path: str | None = None
+            if key is not None and built_in:
+                asset_path = "/".join(part for part in (asset.folder, asset.name) if part)
+                assessment_path = (
+                    item.display_path
+                    if alteryx or not asset_path
+                    else f"{item.display_path}!{asset_path}"
+                )
+                assessed = static.get(assessment_path)
+                if assessed is None:
+                    continue
+            if assessed is not None and alteryx:
+                evaluation = registry.evaluate_alteryx_path(
+                    provider.platform_id,
+                    Path(item.source_path),
+                    unsupported_tools=assessed.unsupported_tools,
+                    default_target=assessed.recommended_target,
+                    default_components=assessed.target_components,
+                    default_reason=assessed.recommendation_reason,
+                )
+            else:
+                evaluation = registry.evaluate_asset(
+                    provider.platform_id,
+                    package,
+                    asset,
+                    base_reason=(
+                        assessed.recommendation_reason
+                        if assessed is not None
+                        else f"Evaluated {asset.name}"
+                    ),
+                )
+            records.append(
+                RunTargetEvaluation(
+                    source_path=item.display_path,
+                    asset_id=asset.native_id,
+                    asset_name=asset.name,
+                    ir_version=package.ir_version,
+                    provider_version=provider.provider_version,
+                    evaluation=evaluation,
+                    assessment_path=assessment_path if assessed is not None else None,
+                    evaluation_key=key if assessed is not None else None,
+                )
+            )
+        return records
 
     def generate_for_target(
         self,
@@ -1173,7 +1334,7 @@ class RunService:
 
     def assess_neutral(self, identity: str) -> NeutralEstateAssessmentResponse:
         """Assess the confirmed run snapshot without target-specific routing."""
-        run = self.get_run(identity)
+        run = self.get_run(identity, include_result=False)
         if run.status != "completed":
             raise ValueError("Complete an assessment before building a neutral baseline")
         snapshot = self._snapshot(run.snapshot_id)
@@ -1195,7 +1356,7 @@ class RunService:
 
     def get_neutral_assessment(self, identity: str) -> NeutralEstateAssessmentResponse:
         """Return the saved neutral baseline for a run."""
-        self.get_run(identity)
+        self.get_run(identity, include_result=False)
         with self._connection() as connection:
             row = connection.execute(
                 "SELECT assessment_json FROM neutral_assessments WHERE run_id=?", (identity,)
@@ -1208,7 +1369,7 @@ class RunService:
         self, identity: str, platform_id: str
     ) -> list[RunTargetEvaluation]:
         """Return the last completed evaluation for one run and target."""
-        self.get_run(identity)
+        self.get_run(identity, include_result=False)
         with self._connection() as connection:
             row = connection.execute(
                 "SELECT evaluations_json FROM target_evaluations WHERE run_id=? AND platform_id=?",
@@ -1295,7 +1456,7 @@ class RunService:
         """Publish all targets atomically to a run-scoped content-addressed directory."""
         if not re.fullmatch(r"[a-f0-9]{32}", identity):
             raise ValueError("Run ID must be a 32-character lowercase hexadecimal value")
-        run = self.get_run(identity)
+        run = self.get_run(identity, include_result=False)
         if run.status != "completed":
             raise ValueError("Complete an assessment before publishing artifacts")
         publications = self.root / "publications"
@@ -1329,7 +1490,7 @@ class RunService:
             raise ValueError(
                 "Publication digest must be a 64-character lowercase hexadecimal value"
             )
-        self.get_run(identity)
+        self.get_run(identity, include_result=False)
         publications = self.root / "publications"
         parent = publications / identity
         root = parent / digest
@@ -1378,7 +1539,7 @@ class RunService:
     ) -> dict[Target, ArtifactWriteResult]:
         if not re.fullmatch(r"[a-f0-9]{32}", identity):
             raise ValueError("Run ID must be a 32-character lowercase hexadecimal value")
-        run = self.get_run(identity)
+        run = self.ensure_fabric_fit(identity)
         if run.status != "completed":
             raise ValueError("Complete an assessment before generating candidates")
         needed = tuple(dict.fromkeys((*targets, *(ALL_TARGETS if write_plan else ()))))
@@ -1396,7 +1557,7 @@ class RunService:
         }
 
     def evidence(self, identity: str, workflow_index: int | None = None) -> EvidenceResponse:
-        run = self.get_run(identity)
+        run = self.get_run(identity, include_result=False)
         if run.status != "completed":
             raise ValueError("Complete the assessment before inspecting evidence")
         snapshot = self._snapshot(run.snapshot_id)

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable, Iterator
+from collections.abc import Collection, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from importlib.metadata import entry_points
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
 from etl_migration_core.contracts.ir import EtlAsset, EtlPackage, is_ir_compatible
 from etl_migration_core.contracts.spi import (
+    AlteryxPathTargetEvaluator,
     TargetCapacityProvider,
     TargetCapacityResult,
     TargetCodeGeneratorProvider,
@@ -247,6 +249,42 @@ class TargetPlatformRegistry:
                     "but does not provide an evaluator.",
                 )
             evaluation = evaluator.evaluate_asset(package, asset, base_reason=base_reason)
+        if evaluation.platform_id.strip().casefold() != provider.platform_id.strip().casefold():
+            raise ValueError("Target evaluator returned a different platform identity")
+        return evaluation
+
+    def evaluate_alteryx_path(
+        self,
+        platform_id: str,
+        path: Path,
+        *,
+        unsupported_tools: Sequence[str],
+        default_target: str,
+        default_components: Sequence[str],
+        default_reason: str,
+    ) -> TargetEvaluation:
+        """Evaluate a staged Alteryx workflow through a provider's optional path evaluator.
+
+        Alteryx generation still reads the legacy workflow graph rather than canonical IR,
+        so a provider that confirms Alteryx routes does so from the staged file. Providers
+        without the optional protocol fail closed here and can use ``evaluate_asset``.
+        """
+        provider = self.require_implemented(platform_id, capability="evaluate")
+        with _guard(provider, "evaluation"):
+            evaluator = provider.evaluator()
+            if not isinstance(evaluator, AlteryxPathTargetEvaluator):
+                raise UnsupportedTargetCapabilityError(
+                    provider.platform_id,
+                    f"Target platform '{provider.platform_id}' does not evaluate "
+                    "staged Alteryx workflow paths.",
+                )
+            evaluation = evaluator.evaluate_alteryx_path(
+                path,
+                unsupported_tools=unsupported_tools,
+                default_target=default_target,
+                default_components=default_components,
+                default_reason=default_reason,
+            )
         if evaluation.platform_id.strip().casefold() != provider.platform_id.strip().casefold():
             raise ValueError("Target evaluator returned a different platform identity")
         return evaluation

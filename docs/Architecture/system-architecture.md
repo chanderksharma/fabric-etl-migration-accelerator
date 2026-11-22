@@ -14,13 +14,13 @@ topology of the **Microsoft Fabric ETL Migration Accelerator**.
 
 ## Pluggable Package and Extension Architecture
 
-The codebase is organized as a `uv` workspace separating canonical ETL IR, target-neutral portfolio assessment, target-platform providers, and the runtime application shell. In the local React workbench (`apps/web`), portfolio assessment (**Portfolio**) is separated from target-platform selection, Fabric code generation, and GitOps dispatch (**Fabric Deployment**). See [Building Source and Target Plugins](../Guides/building-plugins.md) and the [Pluggable Architecture Implementation Plan](../Planning/pluggable-architecture-implementation-plan.md).
+The codebase is organized as a `uv` workspace separating canonical ETL IR, target-neutral portfolio assessment, target-platform providers, and the runtime application shell. The work moves through separate stages (see [Stage separation](#stage-separation)). In the local React workbench (`apps/web`), portfolio assessment (**Portfolio**) is separated from target-platform selection, Fabric code generation, and GitOps dispatch (**Fabric Deployment**). See [Building Source and Target Plugins](../Guides/building-plugins.md) and the [Pluggable Architecture Implementation Plan](../Planning/pluggable-architecture-implementation-plan.md).
 
 | Package | PyPI distribution | Responsibilities |
 | :--- | :--- | :--- |
 | Core IR and SPI | `etl-migration-core` | Canonical `EtlPackage` IR, secure staging, source adapters, and `TargetPlatformRegistry` (with fail-closed placeholders for `databricks`, `synapse`, and `snowflake`) |
 | Portfolio Assessment | `etl-portfolio-assessment` | Target-neutral complexity, base effort, workload profile, redacted evidence, and stateless `etl-assess` CLI |
-| Microsoft Fabric Provider | `etl-target-fabric` | Fabric target evaluator, F-SKU capacity model, Dataflow Gen2 / PySpark / Pipeline compilers, artifact writer, dry-run planner, and stateless `etl-fabric` CLI |
+| Microsoft Fabric Provider | `etl-target-fabric` | Static Fabric assessment (`assessment/`), compiler-grounded fit evaluation (`evaluation/`), F-SKU capacity model, Dataflow Gen2 / PySpark / Pipeline compilers, artifact writer, dry-run planner, and stateless `etl-fabric` CLI |
 | Application Shell | `fabric-etl-migration-accelerator` | FastAPI loopback API (`/api/targets`, `/api/runs`, generation jobs), SQLite WAL `RunService`, candidate cache, Typer CLI (`tool`), CI dispatchers, and Desktop shell |
 
 ## System Context
@@ -53,11 +53,16 @@ flowchart TB
     AYX --> IR[Canonical ETL Graph & Metadata IR]
     PC --> IR
     IDMC --> IR
-    IR --> Assess[Deterministic Complexity & Effort Engine]
-    IR --> Route[Native Component Router]
-    Route --> DF[Dataflow Gen2 M Compiler]
-    Route --> NB[Fabric PySpark Notebook Compiler]
-    Route --> PL[Fabric Data Pipeline Bundler]
+    IR --> Assess[Stage 1: Static Portfolio Assessment, no compiler runs]
+    Assess --> Static[(Static result: routing_basis static_mapping)]
+    Static --> Fit[Stage 2: Fabric Fit, compilers confirm each route]
+    IR --> Fit
+    Fit --> Confirmed[(Stored fit: routing_basis compiler_confirmed)]
+    IR --> Gen[Stage 3: Generation]
+    Confirmed --> Gen
+    Gen --> DF[Dataflow Gen2 M Compiler]
+    Gen --> NB[Fabric PySpark Notebook Compiler]
+    Gen --> PL[Fabric Data Pipeline Bundler]
     DF --> Candidates[Compiled Candidates]
     NB --> Candidates
     PL --> Candidates
@@ -70,6 +75,71 @@ The cache is not a second writer. Synchronous generate still owns file output.
 Preview returns candidates without updating the shared artifact directory.
 Generation jobs read and fill the same cache and do not call the artifact
 writer.
+
+## Stage separation
+
+Portfolio assessment, Fabric fit, generation, and deployment are separate
+stages with separate storage and cache keys. The local portal, API, and CLI
+all follow them.
+
+| Stage | Entry points | Runs a compiler | Stores | Cache or version key |
+| :--- | :--- | :--- | :--- | :--- |
+| 1. Portfolio assessment | `POST /api/runs`, `tool assess`, `etl-assess` | No | Static result on the run, plus the target-neutral baseline | `assessment_cache_key` and `neutral_cache_key`, with no compiler version |
+| 2. Fabric fit | `POST /api/runs/{id}/targets/fabric/evaluate`, opening **Fabric Deployment**, any route that builds artifacts | Yes | One evaluation per asset in `target_evaluations` | `fabric_fit_key`, saved on every evaluation |
+| 3. Generation | `generate`, `previews`, `candidates`, `bundle`, publications, generation jobs | Yes | Candidate cache and, for writers, an artifact tree | `candidate_cache_key` |
+| 4. Deployment | Dry run and CI dispatch | No | Nothing locally | Not applicable |
+
+Stage 1 is static. Its Fabric target, wave, and effort come from the support
+matrix, and `routing_basis` is `static_mapping`. Stage 2 asks the compilers
+which Fabric items each workflow can actually produce. `GET /api/runs/{id}`
+then returns the stored static result with those three fields replaced by the
+stored evaluation, and `routing_basis` becomes `compiler_confirmed`. The
+replacement is applied only while the evaluation's `fabric_fit_key` matches the
+installed compiler, rules, and support-table versions. After a version change
+the run reads as `static_mapping` again until stage 2 runs again. The stored
+static result is never edited.
+
+A run stored before this split has no recorded basis. It is served as stored
+and reports `compiler_confirmed`, because its results already came from the
+compilers. Confirming it again changes nothing in its assessment.
+
+Routes that write an artifact tree take their bundle composition from the
+confirmed target components, so they confirm the fit first. That covers
+`generate`, `previews`, package downloads, and publications. Routes that only
+compile candidates do not read the assessment and do not confirm it: generation
+jobs and `GET /api/runs/{id}/workflows/{index}/candidates`.
+
+Everything that follows routing follows the basis. Capacity, remaining effort,
+and the portfolio counts change when a run is confirmed. The portal shows the
+basis on those pages and refetches capacity when it changes. Assessment exports
+carry it in the `X-Routing-Basis` response header because their file formats are
+fixed contracts.
+
+The boundaries are enforced by `tests/test_stage_separation.py`:
+
+* `etl_target_fabric.assessment` imports no compiler, evaluation, application,
+  provider, or delivery module, and a run of portfolio assessment with every
+  compiler entry point disabled completes.
+* `etl-portfolio-assessment` imports no `etl_target_*` module, and
+  `etl-migration-core` imports neither.
+* Compilers do not import the evaluation or application layers.
+* The old import paths `etl_target_fabric.assessment.evaluator` and
+  `etl_target_fabric.assessment.portfolio.FabricAssessmentApplication` still
+  resolve, lazily, to the relocated code.
+
+Gaps that remain:
+
+* Stage 1 is still Fabric-flavored. Its routing comes from the Fabric support
+  matrix. The target-free view is the neutral baseline
+  (`GET /api/runs/{id}/neutral-assessment`).
+* Stages 2 and 3 each run the compilers. The candidate cache serves generation
+  only, so a first generation after confirmation compiles again.
+* Alteryx generation and fit still read the legacy workflow graph, not canonical
+  IR. Informatica sources and the target SPI generator already consume
+  canonical IR.
+* The local run service still calls Fabric classes directly. Other targets can
+  be evaluated generically through the registry, but only Fabric confirms the
+  stored assessment.
 
 ## Local generation runtime
 
@@ -105,9 +175,9 @@ validation state, and diagnostics for one workflow and one target kind. Its
 must not create an artifact tree. `write_candidates` remains the Fabric disk
 writer.
 
-Schema 7 appends `generation_jobs`. Candidate JSON stays in the existing cache
-table. The schema-4 baseline is unchanged, so a database written by the last
-release still migrates forward.
+Schema 7 appends `generation_jobs`, and schema 8 appends `runs.assessment_basis`.
+Candidate JSON stays in the existing cache table. The schema-4 baseline is
+unchanged, so a database written by the last release still migrates forward.
 
 Plugin registration calls `require_compatible_spi`. A missing `spi_version`
 means `1.0.0`. A declaration that is not compatible with that host version,
@@ -118,7 +188,7 @@ attribute.
 ## Key Architectural Invariants
 
 1. **Source-Neutral Canonical IR (`ADR-001`)**: Alteryx `.yxmd/.yxmc/.yxwz/.yxzp`, Informatica PowerCenter `powrmart.dtd` XML, and Informatica IDMC export ZIPs normalize into a single versioned `EtlPackage` / `EtlAsset` / `EtlGraph` representation before target routing.
-2. **Native-First Target Routing**:
+2. **Native-First Target Routing**: the Fabric fit stage decides these routes with the compilers. Portfolio assessment only maps statically.
    - **Dataflow Gen2** is selected first when all stages map cleanly to Power Query M (`allowFastCopy: false` and `loadEnabled: false` by default until destinations are bound; Alteryx `ToolContainer` hierarchy maps to `queryGroups`).
    - **Fabric Notebook (PySpark)** is selected when DAG operations require PySpark windowing, complex joins/aggregations, or explicit `transform_bindings` extension hooks.
    - **Data Pipeline** orchestrates multi-item bundles (`RefreshDataflow` → `TridentNotebook`) or IDMC taskflows when cross-item sequencing is required.
@@ -128,12 +198,13 @@ attribute.
 6. **Stage-Specific Configuration**: Variable Library definitions deploy with supported items, while each workspace independently selects and verifies its active value set.
 7. Generation jobs cache candidates and do not write files. Synchronous generate and preview remain the file-writing and preview paths. See [ADR-L18](../Planning/local-architecture-decisions.md#adr-l18-cached-generation-jobs-and-neutral-artifact-projection).
 8. Plugin registration treats a missing `spi_version` as `1.0.0` and rejects an incompatible declaration before the plugin is marked loaded.
+9. Portfolio assessment never runs a compiler. Fabric routing is confirmed in a separate stage, and every result says which basis produced it. See [Stage separation](#stage-separation) and [ADR-L19](../Planning/local-architecture-decisions.md#adr-l19-static-portfolio-assessment-and-a-separate-fabric-fit-stage).
 
 ## Quality Attributes (Well-Architected Alignment)
 
 | Pillar | Architectural Control | Verification |
 | --- | --- | --- |
 | **Security** | `defusedxml` entity/depth caps, archive-bomb budgets, `127.0.0.1` loopback + CSRF token, Entra OIDC, CodeQL + `pip-audit`/`npm audit` | [`docs/Security/threat-model.md`](../Security/threat-model.md) |
-| **Reliability** | SQLite WAL, lease-epoch fencing for assessment runs and generation jobs, per-workflow generation fault isolation, idempotent Development deployment, conflict-aware Git synchronization | `tests/test_generation_hardening.py`, `tests/test_delivery.py`, `tests/test_acceptance.py` |
+| **Reliability** | SQLite WAL, lease-epoch fencing for assessment runs and generation jobs, per-workflow generation fault isolation, idempotent Development deployment, conflict-aware Git synchronization | `tests/test_generation_hardening.py`, `tests/test_stage_separation.py`, `tests/test_delivery.py`, `tests/test_acceptance.py` |
 | **Operational Excellence** | Deterministic caching keyed by compiler and rules versions, a sample-estate golden digest, correlation IDs, manual environment approvals, adjacent-stage promotion, and stage-specific value sets | [`docs/Guides/developer-contribution-guide.md`](../Guides/developer-contribution-guide.md), [`docs/Guides/fabric-ci-cd-setup.md`](../Guides/fabric-ci-cd-setup.md) |
 | **Performance Efficiency** | Four bounded parallel file workers, SHA-256 deduplication, streaming archive inspection up to `2 GiB` | `tests/test_discovery.py`, `tests/test_assessment.py` |

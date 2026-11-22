@@ -10,9 +10,9 @@ from pathlib import Path
 
 from etl_migration_core.contracts.ir import SourcePlatform
 from etl_migration_core.sources.defaults import create_default_registry
-from etl_target_fabric.assessment.evaluator import evaluate_etl_native_route
 from etl_target_fabric.compilers.alteryx import Target, generate_candidate
 from etl_target_fabric.compilers.ir import compile_asset
+from etl_target_fabric.evaluation.native_route import evaluate_etl_native_route
 
 
 def main(argv: Sequence[str] | None = None) -> int:

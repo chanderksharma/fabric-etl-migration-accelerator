@@ -109,7 +109,12 @@ def ir_cache_key(registry: SourceAdapterRegistry, item: WorkflowCandidateRespons
 
 
 def assessment_cache_key(registry: SourceAdapterRegistry, item: WorkflowCandidateResponse) -> str:
-    """Key for the target-aware (Fabric) assessment of one confirmed file."""
+    """Key for the static portfolio assessment of one confirmed file.
+
+    Compiler versions are deliberately absent: assessment never runs a compiler, so a
+    compiler change must not invalidate it. See ``fabric_fit_key`` and
+    ``candidate_cache_key`` for the stages that do depend on the compilers.
+    """
     source_versions: tuple[object, ...] = (
         (
             tuple(
@@ -143,10 +148,29 @@ def assessment_cache_key(registry: SourceAdapterRegistry, item: WorkflowCandidat
             REGISTRY_VERSION,
             RULES_VERSION,
             ASSESSMENT_RULES_VERSION,
+            IR_VERSION,
+            CAPACITY_MODEL_VERSION,
+            SUPPORT_TABLE_FINGERPRINT,
+        ]
+    )
+
+
+def fabric_fit_key(provider_version: str) -> str:
+    """Identify what a stored Fabric evaluation was computed with.
+
+    A stored evaluation is applied only while this key still matches, so a compiler,
+    rules, or support-table change makes it stale instead of silently reinterpreting it.
+    """
+    return "fit:" + _digest(
+        [
+            provider_version,
             COMPILER_VERSION,
             ETL_COMPILER_VERSION,
             IR_VERSION,
-            CAPACITY_MODEL_VERSION,
+            GRAPH_VERSION,
+            REGISTRY_VERSION,
+            RULES_VERSION,
+            ASSESSMENT_RULES_VERSION,
             SUPPORT_TABLE_FINGERPRINT,
         ]
     )

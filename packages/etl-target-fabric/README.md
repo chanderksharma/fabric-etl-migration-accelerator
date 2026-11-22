@@ -25,3 +25,19 @@ candidate = generate_candidate(Path("alteryx-workflows/sample_alteryx_workflow.y
 print(candidate.validation_state, candidate.deployable)
 ```
 
+## Assessment, fit, and generation
+
+Assessment, fit, and generation are separate. `etl_target_fabric.assessment` is
+static and imports no compiler. `etl_target_fabric.evaluation` confirms Fabric
+routing with the compilers, and `etl_target_fabric.compilers` generates
+definitions.
+
+```python
+from pathlib import Path
+from etl_target_fabric.application import FabricAssessmentApplication
+
+application = FabricAssessmentApplication()
+static = application.assess(Path("alteryx-workflows"))                        # no compiler runs
+confirmed = application.assess(Path("alteryx-workflows"), route_native=True)  # compilers confirm routes
+```
+
