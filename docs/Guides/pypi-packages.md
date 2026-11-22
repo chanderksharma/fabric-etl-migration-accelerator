@@ -117,7 +117,7 @@ print(evaluation.recommended_target, candidate.validation_state)
 Run the full quality, build, metadata, and isolated-wheel verification sequence before publishing:
 
 ```powershell
-uv run --extra dev ruff check src packages tests
+uv run --extra dev ruff check src packages tests examples
 uv run --extra dev mypy
 uv run --extra dev pytest --cov-fail-under=80
 uv build --all-packages

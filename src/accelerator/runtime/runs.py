@@ -4,27 +4,66 @@ import csv
 import hashlib
 import io
 import json
+import logging
 import re
 import sqlite3
 import tempfile
 import time
 import uuid
-import zipfile
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import replace
 from pathlib import Path
-from threading import RLock
-from typing import Literal, Self, TypedDict
+from typing import Self
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 
-from etl_migration_core.contracts.ir import IR_VERSION, EtlAsset, EtlPackage, SourcePlatform
-from etl_migration_core.contracts.spi import TargetEvaluation
+from accelerator.runtime.identity import (
+    assessment_cache_key,
+    ir_cache_key,
+    neutral_cache_key,
+)
+from accelerator.runtime.identity import copy_with_sha256 as _copy_with_sha256
+from accelerator.runtime.identity import sha256_file as _sha256_file
+from accelerator.runtime.identity import snapshot_id as _snapshot_id
+from accelerator.runtime.models import (
+    TARGET_EVALUATION_LIST,
+    ArtifactPublication,
+    Run,
+    RunStatus,
+    RunTargetEvaluation,
+    SnapshotPreview,
+)
+from accelerator.runtime.publication import (
+    MANIFEST_NAME,
+    build_archive,
+    build_manifest,
+    check_tree,
+    manifest_bytes,
+    manifest_digest,
+    read_manifest,
+)
+from accelerator.runtime.store import GarbageReport, RunStore
+from accelerator.settings import Settings
+from etl_migration_core.contracts.ir import (
+    IR_VERSION,
+    EtlAsset,
+    EtlPackage,
+    SourcePlatform,
+)
+from etl_migration_core.contracts.spi import (
+    TargetCapacityResult,
+    TargetGenerationResult,
+)
 from etl_migration_core.intake.discovery import DiscoveryService, hash_idmc_directory
-from etl_migration_core.intake.domain import WorkflowCandidate
-from etl_migration_core.sources.alteryx.graph import GRAPH_VERSION, WorkflowParseError, redact
+from etl_migration_core.plugins import fault_detail
+from etl_migration_core.sources.alteryx import AlteryxSourceAdapter
+from etl_migration_core.sources.alteryx.graph import (
+    WorkflowGraph,
+    WorkflowParseError,
+    redact,
+)
 from etl_migration_core.sources.defaults import create_default_registry
 from etl_migration_core.sources.registry import SourceAdapterRegistry
 from etl_migration_core.targets.registry import TargetPlatformRegistry
@@ -52,20 +91,19 @@ from etl_target_fabric.assessment.ir_assessment import (
 )
 from etl_target_fabric.assessment.portfolio import assessment_response
 from etl_target_fabric.assessment.schemas import (
-    DiscoverySummaryResponse,
     EstateAssessmentResponse,
     SkippedItemResponse,
     WorkflowAssessmentResponse,
     WorkflowCandidateResponse,
 )
-from etl_target_fabric.assessment.support_matrix import alteryx_support_for, etl_support_for
+from etl_target_fabric.assessment.support_matrix import (
+    alteryx_support_for,
+    etl_support_for,
+)
 from etl_target_fabric.assessment.workflow import (
-    REGISTRY_VERSION,
-    RULES_VERSION,
     assess_workflow,
 )
 from etl_target_fabric.capacity.model import (
-    CAPACITY_MODEL_VERSION,
     CapacityPortfolioEstimate,
     CapacitySettings,
     CapacityUpdate,
@@ -75,13 +113,13 @@ from etl_target_fabric.capacity.model import (
     estimate_capacity,
 )
 from etl_target_fabric.compilers.alteryx import (
-    COMPILER_VERSION,
     Candidate,
     Target,
     generate_candidate,
 )
 from etl_target_fabric.compilers.ir import (
     ETL_COMPILER_VERSION,
+    EtlCompiledCandidate,
     compile_asset,
 )
 from etl_target_fabric.delivery.artifact_writer import (
@@ -93,10 +131,14 @@ from etl_target_fabric.delivery.artifact_writer import (
 )
 
 ASSESSMENT_LIST = TypeAdapter(list[WorkflowAssessmentResponse])
+NEUTRAL_LIST = TypeAdapter(list[NeutralAssessmentResponse])
 LEASE_SECONDS = 300
 LEASE_RENEWAL_INTERVAL_SECONDS = 60
 WORKER_POLL_SECONDS = 5
-COPY_BUFFER_BYTES = 1024 * 1024
+MAX_RUN_ATTEMPTS = 5
+ALL_TARGETS: tuple[Target, ...] = ("dataflow", "notebook", "pipeline")
+
+logger = logging.getLogger(__name__)
 
 AssessmentOutcome = tuple[
     list[WorkflowAssessmentResponse],
@@ -107,160 +149,21 @@ AssessmentOutcome = tuple[
 ]
 
 
-def _snapshot_id(
-    workflows: Iterable[WorkflowCandidate | WorkflowCandidateResponse],
-) -> str:
-    identity = json.dumps(
-        {
-            "files": [
-                (
-                    item.display_path,
-                    item.sha256,
-                    item.source_platform,
-                    item.adapter_version,
-                    *(
-                        (item.adapter_id,)
-                        if not isinstance(item.source_platform, SourcePlatform)
-                        else ()
-                    ),
-                    *(
-                        (item.parser_version, item.registry_version, item.rules_version)
-                        if not isinstance(item.source_platform, SourcePlatform)
-                        and any((item.parser_version, item.registry_version, item.rules_version))
-                        else ()
-                    ),
-                )
-                for item in workflows
-            ],
-            "versions": [
-                GRAPH_VERSION,
-                REGISTRY_VERSION,
-                RULES_VERSION,
-                IR_VERSION,
-            ],
-        },
-        sort_keys=True,
-    )
-    return hashlib.sha256(identity.encode()).hexdigest()
+def _unexpected_failure(item: WorkflowCandidateResponse, error: Exception) -> str:
+    """Record an unexpected fault as one failed workflow so the rest of the run completes."""
+    logger.error("Unexpected fault while assessing %s", item.display_path, exc_info=error)
+    return f"{item.display_path}: unexpected {redact(fault_detail(error))}"
 
 
-def _sha256_file(path: Path) -> str:
-    if path.is_dir():
-        return hash_idmc_directory(path)[0]
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
-
-
-def _copy_with_sha256(source: Path, destination: Path) -> str:
-    digest = hashlib.sha256()
-    with source.open("rb") as input_stream, destination.open("wb") as output_stream:
-        while chunk := input_stream.read(COPY_BUFFER_BYTES):
-            output_stream.write(chunk)
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-__all__ = ["ArtifactWriteResult", "Run", "RunService", "SnapshotPreview", "_artifact_path"]
-
-
-class SnapshotPreview(DiscoverySummaryResponse):
-    snapshot_id: str
-
-
-class Run(BaseModel):
-    id: str
-    snapshot_id: str
-    status: Literal["queued", "running", "completed", "failed", "cancelled"]
-    processed: int
-    total: int
-    cache_hits: int
-    error: str | None = None
-    result: EstateAssessmentResponse | None = None
-
-
-class RunTargetEvaluation(BaseModel):
-    """Target evaluation linked to a source asset in a confirmed run."""
-
-    source_path: str
-    asset_id: str
-    asset_name: str
-    ir_version: str
-    provider_version: str
-    evaluation: TargetEvaluation
-
-
-class ArtifactPublication(BaseModel):
-    """Content-addressed, run-scoped local artifact publication."""
-
-    run_id: str
-    digest: str
-    root: Path
-
-
-class PublicationFile(TypedDict):
-    path: str
-    size_bytes: int
-    sha256: str
-
-
-class PublicationManifest(TypedDict):
-    version: Literal[1]
-    run_id: str
-    files: list[PublicationFile]
-
-
-TARGET_EVALUATION_LIST = TypeAdapter(list[RunTargetEvaluation])
-
-
-def _publication_manifest(root: Path, identity: str) -> PublicationManifest:
-    files: list[PublicationFile] = []
-    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
-        if path.is_symlink() or path.is_junction():
-            raise ValueError("Artifact publication contains a linked path")
-        if path.is_dir():
-            continue
-        if not path.is_file():
-            raise ValueError("Artifact publication contains a non-file entry")
-        relative = path.relative_to(root).as_posix()
-        if relative == "publication-manifest.json":
-            continue
-        files.append(
-            {
-                "path": relative,
-                "size_bytes": path.stat().st_size,
-                "sha256": _sha256_file(path),
-            }
-        )
-    return {"version": 1, "run_id": identity, "files": files}
-
-
-def _read_publication_manifest(root: Path) -> dict[str, object]:
-    if root.is_symlink() or root.is_junction():
-        raise ValueError("Artifact publication contains a linked path")
-    manifest_path = root / "publication-manifest.json"
-    if manifest_path.is_symlink() or manifest_path.is_junction():
-        raise ValueError("Artifact publication contains a linked path")
-    try:
-        recorded = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ValueError("Artifact publication manifest is unavailable or invalid") from error
-    if not isinstance(recorded, dict) or recorded.get("version") != 1:
-        raise ValueError("Artifact publication manifest is invalid")
-    return recorded
-
-
-def _manifest_bytes(manifest: PublicationManifest | dict[str, object]) -> bytes:
-    return json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
-
-
-def _verify_publication(root: Path, expected: PublicationManifest | dict[str, object]) -> None:
-    recorded = _read_publication_manifest(root)
-    if (
-        _manifest_bytes(recorded) != _manifest_bytes(expected)
-        or _manifest_bytes(_publication_manifest(root, str(expected["run_id"])))
-        != _manifest_bytes(expected)
-    ):
-        raise ValueError("Artifact publication has changed; refusing to overwrite it")
+__all__ = [
+    "ArtifactWriteResult",
+    "Run",
+    "RunService",
+    "RunStatus",
+    "RunTargetEvaluation",
+    "SnapshotPreview",
+    "_artifact_path",
+]
 
 
 class RunService:
@@ -276,62 +179,29 @@ class RunService:
         self.artifact_root = artifact_root or root.parent / "generated-fabric-workflows"
         self._source_registry = source_registry or create_default_registry()
         self._discovery = DiscoveryService(source_registry=self._source_registry)
-        root.mkdir(parents=True, exist_ok=True)
-        self.database = root / "runs.db"
-        self._lock = RLock()
-        self.closed = False
-        with self._connection() as connection:
-            connection.execute("PRAGMA journal_mode=WAL")
-            version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in {0, 1, 2, 3, 4}:
-                raise ValueError("Unsupported run database schema version")
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS snapshots (id TEXT PRIMARY KEY, preview TEXT NOT NULL);
-                CREATE TABLE IF NOT EXISTS runs (
-                    id TEXT PRIMARY KEY, snapshot TEXT NOT NULL, status TEXT NOT NULL,
-                    epoch INTEGER NOT NULL DEFAULT 0, lease REAL NOT NULL DEFAULT 0,
-                    processed INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL,
-                    cache_hits INTEGER NOT NULL DEFAULT 0, error TEXT, result TEXT
-                );
-                CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, result TEXT NOT NULL);
-                CREATE TABLE IF NOT EXISTS capacity_inputs (
-                    run_id TEXT NOT NULL,
-                    workflow_path TEXT NOT NULL,
-                    input_json TEXT NOT NULL,
-                    PRIMARY KEY (run_id, workflow_path)
-                );
-                CREATE TABLE IF NOT EXISTS capacity_settings (
-                    run_id TEXT PRIMARY KEY,
-                    settings_json TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS target_evaluations (
-                    run_id TEXT NOT NULL,
-                    platform_id TEXT NOT NULL,
-                    provider_version TEXT NOT NULL,
-                    evaluations_json TEXT NOT NULL,
-                    PRIMARY KEY (run_id, platform_id)
-                );
-                CREATE TABLE IF NOT EXISTS neutral_assessments (
-                    run_id TEXT PRIMARY KEY,
-                    assessment_json TEXT NOT NULL
-                );
-                PRAGMA user_version=4;
-                """
-            )
+        self._store = RunStore(root)
+        self.database = self._store.database
 
-    @contextmanager
-    def _connection(self) -> Iterator[sqlite3.Connection]:
-        with self._lock:
-            if self.closed:
-                raise ValueError("Run store is closed")
-            connection = sqlite3.connect(self.database, timeout=30)
-            connection.row_factory = sqlite3.Row
-            try:
-                with connection:
-                    yield connection
-            finally:
-                connection.close()
+    @classmethod
+    def from_settings(cls, settings: Settings) -> Self:
+        """Build the service the way every entry point should: one settings object."""
+        return cls(
+            settings.state_dir,
+            artifact_root=settings.artifact_dir,
+            source_registry=create_default_registry(plugin_allowlist=settings.plugin_allowlist),
+        )
+
+    @property
+    def closed(self) -> bool:
+        return self._store.closed
+
+    @property
+    def source_registry(self) -> SourceAdapterRegistry:
+        """Return the active source adapter registry."""
+        return self._source_registry
+
+    def _connection(self) -> AbstractContextManager[sqlite3.Connection]:
+        return self._store.connection()
 
     def __enter__(self) -> Self:
         if self.closed:
@@ -342,10 +212,18 @@ class RunService:
         self.close()
 
     def close(self) -> None:
-        with self._lock:
-            self.closed = True
+        self._store.close()
+
+    def collect_garbage(
+        self, *, max_age_days: float = 30, max_cache_bytes: int = 512 * 1024 * 1024, dry_run: bool
+    ) -> GarbageReport:
+        """Apply the retention policy to runs, snapshots, publications, and caches."""
+        return self._store.collect_garbage(
+            max_age_days=max_age_days, max_cache_bytes=max_cache_bytes, dry_run=dry_run
+        )
 
     def preview(self, source: Path) -> SnapshotPreview:
+        started = time.perf_counter()
         summary = self._discovery.discover(source)
         snapshot_id = _snapshot_id(summary.workflows)
         folder = self.root / "snapshots" / snapshot_id
@@ -395,9 +273,18 @@ class RunService:
         )
         with self._connection() as connection:
             connection.execute(
-                "INSERT OR REPLACE INTO snapshots VALUES (?, ?)",
-                (snapshot_id, preview.model_dump_json()),
+                """INSERT INTO snapshots (id, preview, created_at) VALUES (?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    preview=excluded.preview, created_at=excluded.created_at""",
+                (snapshot_id, preview.model_dump_json(), time.time()),
             )
+        logger.info(
+            "Snapshot %s: %d workflows, %d skipped, %.0f ms",
+            snapshot_id[:12],
+            preview.workflow_count,
+            preview.skipped_count,
+            (time.perf_counter() - started) * 1000,
+        )
         return preview
 
     def _snapshot(self, snapshot_id: str) -> SnapshotPreview:
@@ -435,14 +322,21 @@ class RunService:
         identity = uuid.uuid4().hex
         with self._connection() as connection:
             connection.execute(
-                "INSERT INTO runs (id,snapshot,status,total) VALUES (?,?,'queued',?)",
-                (identity, snapshot_id, preview.workflow_count),
+                "INSERT INTO runs (id,snapshot,status,total,created_at) VALUES (?,?,'queued',?,?)",
+                (identity, snapshot_id, preview.workflow_count, time.time()),
             )
         return self.get_run(identity)
 
-    def get_run(self, identity: str) -> Run:
+    def get_run(self, identity: str, *, include_result: bool = True) -> Run:
         with self._connection() as connection:
-            row = connection.execute("SELECT * FROM runs WHERE id=?", (identity,)).fetchone()
+            columns = (
+                "id, snapshot, status, processed, total, cache_hits, error, timings, result"
+                if include_result
+                else "id, snapshot, status, processed, total, cache_hits, error, timings"
+            )
+            row = connection.execute(
+                f"SELECT {columns} FROM runs WHERE id=?", (identity,)
+            ).fetchone()
         if row is None:
             raise KeyError("Run not found")
         return Run(
@@ -453,9 +347,26 @@ class RunService:
             total=row["total"],
             cache_hits=row["cache_hits"],
             error=row["error"],
-            result=EstateAssessmentResponse.model_validate_json(row["result"])
-            if row["result"]
-            else None,
+            timings=json.loads(row["timings"]) if row["timings"] else None,
+            result=(
+                EstateAssessmentResponse.model_validate_json(row["result"])
+                if include_result and row["result"]
+                else None
+            ),
+        )
+
+    def get_run_status(self, identity: str) -> RunStatus:
+        """Return lightweight run status without reading or validating result JSON."""
+        run = self.get_run(identity, include_result=False)
+        return RunStatus(
+            id=run.id,
+            snapshot_id=run.snapshot_id,
+            status=run.status,
+            processed=run.processed,
+            total=run.total,
+            cache_hits=run.cache_hits,
+            error=run.error,
+            timings=run.timings,
         )
 
     def pending(self) -> list[str]:
@@ -471,13 +382,30 @@ class RunService:
     def _claim(self, identity: str) -> int | None:
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            updated = connection.execute(
-                """UPDATE runs SET status='running', epoch=epoch+1, lease=?
+            now = time.time()
+            claimable = connection.execute(
+                """SELECT attempts FROM runs
                 WHERE id=? AND (status='queued' OR (status='running' AND lease<?))""",
-                (time.time() + LEASE_SECONDS, identity, time.time()),
-            )
-            if not updated.rowcount:
+                (identity, now),
+            ).fetchone()
+            if claimable is None:
                 return None
+            if claimable["attempts"] >= MAX_RUN_ATTEMPTS:
+                logger.error("Run %s abandoned after %s attempts", identity, MAX_RUN_ATTEMPTS)
+                connection.execute(
+                    "UPDATE runs SET status='failed', error=?, lease=0 WHERE id=?",
+                    (
+                        f"Run abandoned after {MAX_RUN_ATTEMPTS} interrupted attempts; "
+                        "a workflow may be crashing the process. Remove it and start a new run.",
+                        identity,
+                    ),
+                )
+                return None
+            connection.execute(
+                """UPDATE runs SET status='running', epoch=epoch+1, attempts=attempts+1, lease=?
+                WHERE id=?""",
+                (now + LEASE_SECONDS, identity),
+            )
             return int(
                 connection.execute("SELECT epoch FROM runs WHERE id=?", (identity,)).fetchone()[
                     "epoch"
@@ -488,7 +416,8 @@ class RunService:
         epoch = self._claim(identity)
         if epoch is None:
             return
-        run = self.get_run(identity)
+        started = time.perf_counter()
+        run = self.get_run(identity, include_result=False)
         assessments: list[WorkflowAssessmentResponse] = []
         failures: list[str] = []
         neutral_assessments: list[NeutralAssessmentResponse] = []
@@ -503,6 +432,7 @@ class RunService:
                 ).fetchone()
                 if active is None:
                     return
+            verified = time.perf_counter()
             with ThreadPoolExecutor(max_workers=4) as executor:
                 work = iter(enumerate(snapshot.workflows))
                 pending: dict[Future[AssessmentOutcome], int] = {}
@@ -571,6 +501,7 @@ class RunService:
                     neutral_assessments.extend(item_neutral)
                     if neutral_failure is not None:
                         neutral_failures.append(neutral_failure)
+            assessed = time.perf_counter()
             result = EstateAssessmentResponse(
                 workflow_count=len(assessments),
                 failed_count=len(failures),
@@ -580,25 +511,49 @@ class RunService:
                 skipped=snapshot.skipped,
             )
             neutral_result = _neutral_estate(snapshot, neutral_assessments, neutral_failures)
+            result_json = result.model_dump_json()
+            neutral_json = neutral_result.model_dump_json()
+            persisted = time.perf_counter()
+            timings = {
+                "verify_ms": round((verified - started) * 1000, 1),
+                "assess_ms": round((assessed - verified) * 1000, 1),
+                "persist_ms": round((persisted - assessed) * 1000, 1),
+                "total_ms": round((persisted - started) * 1000, 1),
+            }
             with self._connection() as connection:
                 updated = connection.execute(
-                    """UPDATE runs SET status='completed', result=?, lease=0
+                    """UPDATE runs SET status='completed', result=?, timings=?, lease=0
                     WHERE id=? AND epoch=? AND status='running'""",
-                    (result.model_dump_json(), identity, epoch),
+                    (result_json, json.dumps(timings), identity, epoch),
                 )
                 if updated.rowcount:
                     connection.execute(
                         """INSERT INTO neutral_assessments (run_id, assessment_json) VALUES (?, ?)
                         ON CONFLICT(run_id) DO UPDATE SET
                         assessment_json=excluded.assessment_json""",
-                        (identity, neutral_result.model_dump_json()),
+                        (identity, neutral_json),
                     )
-        except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+            logger.info(
+                "Run %s completed: %d assessments, %d failures, %d cache hits, %s",
+                identity,
+                len(assessments),
+                len(failures),
+                hits,
+                ", ".join(f"{name}={value:g}" for name, value in timings.items()),
+            )
+        except Exception as error:
+            expected = isinstance(error, OSError | ValueError | KeyError | sqlite3.Error)
+            if not expected:
+                logger.exception("Run %s failed unexpectedly", identity)
             with self._connection() as connection:
                 connection.execute(
                     """UPDATE runs SET status='failed',error=?,lease=0
                     WHERE id=? AND epoch=? AND status='running'""",
-                    (redact(str(error)), identity, epoch),
+                    (
+                        redact(str(error) if expected else f"Unexpected {fault_detail(error)}"),
+                        identity,
+                        epoch,
+                    ),
                 )
 
     def cancel(self, identity: str) -> Run:
@@ -708,54 +663,40 @@ class RunService:
         """Export the current capacity estimate as CSV."""
         return capacity_csv(self.get_capacity(identity))
 
+    def _parse_item(self, item: WorkflowCandidateResponse) -> EtlPackage:
+        key = ir_cache_key(self._source_registry, item)
+        cached = self._store.cache_get("ir_cache", key)
+        if cached is not None:
+            return EtlPackage.model_validate_json(cached)
+        path = Path(item.source_path)
+        detected = self._source_registry.detect(path, item.display_path)
+        package = self._source_registry.parse(path, detected.match)
+        self._store.cache_put("ir_cache", key, package.model_dump_json())
+        return package
+
+    def _alteryx_graph(self, item: WorkflowCandidateResponse) -> WorkflowGraph:
+        """Parse an Alteryx workflow once for the Fabric engines and seed the IR cache."""
+        path = Path(item.source_path)
+        adapter = AlteryxSourceAdapter()
+        key = ir_cache_key(self._source_registry, item)
+        if self._store.cache_has("ir_cache", key):
+            return adapter.legacy_graph(path)
+        match = adapter.probe(path, item.display_path)
+        if match is None:
+            return adapter.legacy_graph(path)
+        package, graph = adapter.parse_with_graph(path, match)
+        self._store.cache_put("ir_cache", key, package.model_dump_json())
+        return graph
+
     def _assess_item(
-        self, item: WorkflowCandidateResponse
+        self,
+        item: WorkflowCandidateResponse,
     ) -> tuple[list[WorkflowAssessmentResponse], str | None, int]:
-        key = hashlib.sha256(
-            json.dumps(
-                [
-                    item.sha256,
-                    item.display_path,
-                    item.source_platform,
-                    item.adapter_version,
-                    *(
-                        (
-                            tuple(
-                                (
-                                    adapter.adapter_id,
-                                    adapter.adapter_version,
-                                    adapter.parser_version,
-                                    adapter.registry_version,
-                                    adapter.rules_version,
-                                )
-                                for adapter in self._source_registry.adapters
-                                if adapter.platform == item.source_platform
-                            ),
-                        )
-                        if isinstance(item.source_platform, SourcePlatform)
-                        else (
-                            item.adapter_id,
-                            item.parser_version,
-                            item.registry_version,
-                            item.rules_version,
-                        )
-                    ),
-                    GRAPH_VERSION,
-                    REGISTRY_VERSION,
-                    RULES_VERSION,
-                    ASSESSMENT_RULES_VERSION,
-                    COMPILER_VERSION,
-                    ETL_COMPILER_VERSION,
-                    IR_VERSION,
-                    CAPACITY_MODEL_VERSION,
-                ],
-            ).encode()
-        ).hexdigest()
-        with self._connection() as connection:
-            cached = connection.execute("SELECT result FROM cache WHERE key=?", (key,)).fetchone()
+        key = assessment_cache_key(self._source_registry, item)
+        cached = self._store.cache_get("cache", key)
         try:
-            if cached:
-                cached_value = json.loads(cached["result"])
+            if cached is not None:
+                cached_value = json.loads(cached)
                 assessments = (
                     ASSESSMENT_LIST.validate_python(cached_value)
                     if isinstance(cached_value, list)
@@ -764,58 +705,67 @@ class RunService:
                 return assessments, None, 1
             path = Path(item.source_path)
             if item.source_platform is SourcePlatform.ALTERYX:
+                graph = self._alteryx_graph(item)
                 assessments = [
                     WorkflowAssessmentResponse.model_validate(
                         replace(
-                            apply_alteryx_native_route(path, assess_workflow(path)),
+                            apply_alteryx_native_route(
+                                path,
+                                assess_workflow(path, graph=graph),
+                                graph=graph,
+                            ),
                             path=item.display_path,
                         )
                     )
                 ]
             else:
-                detected = self._source_registry.detect(path, item.display_path)
-                package = self._source_registry.parse(path, detected.match)
+                parsed = self._parse_item(item)
                 assessments = [
                     assessment_response(
                         item.display_path,
-                        apply_native_route(package, asset, assessment),
+                        apply_native_route(parsed, asset, assessment),
                         capacity_profile=build_informatica_capacity_profile(
-                            package, asset
+                            parsed, asset
                         ),
                     )
                     for asset, assessment in zip(
-                        package.assets,
-                        assess_package(package),
+                        parsed.assets,
+                        assess_package(parsed),
                         strict=True,
                     )
                 ]
-            with self._connection() as connection:
-                connection.execute(
-                    "INSERT OR REPLACE INTO cache VALUES (?,?)",
-                    (
-                        key,
-                        json.dumps(
-                            [
-                                assessment.model_dump(mode="json")
-                                for assessment in assessments
-                            ]
-                        ),
-                    ),
-                )
+            self._store.cache_put(
+                "cache",
+                key,
+                json.dumps([assessment.model_dump(mode="json") for assessment in assessments]),
+            )
             return assessments, None, 0
         except (WorkflowParseError, ValueError, json.JSONDecodeError) as error:
             return [], f"{item.display_path}: {redact(str(error))}", 0
+        except (sqlite3.Error, OSError):
+            raise
+        except Exception as error:  # noqa: BLE001 - one workflow's fault must not fail the run
+            return [], _unexpected_failure(item, error), 0
 
     def _assess_neutral_item(
-        self, item: WorkflowCandidateResponse
+        self,
+        item: WorkflowCandidateResponse,
     ) -> tuple[list[NeutralAssessmentResponse], str | None]:
+        key = neutral_cache_key(item)
+        cached = self._store.cache_get("cache", key)
         try:
-            path = Path(item.source_path)
-            detected = self._source_registry.detect(path, item.display_path)
-            package = self._source_registry.parse(path, detected.match)
-            return neutral_assessment_responses(package, item.display_path), None
-        except (WorkflowParseError, ValueError) as error:
+            if cached is not None:
+                return NEUTRAL_LIST.validate_json(cached), None
+            parsed = self._parse_item(item)
+            neutral = neutral_assessment_responses(parsed, item.display_path)
+            self._store.cache_put("cache", key, NEUTRAL_LIST.dump_json(neutral).decode("utf-8"))
+            return neutral, None
+        except (WorkflowParseError, ValueError, json.JSONDecodeError) as error:
             return [], f"{item.display_path}: {redact(str(error))}"
+        except (sqlite3.Error, OSError):
+            raise
+        except Exception as error:  # noqa: BLE001 - one workflow's fault must not fail the run
+            return [], _unexpected_failure(item, error)
 
     def _assess_item_with_neutral(
         self, item: WorkflowCandidateResponse
@@ -831,26 +781,37 @@ class RunService:
         return assessments, failure, hit, neutral, neutral_failure
 
     def generate(self, identity: str, target: Target) -> list[Candidate]:
-        run = self.get_run(identity)
+        run = self.get_run(identity, include_result=False)
         if run.status != "completed":
             raise ValueError("Complete an assessment before generating candidates")
-        candidates: list[Candidate] = []
-        for item in self._snapshot(run.snapshot_id).workflows:
+        return self._generate_targets(self._snapshot(run.snapshot_id), (target,))[target]
+
+    def _generate_targets(
+        self, snapshot: SnapshotPreview, targets: tuple[Target, ...]
+    ) -> dict[Target, list[Candidate]]:
+        """Parse each workflow once and compile every requested target from that parse."""
+        generated: dict[Target, list[Candidate]] = {target: [] for target in targets}
+        for item in snapshot.workflows:
             path = Path(item.source_path)
             if item.source_platform is SourcePlatform.ALTERYX:
-                candidates.append(
-                    generate_candidate(path, target).model_copy(
-                        update={"workflow": item.display_path}
+                try:
+                    graph: WorkflowGraph | None = AlteryxSourceAdapter().legacy_graph(path)
+                except WorkflowParseError:
+                    graph = None  # generate_candidate reports it as a blocked candidate
+                for target in targets:
+                    generated[target].append(
+                        generate_candidate(path, target, graph=graph).model_copy(
+                            update={"workflow": item.display_path}
+                        )
                     )
-                )
                 continue
-            detected = self._source_registry.detect(path, item.display_path)
-            package = self._source_registry.parse(path, detected.match)
-            candidates.extend(
-                _informatica_candidate(item.display_path, package, asset, target)
-                for asset in package.assets
-            )
-        return candidates
+            package = self._parse_item(item)
+            for target in targets:
+                generated[target].extend(
+                    _informatica_candidate(item.display_path, package, asset, target)
+                    for asset in package.assets
+                )
+        return generated
 
     def evaluate_target(
         self, identity: str, platform_id: str, registry: TargetPlatformRegistry
@@ -862,9 +823,7 @@ class RunService:
         provider = registry.require_implemented(platform_id, capability="evaluate")
         evaluations: list[RunTargetEvaluation] = []
         for item in self._snapshot(run.snapshot_id).workflows:
-            path = Path(item.source_path)
-            detected = self._source_registry.detect(path, item.display_path)
-            package = self._source_registry.parse(path, detected.match)
+            package = self._parse_item(item)
             for asset in package.assets:
                 evaluation = registry.evaluate_asset(
                     provider.platform_id,
@@ -898,6 +857,46 @@ class RunService:
                 ),
             )
         return evaluations
+
+    def generate_for_target(
+        self,
+        identity: str,
+        platform_id: str,
+        target_kind: str,
+        registry: TargetPlatformRegistry,
+    ) -> list[TargetGenerationResult]:
+        """Generate target-neutral artifact previews via TargetCodeGeneratorProvider."""
+        run = self.get_run(identity, include_result=False)
+        if run.status != "completed":
+            raise ValueError("Complete an assessment before generating target previews")
+        results: list[TargetGenerationResult] = []
+        for item in self._snapshot(run.snapshot_id).workflows:
+            package = self._parse_item(item)
+            results.append(
+                registry.generate_package(
+                    platform_id,
+                    package,
+                    target_kind=target_kind,
+                    display_path=item.display_path,
+                )
+            )
+        return results
+
+    def estimate_target_capacity(
+        self,
+        identity: str,
+        platform_id: str,
+        registry: TargetPlatformRegistry,
+    ) -> list[TargetCapacityResult]:
+        """Estimate capacity for confirmed assets via a registered TargetCapacityProvider."""
+        run = self.get_run(identity, include_result=False)
+        if run.status != "completed":
+            raise ValueError("Complete an assessment before estimating target capacity")
+        results: list[TargetCapacityResult] = []
+        for item in self._snapshot(run.snapshot_id).workflows:
+            package = self._parse_item(item)
+            results.append(registry.estimate_capacity(platform_id, package))
+        return results
 
     def assess_neutral(self, identity: str) -> NeutralEstateAssessmentResponse:
         """Assess the confirmed run snapshot without target-specific routing."""
@@ -972,7 +971,7 @@ class RunService:
         """Build a byte-stable archive from an isolated set of Fabric definitions."""
         with tempfile.TemporaryDirectory(prefix="candidate-package-", dir=self.root) as directory:
             persisted = self._write_artifacts(
-                identity, (target,), artifact_root=Path(directory)
+                identity, (target,), artifact_root=Path(directory), write_plan=False
             )[target]
             return build_candidate_package(persisted, target)
 
@@ -980,7 +979,7 @@ class RunService:
         """Generate candidate previews without changing the shared artifact directory."""
         with tempfile.TemporaryDirectory(prefix="candidate-preview-", dir=self.root) as directory:
             return self._write_artifacts(
-                identity, (target,), artifact_root=Path(directory)
+                identity, (target,), artifact_root=Path(directory), write_plan=False
             )[target].candidates
 
     def workflow_package(self, identity: str, workflow: str) -> tuple[bytes, str]:
@@ -1037,16 +1036,16 @@ class RunService:
             self._write_artifacts(
                 identity, ("dataflow", "notebook", "pipeline"), artifact_root=staging
             )
-            manifest = _publication_manifest(staging, identity)
-            digest = hashlib.sha256(_manifest_bytes(manifest)).hexdigest()
-            (staging / "publication-manifest.json").write_bytes(_manifest_bytes(manifest))
+            manifest = build_manifest(staging, identity)
+            digest = manifest_digest(manifest)
+            (staging / MANIFEST_NAME).write_bytes(manifest_bytes(manifest))
             destination = parent / digest
             try:
                 staging.rename(destination)
             except OSError:
                 if not destination.is_dir():
                     raise
-                _verify_publication(destination, manifest)
+                check_tree(destination, manifest)
             return ArtifactPublication(run_id=identity, digest=digest, root=destination.resolve())
 
     def verify_publication(self, identity: str, digest: str) -> ArtifactPublication:
@@ -1063,13 +1062,10 @@ class RunService:
         root = parent / digest
         if any(path.is_symlink() or path.is_junction() for path in (publications, parent, root)):
             raise ValueError("Artifact publication contains a linked path")
-        manifest = _read_publication_manifest(root)
-        if (
-            manifest.get("run_id") != identity
-            or hashlib.sha256(_manifest_bytes(manifest)).hexdigest() != digest
-        ):
+        manifest = read_manifest(root)
+        if manifest.get("run_id") != identity or manifest_digest(manifest) != digest:
             raise ValueError("Artifact publication manifest does not match its identity")
-        _verify_publication(root, manifest)
+        check_tree(root, manifest)
         return ArtifactPublication(run_id=identity, digest=digest, root=root.resolve())
 
     def verify_staged_publication(
@@ -1077,70 +1073,51 @@ class RunService:
     ) -> str:
         """Check regenerated artifacts against a publication and return its manifest byte hash."""
         publication = self.verify_publication(identity, digest)
-        staged = _publication_manifest(staged_root, identity)
-        if hashlib.sha256(_manifest_bytes(staged)).hexdigest() != digest:
+        staged = build_manifest(staged_root, identity)
+        if manifest_digest(staged) != digest:
             raise ValueError("Current artifacts do not match the selected publication")
         try:
-            content = (publication.root / "publication-manifest.json").read_bytes()
+            content = (publication.root / MANIFEST_NAME).read_bytes()
             recorded = json.loads(content)
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ValueError("Artifact publication manifest is unavailable or invalid") from error
-        if not isinstance(recorded, dict) or (
-            hashlib.sha256(_manifest_bytes(recorded)).hexdigest() != digest
-        ):
+        if not isinstance(recorded, dict) or manifest_digest(recorded) != digest:
             raise ValueError("Artifact publication manifest does not match its identity")
-        _verify_publication(publication.root, recorded)
+        check_tree(publication.root, recorded)
         return hashlib.sha256(content).hexdigest()
 
     def publication_package(self, identity: str, digest: str) -> bytes:
         """Package only verified publication manifest entries in a deterministic ZIP."""
         publication = self.verify_publication(identity, digest)
-        manifest = _publication_manifest(publication.root, identity)
-        _verify_publication(publication.root, manifest)
-        if hashlib.sha256(_manifest_bytes(manifest)).hexdigest() != digest:
+        manifest = build_manifest(publication.root, identity)
+        check_tree(publication.root, manifest)
+        if manifest_digest(manifest) != digest:
             raise ValueError("Artifact publication has changed while packaging")
-        output = io.BytesIO()
-        with zipfile.ZipFile(output, "w") as archive:
-            for entry in manifest["files"]:
-                path = publication.root / entry["path"]
-                content = path.read_bytes()
-                if len(content) != entry["size_bytes"] or (
-                    hashlib.sha256(content).hexdigest() != entry["sha256"]
-                ):
-                    raise ValueError("Artifact publication has changed while packaging")
-                info = zipfile.ZipInfo(entry["path"], date_time=(1980, 1, 1, 0, 0, 0))
-                info.compress_type = zipfile.ZIP_DEFLATED
-                archive.writestr(info, content)
-            manifest_content = (publication.root / "publication-manifest.json").read_bytes()
-            if json.loads(manifest_content) != manifest:
-                raise ValueError("Artifact publication has changed while packaging")
-            info = zipfile.ZipInfo(
-                "publication-manifest.json", date_time=(1980, 1, 1, 0, 0, 0)
-            )
-            info.compress_type = zipfile.ZIP_DEFLATED
-            archive.writestr(info, manifest_content)
-        return output.getvalue()
+        return build_archive(publication.root, manifest)
 
     def _write_artifacts(
-        self, identity: str, targets: tuple[Target, ...], *, artifact_root: Path | None = None
+        self,
+        identity: str,
+        targets: tuple[Target, ...],
+        *,
+        artifact_root: Path | None = None,
+        write_plan: bool = True,
     ) -> dict[Target, ArtifactWriteResult]:
         if not re.fullmatch(r"[a-f0-9]{32}", identity):
             raise ValueError("Run ID must be a 32-character lowercase hexadecimal value")
         run = self.get_run(identity)
-        generated: dict[Target, list[Candidate]] = {}
-
-        def generate(item_target: Target) -> list[Candidate]:
-            if item_target not in generated:
-                generated[item_target] = self.generate(identity, item_target)
-            return generated[item_target]
-
+        if run.status != "completed":
+            raise ValueError("Complete an assessment before generating candidates")
+        needed = tuple(dict.fromkeys((*targets, *(ALL_TARGETS if write_plan else ()))))
+        generated = self._generate_targets(self._snapshot(run.snapshot_id), needed)
         return {
             target: write_candidates(
                 run_id=identity,
                 target=target,
                 artifact_root=artifact_root if artifact_root is not None else self.artifact_root,
-                generate_fn=generate,
+                generate_fn=generated.__getitem__,
                 assessments=run.result.assessments if run.result else [],
+                write_plan=write_plan,
             )
             for target in targets
         }
@@ -1174,9 +1151,7 @@ class RunService:
                     )
                 ]
             else:
-                path = Path(item.source_path)
-                detected = self._source_registry.detect(path, item.display_path)
-                package = self._source_registry.parse(path, detected.match)
+                package = self._parse_item(item)
                 asset_evidence = [
                     etl_asset_evidence(
                         package,
@@ -1236,23 +1211,25 @@ def _informatica_candidate(
     package: EtlPackage,
     asset: EtlAsset,
     target: Target,
+    *,
+    compiled: EtlCompiledCandidate | None = None,
 ) -> Candidate:
     if not isinstance(package.source_platform, SourcePlatform):
         raise ValueError(f"Fabric generation does not support source {package.source_platform!r}")
-    compiled = compile_asset(package, asset, target)
+    compiled_result = compiled or compile_asset(package, asset, target)
     asset_path = "/".join(part for part in (asset.folder, asset.name) if part)
     workflow = f"{display_path}!{asset_path}" if asset_path else display_path
-    code = compiled.code
+    code = compiled_result.code
     return Candidate(
         workflow=workflow,
         target=target,
-        validation_state=compiled.validation_state,
+        validation_state=compiled_result.validation_state,
         translation_mode=(
-            "native" if compiled.validation_state == "generated_unvalidated" else "scaffold"
+            "native" if compiled_result.validation_state == "generated_unvalidated" else "scaffold"
         ),
-        deployable=compiled.deployable,
-        definition_ready=compiled.deployable,
-        runtime_ready=compiled.runtime_ready,
+        deployable=compiled_result.deployable,
+        definition_ready=compiled_result.deployable,
+        runtime_ready=compiled_result.runtime_ready,
         source_sha256=package.source_sha256 or hashlib.sha256(display_path.encode()).hexdigest(),
         code_sha256=hashlib.sha256(code.encode()).hexdigest(),
         graph_version=IR_VERSION,
@@ -1260,10 +1237,10 @@ def _informatica_candidate(
         rules_version=ASSESSMENT_RULES_VERSION,
         compiler_version=ETL_COMPILER_VERSION,
         code=code,
-        diagnostics=list(compiled.diagnostics),
-        required_bindings=list(compiled.required_bindings),
-        definition_queries=list(compiled.definition_queries),
-        loaded_queries=list(compiled.loaded_outputs),
+        diagnostics=list(compiled_result.diagnostics),
+        required_bindings=list(compiled_result.required_bindings),
+        definition_queries=list(compiled_result.definition_queries),
+        loaded_queries=list(compiled_result.loaded_outputs),
         source_platform=package.source_platform,
         source_product=package.source_product,
         asset_type=asset.asset_type,

@@ -85,13 +85,15 @@ class DagCompilation:
     query_group_assignments: dict[str, str]
 
 
-def generate_candidate(path: Path, target: Target) -> Candidate:
+def generate_candidate(
+    path: Path, target: Target, *, graph: WorkflowGraph | None = None
+) -> Candidate:
     """Compile review-only transformations without executing source content."""
     diagnostics: list[str] = []
     statements: list[str] = []
     required_bindings: list[str] = []
     try:
-        graph = AlteryxSourceAdapter().legacy_graph(path)
+        graph = graph or AlteryxSourceAdapter().legacy_graph(path)
         if target == "pipeline":
             message = (
                 "Alteryx pipeline generation is available only for mixed-item bundles"

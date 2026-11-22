@@ -246,11 +246,27 @@ def test_deployment_workflow_is_dev_only_and_idempotent() -> None:
     assert "default: Update" in workflow
     assert "- Bundle" in workflow
     assert "- DataPipeline" in workflow
-    assert "runs-on: [self-hosted, Windows, X64]" in workflow
+    assert "vars.DEPLOY_RUNNER_LABELS" in workflow
+    assert '"self-hosted", "Windows", "X64"' in workflow
     assert "FABRIC_SYNC_DEVELOPMENT_TO_GIT == 'true'" in workflow
     assert "Invoke-FabricAlm.ps1" in workflow
     assert "SyncDevelopmentToGit" in workflow
     assert "production" not in workflow.casefold()
+
+
+@pytest.mark.parametrize(
+    "workflow_name",
+    [
+        "deploy-fabric-artifacts.yml",
+        "create-fabric-deployment-pipeline.yml",
+        "promote-fabric-alm.yml",
+    ],
+)
+def test_deployment_workflows_take_their_runner_from_one_variable(workflow_name: str) -> None:
+    workflow = (ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")
+
+    assert "runs-on: [" not in workflow
+    assert workflow.count("runs-on:") == workflow.count("vars.DEPLOY_RUNNER_LABELS")
 
 
 @pytest.mark.parametrize(

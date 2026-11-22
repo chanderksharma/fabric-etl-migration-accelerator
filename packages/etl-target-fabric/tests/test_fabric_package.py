@@ -8,10 +8,14 @@ from pathlib import Path
 import pytest
 
 from etl_migration_core.contracts.ir import EXTENSIBLE_SOURCE_IR_VERSION, EtlPackage
+from etl_migration_core.contracts.testing import assert_target_provider_conformance
 from etl_migration_core.sources.defaults import create_default_registry
 from etl_target_fabric.compilers.alteryx import Candidate, Target, generate_candidate
 from etl_target_fabric.compilers.ir import compile_asset, compile_asset_targets
-from etl_target_fabric.delivery.artifact_writer import write_candidates
+from etl_target_fabric.delivery.artifact_writer import (
+    build_logical_id_migration_plan,
+    write_candidates,
+)
 from etl_target_fabric.delivery.deployer import dry_run
 from etl_target_fabric.provider import FabricTargetProvider
 from etl_target_fabric.stdio import main as fabric_stdio_main
@@ -127,3 +131,46 @@ def test_artifact_writer_rejects_logical_id_collision_before_writing(tmp_path: P
             assessments=[],
         )
     assert not root.exists()
+
+
+def test_fabric_provider_conformance_and_asset_identity_migration(tmp_path: Path) -> None:
+    source_xml = (
+        Path(__file__).parents[3] / "tests" / "fixtures" / "powercenter" / "basic_repository.xml"
+    )
+    registry = create_default_registry(load_entry_points=False)
+    detected = registry.detect(source_xml, source_xml.name)
+    package = registry.parse(source_xml, detected.match)
+    provider = FabricTargetProvider()
+    assert_target_provider_conformance(provider, package)
+
+    generated = provider.code_generator().generate_package(
+        package, target_kind="notebook", display_path=source_xml.name
+    )
+    assert generated.platform_id == "fabric"
+    assert generated.artifacts
+
+    capacity = provider.capacity_estimator().estimate_package_capacity(package)
+    assert capacity.platform_id == "fabric"
+    assert capacity.asset_count == len(package.assets)
+
+    sample = Path(__file__).parents[3] / "alteryx-workflows" / "02_low_west_sample.yxmd"
+    first = generate_candidate(sample, "dataflow")
+    edited = first.model_copy(update={"source_sha256": "f" * 64})
+    plan = build_logical_id_migration_plan([first, edited])
+    assert plan[0]["legacy_logical_id"] != plan[1]["legacy_logical_id"]
+    assert plan[0]["stable_logical_id"] == plan[1]["stable_logical_id"]
+
+    result = write_candidates(
+        run_id="0123456789abcdef0123456789abcdef",
+        target="dataflow",
+        artifact_root=tmp_path / "asset-id",
+        generate_fn=lambda target: [generate_candidate(sample, target)],
+        assessments=[],
+        identity_mode="asset",
+    )
+    platform_json = json.loads(
+        (result.root / "02_low_west_sample" / "dataflow.platform.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert platform_json["config"]["logicalId"] == plan[0]["stable_logical_id"]

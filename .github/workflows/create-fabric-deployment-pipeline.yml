@@ -45,7 +45,7 @@ concurrency:
 jobs:
   create:
     name: Create or reuse deployment pipeline
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: ${{ fromJSON(vars.DEPLOY_RUNNER_LABELS || '["self-hosted", "Windows", "X64"]') }}
     timeout-minutes: 10
     environment:
       name: dev

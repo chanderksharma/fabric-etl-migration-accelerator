@@ -28,7 +28,7 @@ dev = [
   "ipykernel>=7,<8",
   "ipywidgets>=8.1,<9",
   "mypy>=1.18,<2",
-  "pytest>=8.4,<9",
+  "pytest>=9.0.3,<10",
   "pytest-cov>=7,<8",
   "ruff>=0.14,<1",
   "tqdm>=4.67,<5",
@@ -71,7 +71,15 @@ target-version = "py313"
 extend-exclude = ["generated-fabric-workflows"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+select = [
+  "E", "F", "I", "UP", "B", "SIM", "RUF",
+  "ASYNC", "BLE", "DTZ", "ERA", "G", "LOG", "PLE", "PTH", "RET",
+  "S102", "S301", "S307", "S506", "S602", "S604", "S605",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S102"]
+"packages/*/tests/**" = ["S102"]
 
 [tool.ruff.lint.isort]
 known-first-party = [
@@ -84,12 +92,20 @@ known-first-party = [
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["src", "packages", "tests"]
+files = [
+  "src",
+  "packages",
+  "tests",
+  "examples/plugins/synthetic-ssis/src",
+  "examples/plugins/synthetic-databricks/src",
+]
 mypy_path = [
   "src",
   "packages/etl-migration-core/src",
   "packages/etl-portfolio-assessment/src",
   "packages/etl-target-fabric/src",
+  "examples/plugins/synthetic-ssis/src",
+  "examples/plugins/synthetic-databricks/src",
 ]
 
 [[tool.mypy.overrides]]

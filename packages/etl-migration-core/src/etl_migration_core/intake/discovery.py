@@ -9,7 +9,7 @@ import shutil
 import stat
 import tempfile
 import zipfile
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path, PurePosixPath
 from typing import IO
@@ -25,18 +25,14 @@ from etl_migration_core.intake.domain import (
     WorkflowCandidate,
     classify_input,
 )
-from etl_migration_core.sources.base import SourceFileDiscoveryAdapter
+from etl_migration_core.sources.base import SourceAdapter, SourceFileDiscoveryAdapter, SourceMatch
 from etl_migration_core.sources.registry import (
     DetectedSource,
     SourceAdapterRegistry,
-    UnknownSourceFormatError,
 )
 
-DEFAULT_ADAPTER_VERSIONS: dict[SourcePlatform, str] = {
-    SourcePlatform.ALTERYX: "1.0.0",
-    SourcePlatform.INFORMATICA_POWERCENTER: "1.0.0",
-    SourcePlatform.INFORMATICA_IDMC: "1.0.0",
-}
+IDMC_ADAPTER_ID = "informatica-idmc"
+ALTERYX_ADAPTER_ID = "alteryx"
 
 
 class InputRejectedError(ValueError):
@@ -50,20 +46,63 @@ class InputRejectedError(ValueError):
 
 
 class DiscoveryService:
-    """Discover unique workflows without executing their content."""
+    """Discover unique workflows without executing their content.
+
+    Built-in adapters are always available, so an injected registry only adds plugins and
+    candidate metadata never depends on how the service was constructed.
+    """
 
     def __init__(
         self,
         limits: DiscoveryLimits | None = None,
-        adapter_versions: Mapping[SourcePlatform, str] | None = None,
         source_registry: SourceAdapterRegistry | None = None,
     ) -> None:
+        # Imported here because the built-in adapters import archive helpers from this module.
+        from etl_migration_core.sources.defaults import with_builtin_adapters
+
         self._limits = limits or DiscoveryLimits()
-        self._adapter_versions = {
-            **DEFAULT_ADAPTER_VERSIONS,
-            **(adapter_versions or {}),
-        }
-        self._source_registry = source_registry
+        self._source_registry = with_builtin_adapters(source_registry)
+        self._claimed_extensions = self._source_registry.file_extensions()
+
+    def _adapter(self, adapter_id: str) -> SourceAdapter:
+        adapter = self._source_registry.get(adapter_id)
+        if adapter is None:
+            raise LookupError(f"Built-in source adapter is not registered: {adapter_id}")
+        return adapter
+
+    def _candidate(
+        self,
+        *,
+        source_path: str,
+        display_path: str,
+        extension: str,
+        size_bytes: int,
+        sha256: str,
+        detected: DetectedSource | None = None,
+        builtin_adapter_id: str = ALTERYX_ADAPTER_ID,
+        asset_type: str = "workflow",
+        archive_chain: tuple[str, ...] = (),
+    ) -> WorkflowCandidate:
+        """Build a candidate whose identity always comes from an adapter, never from defaults."""
+        adapter = detected.adapter if detected else self._adapter(builtin_adapter_id)
+        match: SourceMatch | None = detected.match if detected else None
+        return WorkflowCandidate(
+            source_path=source_path,
+            display_path=display_path,
+            extension=extension,
+            size_bytes=size_bytes,
+            sha256=sha256,
+            archive_path="!".join(archive_chain) or None,
+            archive_chain=archive_chain,
+            source_platform=match.platform if match else adapter.platform,
+            source_product=match.product if match else adapter.product,
+            asset_type=match.asset_type if match else asset_type,
+            adapter_id=adapter.adapter_id,
+            adapter_version=adapter.adapter_version,
+            parser_version=adapter.parser_version,
+            registry_version=adapter.registry_version,
+            rules_version=adapter.rules_version,
+        )
 
     def discover(self, input_path: Path) -> DiscoverySummary:
         """Discover workflows and produce a deterministic pre-run summary."""
@@ -179,12 +218,7 @@ class DiscoveryService:
     ) -> None:
         display_path = str(path.relative_to(relative_to)) if relative_to else path.name
         extension = path.suffix.casefold()
-        plugin_extension = (
-            extension not in SUPPORTED_EXTENSIONS
-            and self._source_registry is not None
-            and extension in self._source_registry.file_extensions()
-        )
-        if extension not in SUPPORTED_EXTENSIONS and not plugin_extension:
+        if extension not in SUPPORTED_EXTENSIONS and extension not in self._claimed_extensions:
             skipped.append(
                 SkippedItem(
                     display_path,
@@ -209,26 +243,11 @@ class DiscoveryService:
                 )
             )
             return
-        detected = None
+        detected: DetectedSource | None = None
         try:
-            if extension == ".xml":
-                with path.open("rb") as stream:
-                    is_powercenter = b"<POWERMART" in stream.read(64_000)
-                if not is_powercenter:
-                    skipped.append(
-                        SkippedItem(
-                            display_path,
-                            SkipReason.UNSUPPORTED_INPUT,
-                            "XML input is not a PowerCenter repository export",
-                        )
-                    )
-                    return
-            elif plugin_extension:
-                detected = self._detect_plugin_file(path, extension, display_path)
+            if extension == ".xml" or extension not in SUPPORTED_EXTENSIONS:
+                detected = self._detect_claimed(path, extension, display_path)
             digest = self._stream_digest(path.open("rb"))
-        except UnknownSourceFormatError as error:
-            skipped.append(SkippedItem(display_path, SkipReason.UNSUPPORTED_INPUT, str(error)))
-            return
         except ValueError as error:
             skipped.append(SkippedItem(display_path, SkipReason.UNSUPPORTED_INPUT, str(error)))
             return
@@ -249,54 +268,40 @@ class DiscoveryService:
             return
         seen_hashes[digest] = display_path
         candidates.append(
-            WorkflowCandidate(
+            self._candidate(
                 source_path=str(path),
                 display_path=display_path,
                 extension=extension,
                 size_bytes=size,
                 sha256=digest,
-                source_platform=(
-                    detected.match.platform
-                    if detected is not None
-                    else SourcePlatform.INFORMATICA_POWERCENTER
-                    if extension == ".xml"
-                    else SourcePlatform.ALTERYX
-                ),
-                source_product=(
-                    detected.match.product
-                    if detected is not None
-                    else "Informatica PowerCenter"
-                    if extension == ".xml"
-                    else "Alteryx Designer"
-                ),
-                asset_type=(
-                    detected.match.asset_type
-                    if detected is not None
-                    else "repository_export" if extension == ".xml" else "workflow"
-                ),
-                adapter_id=(
-                    detected.adapter.adapter_id
-                    if detected is not None
-                    else "informatica-powercenter" if extension == ".xml" else "alteryx"
-                ),
-                adapter_version=(
-                    detected.adapter.adapter_version
-                    if detected is not None
-                    else self._adapter_versions[SourcePlatform.INFORMATICA_POWERCENTER]
-                    if extension == ".xml"
-                    else self._adapter_versions[SourcePlatform.ALTERYX]
-                ),
-                parser_version=detected.adapter.parser_version if detected else None,
-                registry_version=detected.adapter.registry_version if detected else None,
-                rules_version=detected.adapter.rules_version if detected else None,
+                detected=detected,
             )
         )
 
-    def _detect_plugin_file(
-        self, path: Path, extension: str, display_path: str
+    def _detect(self, source: Path | bytes, extension: str, display_path: str) -> DetectedSource:
+        """Detect a claimed format from a file or from archive-member bytes."""
+        if isinstance(source, Path):
+            return self._source_registry.detect(source, display_path)
+        if self._source_registry.supports_stream_probe(extension):
+            return self._source_registry.detect_bytes(source, display_path)
+        with tempfile.TemporaryDirectory(prefix="source-discovery-") as directory:
+            staged = Path(directory) / f"source{extension}"
+            staged.write_bytes(source)
+            return self._source_registry.detect(staged, display_path)
+
+    def _detect_claimed(
+        self, source: Path | bytes, extension: str, display_path: str
     ) -> DetectedSource:
-        assert self._source_registry is not None
-        detected = self._source_registry.detect(path, display_path)
+        """Detect XML or a plugin-claimed extension, validating plugin declarations."""
+        detected = self._detect(source, extension, display_path)
+        if extension != ".xml":
+            self._validate_plugin_detection(detected, extension)
+        return detected
+
+    @staticmethod
+    def _validate_plugin_detection(
+        detected: DetectedSource, extension: str
+    ) -> DetectedSource:
         if (
             not isinstance(detected.adapter, SourceFileDiscoveryAdapter)
             or extension not in detected.adapter.supported_extensions
@@ -371,16 +376,14 @@ class DiscoveryService:
             return
         seen_hashes[digest] = archive.name
         candidates.append(
-            WorkflowCandidate(
+            self._candidate(
                 source_path=str(archive),
                 display_path=archive.name,
                 extension=".zip",
                 size_bytes=size,
                 sha256=digest,
-                source_platform=SourcePlatform.INFORMATICA_IDMC,
-                source_product="Informatica IDMC",
+                builtin_adapter_id=IDMC_ADAPTER_ID,
                 asset_type="export_package",
-                adapter_id="informatica-idmc",
             )
         )
 
@@ -404,16 +407,14 @@ class DiscoveryService:
             return
         seen_hashes[value] = root.name
         candidates.append(
-            WorkflowCandidate(
+            self._candidate(
                 source_path=str(root),
                 display_path=root.name,
                 extension=".idmc",
                 size_bytes=size,
                 sha256=value,
-                source_platform=SourcePlatform.INFORMATICA_IDMC,
-                source_product="Informatica IDMC",
+                builtin_adapter_id=IDMC_ADAPTER_ID,
                 asset_type="export_package",
-                adapter_id="informatica-idmc",
             )
         )
 
@@ -469,15 +470,8 @@ class DiscoveryService:
                     )
                 continue
             extension = safe_path.suffix.casefold()
-            plugin_extension = (
-                extension not in SUPPORTED_EXTENSIONS
-                and extension != ".zip"
-                and self._source_registry is not None
-                and extension in self._source_registry.file_extensions()
-            )
-            if (extension not in SUPPORTED_EXTENSIONS and not plugin_extension) or (
-                extension == ".yxzp"
-            ):
+            claimed = extension in self._claimed_extensions and extension != ".zip"
+            if (extension not in SUPPORTED_EXTENSIONS and not claimed) or extension == ".yxzp":
                 skipped.append(
                     SkippedItem(
                         entry.filename,
@@ -497,23 +491,11 @@ class DiscoveryService:
                 continue
             with package.open(entry, "r") as stream:
                 content = self._read_member(stream, entry, budget)
-            if extension == ".xml" and b"<POWERMART" not in content[:64_000]:
-                skipped.append(
-                    SkippedItem(
-                        entry.filename,
-                        SkipReason.UNSUPPORTED_INPUT,
-                        "XML input is not a PowerCenter repository export",
-                    )
-                )
-                continue
-            detected = None
             display_path = "!".join((*chain, entry.filename))
-            if plugin_extension:
+            detected: DetectedSource | None = None
+            if extension == ".xml" or extension not in SUPPORTED_EXTENSIONS:
                 try:
-                    with tempfile.TemporaryDirectory(prefix="source-discovery-") as directory:
-                        staged = Path(directory) / f"source{extension}"
-                        staged.write_bytes(content)
-                        detected = self._detect_plugin_file(staged, extension, display_path)
+                    detected = self._detect_claimed(content, extension, display_path)
                 except ValueError as error:
                     skipped.append(
                         SkippedItem(display_path, SkipReason.UNSUPPORTED_INPUT, str(error))
@@ -537,48 +519,14 @@ class DiscoveryService:
                 continue
             seen_hashes[digest] = entry.filename
             candidates.append(
-                WorkflowCandidate(
+                self._candidate(
                     source_path=str(archive),
                     display_path=display_path,
                     extension=extension,
                     size_bytes=entry.file_size,
                     sha256=digest,
-                    archive_path="!".join((*chain, entry.filename)),
+                    detected=detected,
                     archive_chain=(*chain, entry.filename),
-                    source_platform=(
-                        detected.match.platform
-                        if detected is not None
-                        else SourcePlatform.INFORMATICA_POWERCENTER
-                        if extension == ".xml"
-                        else SourcePlatform.ALTERYX
-                    ),
-                    source_product=(
-                        detected.match.product
-                        if detected is not None
-                        else "Informatica PowerCenter"
-                        if extension == ".xml"
-                        else "Alteryx Designer"
-                    ),
-                    asset_type=(
-                        detected.match.asset_type
-                        if detected is not None
-                        else "repository_export" if extension == ".xml" else "workflow"
-                    ),
-                    adapter_id=(
-                        detected.adapter.adapter_id
-                        if detected is not None
-                        else "informatica-powercenter" if extension == ".xml" else "alteryx"
-                    ),
-                    adapter_version=(
-                        detected.adapter.adapter_version
-                        if detected is not None
-                        else self._adapter_versions[SourcePlatform.INFORMATICA_POWERCENTER]
-                        if extension == ".xml"
-                        else self._adapter_versions[SourcePlatform.ALTERYX]
-                    ),
-                    parser_version=detected.adapter.parser_version if detected else None,
-                    registry_version=detected.adapter.registry_version if detected else None,
-                    rules_version=detected.adapter.rules_version if detected else None,
                 )
             )
 
@@ -636,42 +584,7 @@ class DiscoveryService:
             yield destination
 
     def _validate_archive(self, archive: Path, entries: list[zipfile.ZipInfo]) -> None:
-        if len(entries) > self._limits.max_archive_entries:
-            raise InputRejectedError(
-                str(archive),
-                SkipReason.ARCHIVE_ENTRY_LIMIT,
-                f"{len(entries)} entries exceeds {self._limits.max_archive_entries}",
-            )
-        expanded_size = sum(entry.file_size for entry in entries)
-        if expanded_size > self._limits.max_archive_uncompressed_bytes:
-            raise InputRejectedError(
-                str(archive),
-                SkipReason.ARCHIVE_SIZE_LIMIT,
-                f"{expanded_size} bytes exceeds {self._limits.max_archive_uncompressed_bytes}",
-            )
-        names: set[str] = set()
-        for entry in entries:
-            validate_member_path(archive, entry.filename)
-            normalized = str(PurePosixPath(entry.filename.replace("\\", "/"))).casefold()
-            if (
-                normalized in names
-                or entry.flag_bits & 1
-                or stat.S_ISLNK(entry.external_attr >> 16)
-            ):
-                raise InputRejectedError(
-                    entry.filename,
-                    SkipReason.INVALID_ARCHIVE,
-                    "Colliding, encrypted, or linked archive entry",
-                )
-            names.add(normalized)
-            compressed = max(entry.compress_size, 1)
-            ratio = entry.file_size / compressed
-            if ratio > self._limits.max_compression_ratio:
-                raise InputRejectedError(
-                    entry.filename,
-                    SkipReason.ARCHIVE_RATIO_LIMIT,
-                    f"Compression ratio {ratio:.1f} exceeds {self._limits.max_compression_ratio}",
-                )
+        validate_archive_entries(archive, entries, self._limits)
 
     @contextmanager
     def staged_zip(self, archive: Path) -> Iterator[Path]:
@@ -694,6 +607,51 @@ class DiscoveryService:
                 yield sandbox
             finally:
                 shutil.rmtree(sandbox, ignore_errors=False)
+
+
+def validate_archive_entries(
+    archive: Path,
+    entries: list[zipfile.ZipInfo],
+    limits: DiscoveryLimits,
+) -> set[str]:
+    """Validate ZIP entry counts, paths, compression ratios, and expansion limits."""
+    if len(entries) > limits.max_archive_entries:
+        raise InputRejectedError(
+            str(archive),
+            SkipReason.ARCHIVE_ENTRY_LIMIT,
+            f"{len(entries)} entries exceeds {limits.max_archive_entries}",
+        )
+    expanded_size = sum(entry.file_size for entry in entries)
+    if expanded_size > limits.max_archive_uncompressed_bytes:
+        raise InputRejectedError(
+            str(archive),
+            SkipReason.ARCHIVE_SIZE_LIMIT,
+            f"{expanded_size} bytes exceeds {limits.max_archive_uncompressed_bytes}",
+        )
+    names: set[str] = set()
+    for entry in entries:
+        validate_member_path(archive, entry.filename)
+        normalized = str(PurePosixPath(entry.filename.replace("\\", "/"))).casefold()
+        if (
+            normalized in names
+            or entry.flag_bits & 1
+            or stat.S_ISLNK(entry.external_attr >> 16)
+        ):
+            raise InputRejectedError(
+                entry.filename,
+                SkipReason.INVALID_ARCHIVE,
+                "Colliding, encrypted, or linked archive entry",
+            )
+        names.add(normalized)
+        compressed = max(entry.compress_size, 1)
+        ratio = entry.file_size / compressed
+        if ratio > limits.max_compression_ratio:
+            raise InputRejectedError(
+                entry.filename,
+                SkipReason.ARCHIVE_RATIO_LIMIT,
+                f"Compression ratio {ratio:.1f} exceeds {limits.max_compression_ratio}",
+            )
+    return names
 
 
 def validate_member_path(archive: Path, member_name: str) -> PurePosixPath:

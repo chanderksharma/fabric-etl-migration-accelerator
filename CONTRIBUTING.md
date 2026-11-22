@@ -69,7 +69,7 @@ Contributors use the following standard toolchain to develop, validate, and main
 | **Python** | `3.13` | Backend runtime, parsers, compilers, FastAPI, Typer CLI | [python.org](https://www.python.org/downloads/) or `uv python install 3.13` |
 | **uv** | Latest | Deterministic Python package/lockfile (`uv.lock`) and virtualenv manager | [docs.astral.sh/uv](https://docs.astral.sh/uv/getting-started/installation/) |
 | **Ruff / mypy / pytest** | Locked in `uv.lock` | Python linting, `--strict` static type checking, and `>=80%` coverage test runner | Run via `uv run --extra dev <tool>` |
-| **pip-audit** | Latest via `uvx` | Python dependency CVE scanning (`uvx pip-audit --strict`) | [pypi.org/project/pip-audit](https://pypi.org/project/pip-audit/) |
+| **pip-audit** | Latest via `uvx` | Python dependency CVE scanning of the exported lock (`uv export`, then `uvx pip-audit --strict --disable-pip -r <file>`; see [Local Development & Verification](README.md#local-development--verification)) | [pypi.org/project/pip-audit](https://pypi.org/project/pip-audit/) |
 | **Node.js & npm** | `22.x` | Building, linting (`eslint`), and testing (`vitest`) the React UI in `apps/web/` | [nodejs.org](https://nodejs.org/) |
 | **PowerShell** | `7.0+` (`pwsh`) | Executing and dry-run testing `scripts/Deploy-FabricArtifacts.ps1` | [aka.ms/powershell](https://aka.ms/powershell) |
 | **DocFX** | `2.x` (optional locally) | Previewing Chrysalis Docs-as-Code Wiki (`docfx.json` + `toc.yml`) | [dotnet.github.io/docfx](https://dotnet.github.io/docfx/) |

@@ -14,8 +14,10 @@ from etl_target_fabric.compilers.alteryx import Target, generate_candidate
 from etl_target_fabric.compilers.ir import compile_asset_targets
 
 if TYPE_CHECKING:
+    from etl_migration_core.sources.alteryx.graph import WorkflowGraph
     from etl_target_fabric.assessment.ir_assessment import EtlAssessment
     from etl_target_fabric.assessment.workflow import WorkflowAssessment
+    from etl_target_fabric.compilers.ir import EtlCompiledTargets
 
 
 def evaluate_alteryx_native_route(
@@ -25,14 +27,15 @@ def evaluate_alteryx_native_route(
     default_target: str,
     default_components: Sequence[str],
     default_reason: str,
+    graph: WorkflowGraph | None = None,
 ) -> TargetEvaluation:
     """Evaluate Fabric target fit for an Alteryx workflow without mutating assessment."""
     if (
         unsupported_tools
         and {"Dataflow Gen2", "Fabric Notebook"}.issubset(default_components)
     ):
-        dataflow = generate_candidate(path, "dataflow")
-        notebook = generate_candidate(path, "notebook")
+        dataflow = generate_candidate(path, "dataflow", graph=graph)
+        notebook = generate_candidate(path, "notebook", graph=graph)
         if dataflow.deployable and notebook.deployable:
             bindings = (*dataflow.required_bindings, *notebook.required_bindings)
             return TargetEvaluation(
@@ -58,7 +61,7 @@ def evaluate_alteryx_native_route(
         ("notebook", "Fabric Notebook"),
     )
     for target, label in labels:
-        candidate = generate_candidate(path, target)
+        candidate = generate_candidate(path, target, graph=graph)
         if not candidate.deployable:
             continue
         reason = default_reason
@@ -93,9 +96,10 @@ def evaluate_etl_native_route(
     asset: EtlAsset,
     *,
     base_reason: str,
+    compiled: EtlCompiledTargets | None = None,
 ) -> TargetEvaluation:
     """Evaluate Fabric target fit using one shared set of compiled definitions."""
-    candidates = compile_asset_targets(package, asset)
+    candidates = compiled or compile_asset_targets(package, asset)
     if candidates.dataflow.deployable and candidates.pipeline.deployable:
         bindings = (
             *candidates.dataflow.required_bindings,
@@ -177,7 +181,10 @@ def evaluate_etl_native_route(
 
 
 def apply_alteryx_native_route(
-    path: Path, assessment: WorkflowAssessment
+    path: Path,
+    assessment: WorkflowAssessment,
+    *,
+    graph: WorkflowGraph | None = None,
 ) -> WorkflowAssessment:
     """Finalize Alteryx assessment routing without executing the workflow."""
     evaluation = evaluate_alteryx_native_route(
@@ -186,6 +193,7 @@ def apply_alteryx_native_route(
         default_target=assessment.recommended_target,
         default_components=assessment.target_components,
         default_reason=assessment.recommendation_reason,
+        graph=graph,
     )
     return replace(
         assessment,

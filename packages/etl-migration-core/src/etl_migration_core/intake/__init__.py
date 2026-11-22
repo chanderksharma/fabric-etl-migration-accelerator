@@ -1,7 +1,6 @@
 """Secure input discovery, archive validation, and domain models."""
 
 from etl_migration_core.intake.discovery import (
-    DEFAULT_ADAPTER_VERSIONS,
     DiscoveryService,
     InputRejectedError,
     validate_member_path,
@@ -18,7 +17,6 @@ from etl_migration_core.intake.domain import (
 )
 
 __all__ = [
-    "DEFAULT_ADAPTER_VERSIONS",
     "SUPPORTED_EXTENSIONS",
     "DiscoveryLimits",
     "DiscoveryService",

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from etl_migration_core.contracts.ir import (
     EXTENSIBLE_SOURCE_IR_VERSION,
     AssetType,
@@ -16,7 +18,13 @@ from etl_migration_core.contracts.ir import (
     NodeKind,
     SourcePlatform,
 )
-from etl_portfolio_assessment.assessment.engine import assess_package_neutral
+from etl_portfolio_assessment.assessment.engine import (
+    NEUTRAL_ASSESSMENT_VERSION,
+    NEUTRAL_RULES_FINGERPRINT,
+    NEUTRAL_RULES_VERSION,
+    assess_package_neutral,
+    classify_neutral_operation,
+)
 from etl_portfolio_assessment.assessment.workload_profile import extract_workload_profile
 from etl_portfolio_assessment.service.application import PortfolioAssessmentApplication
 from etl_portfolio_assessment.service.stdio import main as assess_stdio_main
@@ -133,3 +141,28 @@ def test_unknown_source_uses_generic_neutral_profile() -> None:
     profile = extract_workload_profile(package, asset)
     assert profile.source_platform == "ssis"
     assert profile.profile_kind == "generic"
+
+
+def test_neutral_rules_fingerprint_is_a_golden_value() -> None:
+    # A rule or table edit changes the fingerprint (and therefore every cache key).
+    # Update the literal together with NEUTRAL_RULES_VERSION in the same change.
+    assert NEUTRAL_RULES_VERSION == "1.2.0"
+    assert NEUTRAL_RULES_FINGERPRINT == "b160788f085f"
+    assert f"1.2.0+{NEUTRAL_RULES_FINGERPRINT}" == NEUTRAL_ASSESSMENT_VERSION
+
+
+@pytest.mark.parametrize(
+    ("operation", "has_issues", "expected"),
+    [
+        ("ControlContainer", False, "orchestration"),
+        ("Container", False, "neutral"),
+        ("Source Qualifier", False, "tabular"),
+        ("filter", True, "manual"),
+        ("Python", False, "script"),
+        ("unrecognized", False, "manual"),
+    ],
+)
+def test_operation_classification_golden_vectors(
+    operation: str, has_issues: bool, expected: str
+) -> None:
+    assert classify_neutral_operation(operation, has_issues=has_issues) == expected

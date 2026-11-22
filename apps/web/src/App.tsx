@@ -100,6 +100,23 @@ const sourceTypes: Array<{ id: SourceType; title: string; detail: string }> = [
   { id: "plugin", title: "Installed plugins", detail: "Registered external source adapters" },
 ];
 
+type InstalledPlugin = { product: string; supported_extensions: string[] };
+
+function parseInstalledPlugins(body: unknown): InstalledPlugin[] {
+  const sources = (body as { sources?: unknown } | null)?.sources;
+  if (!Array.isArray(sources)) return [];
+  return sources.flatMap((source: Record<string, unknown>) =>
+    typeof source?.origin === "string" && source.origin.startsWith("plugin:")
+      && typeof source.product === "string" && Array.isArray(source.supported_extensions)
+      ? [{
+        product: source.product,
+        supported_extensions: source.supported_extensions.filter(
+          (extension): extension is string => typeof extension === "string",
+        ),
+      }]
+      : []);
+}
+
 const modes: Record<SourceType, Array<{ id: BrowseMode; title: string; detail: string }>> = {
   alteryx: [
     { id: "files", title: "Select file(s)", detail: ".yxmd, .yxmc, .yxwz, or .yxzp" },
@@ -148,6 +165,9 @@ export function App() {
   const [neutralAssessment, setNeutralAssessment] = useState<NeutralAssessment | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [installedPlugins, setInstalledPlugins] = useState<InstalledPlugin[] | null>(null);
+  const [failedPlugins, setFailedPlugins] = useState(0);
+  const pluginsRequested = useRef(false);
   const [theme, setTheme] = useState(() => localStorage.getItem("accelerator-theme") ?? "light");
   const selectionEpoch = useRef(0);
   const activeRunId = useRef(runId);
@@ -182,14 +202,36 @@ export function App() {
   }, [theme]);
 
   useEffect(() => {
+    if (sourceType !== "plugin" || pluginsRequested.current) return;
+    pluginsRequested.current = true;
+    void (async () => {
+      try {
+        const [sources, plugins] = await Promise.all([
+          apiRequest("/api/sources").then(response => response.json()),
+          apiRequest("/api/plugins").then(response => response.json()),
+        ]);
+        setInstalledPlugins(parseInstalledPlugins(sources));
+        setFailedPlugins(typeof plugins?.failed_count === "number" ? plugins.failed_count : 0);
+      } catch {
+        pluginsRequested.current = false;
+      }
+    })();
+  }, [sourceType]);
+
+  useEffect(() => {
     if (!runId) return;
     const epoch = selectionEpoch.current;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function poll() {
       try {
-        const response = await apiRequest(`/api/runs/${runId}`);
-        const current: RunResult = await response.json();
+        // Poll the lightweight status; fetch the full result once, when the run completes.
+        const statusResponse = await apiRequest(`/api/runs/${runId}/status`);
+        let current: RunResult = await statusResponse.json();
+        if (current.status === "completed" && !current.result) {
+          const response = await apiRequest(`/api/runs/${runId}`);
+          current = await response.json();
+        }
         if (disposed || epoch !== selectionEpoch.current || activeRunId.current !== runId) return;
         setRun(current);
         if (current.status === "completed" && current.result) {
@@ -255,8 +297,9 @@ export function App() {
   }, [activePage]);
 
   const inputModes = modes[sourceType];
+  const pluginExtensions = installedPlugins?.flatMap(plugin => plugin.supported_extensions) ?? [];
   const accept = sourceType === "plugin"
-    ? selectedMode === "zip" ? ".zip" : undefined
+    ? selectedMode === "zip" ? ".zip" : pluginExtensions.length ? pluginExtensions.join(",") : undefined
     : sourceType === "alteryx"
       ? selectedMode === "zip" ? ".zip,.yxzp" : ".yxmd,.yxmc,.yxwz,.yxzp"
       : selectedMode === "zip" ? ".zip" : ".xml,.zip";
@@ -617,6 +660,16 @@ export function App() {
               </button>
             ))}
           </div>
+
+          {sourceType === "plugin" && installedPlugins && (
+            <p className="hint" data-testid="plugin-sources">
+              {installedPlugins.length
+                ? `Installed: ${installedPlugins.map(plugin =>
+                  `${plugin.product} (${plugin.supported_extensions.join(", ")})`).join("; ")}.`
+                : "No source plugins are installed."}
+              {failedPlugins > 0 && ` ${failedPlugins} installed plugin${failedPlugins === 1 ? "" : "s"} failed to load; see /api/plugins.`}
+            </p>
+          )}
 
           <div className="modeGrid" role="radiogroup" aria-label="Input mode">
             {inputModes.map((mode) => (

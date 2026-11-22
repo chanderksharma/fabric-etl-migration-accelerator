@@ -295,7 +295,7 @@ def desktop_entry() -> int:
             smoke_test=smoke_test,
         )
     except Exception as error:
-        logging.exception("Desktop startup failed")
+        logging.getLogger(__name__).exception("Desktop startup failed")
         if smoke_test:
             print(str(error), file=sys.stderr)
         else:

@@ -2,12 +2,16 @@ name: CI
 
 on:
   pull_request:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   python:
+    if: github.event_name != 'schedule'
     runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["self-hosted", "Windows", "X64"]') }}
     timeout-minutes: 30
     env:
@@ -21,7 +25,7 @@ jobs:
           enable-cache: true
       - run: uv python install 3.13
       - run: uv sync --extra dev --locked
-      - run: uv run ruff check src packages tests
+      - run: uv run ruff check src packages tests examples
       - run: uv run mypy
       - run: uv run pytest --cov-fail-under=80
       - run: uv build --all-packages --wheel
@@ -30,7 +34,31 @@ jobs:
           uv run --isolated --no-project --with dist/etl_migration_core-*.whl --with dist/etl_portfolio_assessment-*.whl python -c "import sys; from pathlib import Path; from etl_portfolio_assessment.service.application import PortfolioAssessmentApplication; res = PortfolioAssessmentApplication().assess_neutral(Path('alteryx-workflows')); assert res.workflow_count > 0 and 'fastapi' not in sys.modules"
           uv run --isolated --no-project --with dist/etl_migration_core-*.whl --with dist/etl_target_fabric-*.whl python -c "import sys; from etl_migration_core.targets import create_target_registry; reg = create_target_registry(); assert reg.require_implemented('fabric', capability='codegen').platform_id == 'fabric'; assert 'fastapi' not in sys.modules"
 
+  plugin-entry-points:
+    if: github.event_name != 'schedule'
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["self-hosted", "Windows", "X64"]') }}
+    timeout-minutes: 20
+    env:
+      UV_PYTHON_DOWNLOADS: automatic
+      UV_PYTHON_PREFERENCE: only-managed
+      ACCELERATOR_REQUIRE_INSTALLED_PLUGINS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --extra dev --locked
+      - name: Install the example plugins as real distributions
+        run: uv pip install --no-deps ./examples/plugins/synthetic-ssis ./examples/plugins/synthetic-databricks
+      - name: Verify entry-point discovery
+        run: uv run --no-sync pytest tests/test_installed_plugins.py --no-cov
+      - name: Verify the plugin catalog
+        run: uv run --no-sync tool plugins
+
   web:
+    if: github.event_name != 'schedule'
     runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["self-hosted", "Windows", "X64"]') }}
     timeout-minutes: 30
     defaults:
@@ -62,8 +90,10 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
-      - name: Audit Python dependencies
-        run: uvx pip-audit --strict
+      - name: Export locked Python dependencies
+        run: uv export --locked --all-extras --no-emit-workspace --format requirements-txt --output-file "${{ runner.temp }}/audit-requirements.txt"
+      - name: Audit locked Python dependencies
+        run: uvx pip-audit --strict --disable-pip -r "${{ runner.temp }}/audit-requirements.txt"
       - name: Audit Web dependencies
         working-directory: apps/web
         run: npm audit --audit-level=high

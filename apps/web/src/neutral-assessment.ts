@@ -1,3 +1,9 @@
+export type NeutralComponent = {
+  operation: string;
+  count: number;
+  classification: string;
+};
+
 type NeutralAsset = {
   path: string;
   name: string;
@@ -9,6 +15,9 @@ type NeutralAsset = {
   complexity_band: string;
   intrinsic_effort_days: number;
   unknown_components: string[];
+  inventory?: NeutralComponent[];
+  dependencies?: string[];
+  data_sources?: string[];
 };
 
 export type NeutralAssessment = {

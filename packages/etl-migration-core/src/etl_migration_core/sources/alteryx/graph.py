@@ -12,7 +12,10 @@ from xml.etree.ElementTree import Element, tostring
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 
+from etl_migration_core.sources.io import SourceChangedError, SourceTooLargeError, read_bounded
+
 GRAPH_VERSION = "1.4.0"
+MAX_WORKFLOW_BYTES = 100 * 1024 * 1024
 
 
 class WorkflowParseError(ValueError):
@@ -57,14 +60,21 @@ def redact(value: str) -> str:
     )
 
 
+@dataclass(frozen=True)
+class ParsedWorkflow:
+    """One parse result: the static graph plus root metadata from the same document."""
+
+    graph: WorkflowGraph
+    product_version: str | None
+
+
 def parse_graph(path: Path) -> WorkflowGraph:
+    return parse_workflow(path).graph
+
+
+def parse_workflow(path: Path) -> ParsedWorkflow:
     try:
-        if path.stat().st_size > 100 * 1024 * 1024:
-            raise WorkflowParseError("Workflow exceeds the parser size limit")
-        with path.open("rb") as stream:
-            content = stream.read(100 * 1024 * 1024 + 1)
-        if len(content) > 100 * 1024 * 1024:
-            raise WorkflowParseError("Workflow exceeds the parser size limit")
+        content = read_bounded(path, MAX_WORKFLOW_BYTES)
         root: Element | None = None
         depth = -1
         elements = 0
@@ -84,7 +94,14 @@ def parse_graph(path: Path) -> WorkflowGraph:
                     raise WorkflowParseError("XML nesting or element count exceeds parser limits")
             else:
                 depth -= 1
-    except (ElementTree.ParseError, DefusedXmlException, OSError) as error:
+    except SourceTooLargeError as error:
+        raise WorkflowParseError("Workflow exceeds the parser size limit") from error
+    except (
+        ElementTree.ParseError,
+        DefusedXmlException,
+        OSError,
+        SourceChangedError,
+    ) as error:
         raise WorkflowParseError(f"Unable to parse {path.name}: {type(error).__name__}") from error
     if root is None:
         raise WorkflowParseError("Workflow has no XML root")
@@ -92,6 +109,7 @@ def parse_graph(path: Path) -> WorkflowGraph:
         element.tag = element.tag.rsplit("}", 1)[-1]
     if root.tag != "AlteryxDocument":
         raise WorkflowParseError(f"Unable to parse {path.name}: expected AlteryxDocument")
+    product_version = root.get("yxmdVer")
     pending: list[tuple[Element, int]] = [(root, 0)]
     while pending:
         element, depth = pending.pop()
@@ -221,13 +239,18 @@ def parse_graph(path: Path) -> WorkflowGraph:
                 ready.append(target)
     if visited != len(ids):
         raise WorkflowParseError("Workflow graph contains a cycle")
-    return WorkflowGraph(
-        tuple(nodes),
-        tuple(edges),
-        tuple(sorted(dependencies)),
-        tuple(sorted(sources)),
-        hashlib.sha256(content).hexdigest(),
-        tuple(issue for event in root.iter("Events") if (issue := _event_issue(event)) is not None),
+    return ParsedWorkflow(
+        WorkflowGraph(
+            tuple(nodes),
+            tuple(edges),
+            tuple(sorted(dependencies)),
+            tuple(sorted(sources)),
+            hashlib.sha256(content).hexdigest(),
+            tuple(
+                issue for event in root.iter("Events") if (issue := _event_issue(event)) is not None
+            ),
+        ),
+        product_version,
     )
 
 

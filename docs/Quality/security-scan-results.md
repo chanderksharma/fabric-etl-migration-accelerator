@@ -1,12 +1,12 @@
 ---
 title: Security Scan Results
 description: Dependency, static-analysis, and platform security validation evidence
-ms.date: 2026-11-08
+ms.date: 2026-11-22
 ---
 
 | Scan | Command | Result |
 |------|---------|--------|
-| Python dependency audit | `uvx pip-audit --strict` | No known vulnerabilities (enforced in CI) |
+| Python dependency audit | `uv export --locked --all-extras --no-emit-workspace --format requirements-txt --output-file <file>`, then `uvx pip-audit --strict --disable-pip -r <file>` | No known vulnerabilities in 94 locked packages after upgrading `pytest` to 9.2.0 and `tornado` to 6.6.1 (enforced in CI; see AF-09) |
 | Web dependency audit | `npm audit --audit-level=high` | Zero vulnerabilities (enforced in CI) |
 | Static analysis (SAST) | GitHub CodeQL (`python`, `javascript-typescript`), Ruff, and mypy | Enforced in CI and passed locally |
 | Threat model | STRIDE review (`docs/Security/threat-model.md`) | Completed; OIDC federation & SDL controls implemented |

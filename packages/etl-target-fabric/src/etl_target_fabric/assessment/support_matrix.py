@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 DATAFLOW_TOOL_MARKERS = frozenset(
     {
         "alteryxselect",
@@ -88,6 +91,28 @@ PIPELINE_OPERATIONS = frozenset(
     }
 )
 NEUTRAL_OPERATIONS = frozenset({"annotation", "container", "end", "start"})
+
+
+def support_table_fingerprint() -> str:
+    """Hash every support table so an edit invalidates caches even without a version bump."""
+    payload = {
+        name: sorted(table)
+        for name, table in {
+            "dataflow_tools": DATAFLOW_TOOL_MARKERS,
+            "notebook_tools": NOTEBOOK_TOOL_MARKERS,
+            "pipeline_tools": PIPELINE_TOOL_MARKERS,
+            "neutral_tools": NEUTRAL_TOOL_MARKERS,
+            "annotation_identities": ANNOTATION_IDENTITIES,
+            "dataflow_operations": DATAFLOW_OPERATIONS,
+            "notebook_operations": NOTEBOOK_OPERATIONS,
+            "pipeline_operations": PIPELINE_OPERATIONS,
+            "neutral_operations": NEUTRAL_OPERATIONS,
+        }.items()
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+SUPPORT_TABLE_FINGERPRINT = support_table_fingerprint()
 
 
 def alteryx_support_for(plugin: str) -> str:

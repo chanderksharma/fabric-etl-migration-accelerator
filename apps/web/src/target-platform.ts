@@ -6,6 +6,8 @@ export type TargetPlatformInfo = {
   implemented: boolean;
   status: "ready" | "placeholder";
   capabilities: string[];
+  target_kinds?: string[];
+  origin?: string;
   description: string;
 };
 
@@ -22,6 +24,10 @@ export function isTargetPlatformInfo(value: unknown): value is TargetPlatformInf
     (platform.status === "ready" || platform.status === "placeholder") &&
     Array.isArray(platform.capabilities) &&
     platform.capabilities.every((item: unknown) => typeof item === "string") &&
+    (platform.target_kinds === undefined || (
+      Array.isArray(platform.target_kinds) &&
+      platform.target_kinds.every((item: unknown) => typeof item === "string")
+    )) &&
     typeof platform.description === "string"
   );
 }

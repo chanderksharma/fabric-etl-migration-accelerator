@@ -8,7 +8,7 @@ from pathlib import Path
 
 from etl_migration_core.contracts.ir import AssetType, SourcePlatform
 from etl_migration_core.sources.alteryx import AlteryxSourceAdapter
-from etl_migration_core.sources.alteryx.graph import GRAPH_VERSION
+from etl_migration_core.sources.alteryx.graph import GRAPH_VERSION, WorkflowGraph
 from etl_migration_core.sources.alteryx.graph import WorkflowParseError as WorkflowParseError
 from etl_target_fabric.assessment.effort import assessment_effort_days
 from etl_target_fabric.assessment.support_matrix import (
@@ -76,9 +76,11 @@ class WorkflowAssessment:
     capacity_profile: CapacityStaticProfile | None = None
 
 
-def assess_workflow(path: Path) -> WorkflowAssessment:
+def assess_workflow(
+    path: Path, *, graph: WorkflowGraph | None = None
+) -> WorkflowAssessment:
     """Parse and assess one XML-based Alteryx workflow."""
-    graph = AlteryxSourceAdapter().legacy_graph(path)
+    graph = graph or AlteryxSourceAdapter().legacy_graph(path)
     active = [node for node in graph.nodes if not node.disabled]
     tool_names = [node.name for node in active]
     counts = Counter((node.name, node.plugin) for node in active)

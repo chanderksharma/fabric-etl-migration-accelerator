@@ -1,21 +1,23 @@
 """FastAPI entry point."""
 
 import asyncio
+import logging
 import os
 import secrets
 import shutil
 import tempfile
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from contextlib import asynccontextmanager, nullcontext, suppress
-from pathlib import Path, PurePosixPath
+from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 from typing import Annotated, Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import TypeAdapter
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -36,19 +38,42 @@ from accelerator.delivery.gitlab import (
 )
 from accelerator.delivery.provenance import PublicationDispatch
 from accelerator.runtime.runs import (
-    ArtifactWriteResult,
     Run,
     RunService,
+    RunStatus,
     RunTargetEvaluation,
     SnapshotPreview,
 )
+from accelerator.server.deployment import (
+    DeploymentTarget,
+    plan_deployment_dispatch,
+    resolve_deployment_artifact,
+)
+from accelerator.server.schemas import (
+    Confirmation,
+    DevSelection,
+    FolderSelectionResponse,
+    LocalSelection,
+    PluginsResponse,
+    PublicationReference,
+    SourcesResponse,
+    TargetsResponse,
+)
+from accelerator.server.uploads import stage_uploads
+from accelerator.settings import Settings, configure_logging
 from accelerator.targets import (
     TargetPlatformRegistry,
     UnknownTargetPlatformError,
     create_default_target_registry,
 )
-from etl_migration_core.contracts.spi import TargetPlatformInfo, UnsupportedTargetCapabilityError
-from etl_migration_core.intake.discovery import InputRejectedError, validate_member_path
+from etl_migration_core.contracts.spi import (
+    TargetCapacityResult,
+    TargetGenerationResult,
+    TargetPlatformInfo,
+    UnsupportedTargetCapabilityError,
+)
+from etl_migration_core.host import PluginHost
+from etl_migration_core.intake.discovery import InputRejectedError
 from etl_migration_core.sources.alteryx.graph import WorkflowGraph
 from etl_portfolio_assessment.evidence.extractor import EvidenceResponse
 from etl_portfolio_assessment.service.schemas import NeutralEstateAssessmentResponse
@@ -63,23 +88,38 @@ from etl_target_fabric.delivery.deployer import DryRunResult, dry_run
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+WORKER_RETRY_SECONDS = 5.0
+
 
 @asynccontextmanager
 async def lifespan(api: FastAPI) -> AsyncIterator[None]:
+    configure_logging(Settings.from_environment())
     if not hasattr(api.state, "run_service") or api.state.run_service.closed:
         api.state.run_service = _new_run_service()
     executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="accelerator")
     futures: dict[str, Future[None]] = {}
+    retry_after: dict[str, float] = {}
 
     async def resume_pending() -> None:
         while True:
-            for identity in await run_in_threadpool(api.state.run_service.pending):
-                if identity not in futures and len(futures) < 2:
-                    futures[identity] = executor.submit(api.state.run_service.execute, identity)
-            for identity, future in list(futures.items()):
-                if future.done():
-                    future.result()
-                    del futures[identity]
+            try:
+                for identity in await run_in_threadpool(api.state.run_service.pending):
+                    if (
+                        identity not in futures
+                        and len(futures) < 2
+                        and retry_after.get(identity, 0) <= time.monotonic()
+                    ):
+                        futures[identity] = executor.submit(api.state.run_service.execute, identity)
+                for identity, future in list(futures.items()):
+                    if future.done():
+                        del futures[identity]
+                        if (error := future.exception()) is not None:
+                            logger.error("Run %s worker failed", identity, exc_info=error)
+                            retry_after[identity] = time.monotonic() + WORKER_RETRY_SECONDS
+            except Exception:
+                logger.exception("Run worker loop failed; retrying")
+                await asyncio.sleep(WORKER_RETRY_SECONDS)
             await asyncio.sleep(0.2)
 
     worker = asyncio.create_task(resume_pending())
@@ -87,7 +127,7 @@ async def lifespan(api: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         worker.cancel()
-        with suppress(asyncio.CancelledError):
+        with suppress(asyncio.CancelledError, Exception):
             await worker
         await run_in_threadpool(executor.shutdown, wait=True)
         api.state.run_service.close()
@@ -97,7 +137,6 @@ app = FastAPI(title="Alteryx to Fabric Accelerator", version=__version__, lifesp
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 app.state.csrf_token = secrets.token_urlsafe(32)
 application = AssessmentApplication()
-MAX_BROWSER_UPLOAD_BYTES = 100 * 1024 * 1024
 DESKTOP_TOKEN_COOKIE = "accelerator-desktop-token"
 
 
@@ -174,7 +213,7 @@ async def upload_preview(
 
     sandbox = Path(tempfile.mkdtemp(prefix="alteryx-upload-"))
     try:
-        staged = await _stage_uploads(files, sandbox)
+        staged = await stage_uploads(files, sandbox)
         target_path = staged[0] if mode == "zip" else sandbox
         return await run_in_threadpool(application.preview, target_path)
     except InputRejectedError as error:
@@ -196,56 +235,12 @@ async def upload_assessment(
     try:
         if mode == "zip" and len(files) != 1:
             raise HTTPException(status_code=400, detail="ZIP mode requires exactly one archive")
-        staged = await _stage_uploads(files, sandbox)
+        staged = await stage_uploads(files, sandbox)
         return await run_in_threadpool(application.assess, staged[0] if mode == "zip" else sandbox)
     except InputRejectedError as error:
         raise HTTPException(status_code=400, detail=error.detail) from error
     finally:
         shutil.rmtree(sandbox, ignore_errors=False)
-
-
-async def _stage_uploads(files: list[UploadFile], sandbox: Path) -> list[Path]:
-    staged: list[Path] = []
-    total_size = 0
-    seen_names: set[str] = set()
-    for upload in files:
-        relative_path = _safe_upload_path(upload.filename)
-        key = str(relative_path).casefold()
-        if key in seen_names:
-            raise HTTPException(status_code=400, detail="Uploaded names collide")
-        seen_names.add(key)
-        destination = sandbox.joinpath(*relative_path.parts)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        size = 0
-        with destination.open("wb") as target:
-            while chunk := await upload.read(1024 * 1024):
-                size += len(chunk)
-                total_size += len(chunk)
-                if size > MAX_BROWSER_UPLOAD_BYTES or total_size > MAX_BROWSER_UPLOAD_BYTES:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"{upload.filename} exceeds the browser upload limit",
-                    )
-                target.write(chunk)
-        staged.append(destination)
-    return staged
-
-
-def _safe_upload_path(filename: str | None) -> PurePosixPath:
-    if not filename:
-        raise HTTPException(status_code=400, detail="An uploaded file has no name")
-    try:
-        return validate_member_path(Path("upload"), filename)
-    except InputRejectedError as error:
-        raise HTTPException(status_code=400, detail=error.detail) from error
-
-
-class LocalSelection(BaseModel):
-    path: str = Field(min_length=1)
-
-
-class FolderSelectionResponse(BaseModel):
-    path: str | None = None
 
 
 _DIALOG_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="folder-dialog")
@@ -276,20 +271,6 @@ def _pick_local_folder() -> str | None:
     return selected or None
 
 
-class Confirmation(BaseModel):
-    snapshot_id: str = Field(pattern=r"^[a-f0-9]{64}$")
-
-
-class DevSelection(BaseModel):
-    workspace: str = Field(min_length=1)
-    target: Target = "notebook"
-
-
-class PublicationReference(BaseModel):
-    run_id: str
-    digest: str
-
-
 def run_service() -> RunService:
     if not hasattr(app.state, "run_service") or app.state.run_service.closed:
         app.state.run_service = _new_run_service()
@@ -298,12 +279,7 @@ def run_service() -> RunService:
 
 
 def _new_run_service() -> RunService:
-    return RunService(
-        Path(os.getenv("ACCELERATOR_STATE_DIR", ".accelerator")),
-        artifact_root=Path(
-            os.getenv("ACCELERATOR_ARTIFACT_DIR", "generated-fabric-workflows")
-        ),
-    )
+    return RunService.from_settings(Settings.from_environment())
 
 
 @app.get("/api/session")
@@ -327,22 +303,46 @@ def tool_registry() -> dict[str, object]:
 
 def target_registry() -> TargetPlatformRegistry:
     if not hasattr(app.state, "target_registry"):
-        app.state.target_registry = create_default_target_registry()
+        app.state.target_registry = create_default_target_registry(
+            plugin_allowlist=Settings.from_environment().plugin_allowlist
+        )
     registry: TargetPlatformRegistry = app.state.target_registry
     return registry
 
 
-@app.get("/api/targets")
-def list_target_platforms() -> dict[str, object]:
-    try:
-        return {
-            "targets": [
-                info.model_dump(mode="json")
-                for info in target_registry().list_providers()
-            ]
-        }
-    except ValueError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
+def plugin_host(*, with_sources: bool = True) -> PluginHost:
+    """Build the plugin view; target-only endpoints skip opening the run store."""
+    return PluginHost(
+        run_service().source_registry if with_sources else None,
+        target_registry(),
+        allowlist=Settings.from_environment().plugin_allowlist,
+    )
+
+
+@app.get("/api/sources", response_model=SourcesResponse)
+def list_source_adapters() -> SourcesResponse:
+    """List registered built-in and plugin source adapters."""
+    return SourcesResponse(sources=list(plugin_host().sources()))
+
+
+@app.get("/api/plugins", response_model=PluginsResponse)
+def list_plugins() -> PluginsResponse:
+    """Report which installed plugins loaded, failed, or were excluded by the allowlist."""
+    catalog = plugin_host().catalog()
+    return PluginsResponse(
+        allowlist=list(catalog.allowlist) if catalog.allowlist is not None else None,
+        failed_count=catalog.failed_count,
+        plugins=list(catalog.plugins),
+        diagnostics=list(catalog.diagnostics),
+    )
+
+
+@app.get("/api/targets", response_model=TargetsResponse)
+def list_target_platforms() -> TargetsResponse:
+    host = plugin_host(with_sources=False)
+    return TargetsResponse(
+        targets=list(host.targets()), faults=list(host.target_catalog().faults)
+    )
 
 
 @app.get("/api/targets/{platform_id}", response_model=TargetPlatformInfo)
@@ -386,7 +386,7 @@ async def uploaded_snapshot(
     if mode == "zip" and len(files) != 1:
         raise HTTPException(status_code=400, detail="ZIP mode requires exactly one archive")
     with tempfile.TemporaryDirectory(prefix="alteryx-snapshot-") as directory:
-        staged = await _stage_uploads(files, Path(directory))
+        staged = await stage_uploads(files, Path(directory))
         try:
             return await run_in_threadpool(
                 run_service().preview, staged[0] if mode == "zip" else Path(directory)
@@ -406,9 +406,17 @@ def confirm_run(confirmation: Confirmation) -> Run:
 
 
 @app.get("/api/runs/{identity}", response_model=Run)
-def get_run(identity: str) -> Run:
+def get_run(identity: str, include_result: bool = True) -> Run:
     try:
-        return run_service().get_run(identity)
+        return run_service().get_run(identity, include_result=include_result)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/api/runs/{identity}/status", response_model=RunStatus)
+def get_run_status(identity: str) -> RunStatus:
+    try:
+        return run_service().get_run_status(identity)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -527,9 +535,47 @@ def download_run_publication(identity: str, digest: str) -> Response:
     response_model=list[RunTargetEvaluation],
 )
 def evaluate_run_target(identity: str, platform_id: str) -> list[RunTargetEvaluation]:
-    get_run(identity)
+    get_run(identity, include_result=False)
     try:
         return run_service().evaluate_target(identity, platform_id, target_registry())
+    except UnknownTargetPlatformError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (UnsupportedTargetCapabilityError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.post(
+    "/api/runs/{identity}/targets/{platform_id}/generate",
+    response_model=list[TargetGenerationResult],
+)
+def generate_run_target(
+    identity: str,
+    platform_id: str,
+    target_kind: str = Query(min_length=1),
+) -> list[TargetGenerationResult]:
+    get_run(identity, include_result=False)
+    try:
+        return run_service().generate_for_target(
+            identity, platform_id, target_kind, target_registry()
+        )
+    except UnknownTargetPlatformError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (UnsupportedTargetCapabilityError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.get(
+    "/api/runs/{identity}/targets/{platform_id}/capacity",
+    response_model=list[TargetCapacityResult],
+)
+def estimate_run_target_capacity(
+    identity: str, platform_id: str
+) -> list[TargetCapacityResult]:
+    get_run(identity, include_result=False)
+    try:
+        return run_service().estimate_target_capacity(
+            identity, platform_id, target_registry()
+        )
     except UnknownTargetPlatformError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except (UnsupportedTargetCapabilityError, ValueError) as error:
@@ -671,135 +717,35 @@ def deploy_with_gitlab(
 def _plan_deployment_dispatch(
     identity: str,
     source_workflow: str,
-    requested_target: Literal["notebook", "dataflow", "pipeline", "bundle"],
+    requested_target: DeploymentTarget,
     *,
     isolate_local_artifacts: bool,
     publication_digest: str | None,
-) -> tuple[
-    Literal["notebook", "dataflow", "pipeline", "bundle"],
-    str,
-    PublicationDispatch | None,
-]:
-    if publication_digest is None:
-        _, target, path = _resolve_deployment_artifact(
-            identity,
-            source_workflow,
-            requested_target,
-            isolate_local_artifacts=isolate_local_artifacts,
-        )
-        return target, path, None
-    get_run(identity)
-    service = run_service()
-    try:
-        with service.stage_all_artifacts(identity) as results:
-            manifest_hash = service.verify_staged_publication(
-                identity, publication_digest, results["dataflow"].root
-            )
-            _, target, path = _resolve_generated_artifact(
-                results, source_workflow, requested_target
-            )
-            return (
-                target,
-                path,
-                PublicationDispatch(
-                    artifact_root=f"published-fabric-workflows/{identity}/{publication_digest}",
-                    manifest_sha256=manifest_hash,
-                ),
-            )
-    except (OSError, ValueError) as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
+) -> tuple[DeploymentTarget, str, PublicationDispatch | None]:
+    return plan_deployment_dispatch(
+        run_service(),
+        identity,
+        source_workflow,
+        requested_target,
+        isolate_local_artifacts=isolate_local_artifacts,
+        publication_digest=publication_digest,
+    )
 
 
 def _resolve_deployment_artifact(
     identity: str,
     source_workflow: str,
-    requested_target: Literal["notebook", "dataflow", "pipeline", "bundle"],
+    requested_target: DeploymentTarget,
     *,
     isolate_local_artifacts: bool = False,
-) -> tuple[
-    Candidate,
-    Literal["notebook", "dataflow", "pipeline", "bundle"],
-    str,
-]:
-    get_run(identity)
-    service = run_service()
-    try:
-        staged = (
-            service.stage_all_artifacts(identity)
-            if isolate_local_artifacts
-            else nullcontext(service.write_all_artifacts(identity))
-        )
-        with staged as results:
-            return _resolve_generated_artifact(results, source_workflow, requested_target)
-    except (OSError, ValueError) as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
-
-
-def _resolve_generated_artifact(
-    results: dict[Target, ArtifactWriteResult],
-    source_workflow: str,
-    requested_target: Literal["notebook", "dataflow", "pipeline", "bundle"],
-) -> tuple[
-    Candidate,
-    Literal["notebook", "dataflow", "pipeline", "bundle"],
-    str,
-]:
-    candidate: Candidate | None = None
-    selected_target: Literal["notebook", "dataflow", "pipeline", "bundle"] | None = None
-    diagnostics: list[str] = []
-    targets: tuple[Target, ...] = ("dataflow", "notebook", "pipeline")
-    candidates_by_target: dict[Target, Candidate] = {}
-    for target in targets:
-        written = results[target]
-        current = next(
-            (
-                item
-                for item in written.candidates
-                if item.workflow == source_workflow
-                and item.target == target
-            ),
-            None,
-        )
-        if current is None:
-            continue
-        candidates_by_target[target] = current
-        diagnostics.extend(f"{target}: {message}" for message in current.diagnostics[:3])
-        if requested_target == "bundle":
-            continue
-        if requested_target != target:
-            continue
-        if current.deployable and current.artifact_path:
-            candidate = current
-            selected_target = target
-            break
-    if requested_target == "bundle":
-        deployable = [
-            item
-            for item in candidates_by_target.values()
-            if item.deployable and item.artifact_path
-        ]
-        artifact_paths = {item.artifact_path for item in deployable}
-        if len(artifact_paths) == 1:
-            artifact_path = next(iter(artifact_paths))
-            assert artifact_path is not None
-            folder = results["dataflow"].root / Path(*artifact_path.split("/"))
-            if (folder / "deployment-bundle.json").is_file():
-                candidate = deployable[0]
-                selected_target = "bundle"
-    if candidate is None or selected_target is None:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "No requested native Fabric implementation is available."
-                + (f" Diagnostics: {'; '.join(diagnostics)}." if diagnostics else "")
-            ),
-        )
-    artifact_path = candidate.artifact_path
-    if artifact_path is None:
-        raise HTTPException(status_code=409, detail="Selected native artifact has no path")
-    if selected_target not in {"notebook", "dataflow", "pipeline", "bundle"}:
-        raise HTTPException(status_code=500, detail="Resolved deployment target is invalid")
-    return candidate, selected_target, artifact_path
+) -> tuple[Candidate, DeploymentTarget, str]:
+    return resolve_deployment_artifact(
+        run_service(),
+        identity,
+        source_workflow,
+        requested_target,
+        isolate_local_artifacts=isolate_local_artifacts,
+    )
 
 
 @app.get("/api/runs/{identity}/candidates")

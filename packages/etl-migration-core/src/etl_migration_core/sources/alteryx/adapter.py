@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
-
-from defusedxml import ElementTree
 
 from etl_migration_core.contracts.ir import (
     AssetType,
@@ -22,7 +19,11 @@ from etl_migration_core.contracts.ir import (
     SourceLocation,
     SourcePlatform,
 )
-from etl_migration_core.sources.alteryx.graph import GraphNode, WorkflowGraph, parse_graph
+from etl_migration_core.sources.alteryx.graph import (
+    GraphNode,
+    WorkflowGraph,
+    parse_workflow,
+)
 from etl_migration_core.sources.base import SourceMatch
 
 ALTERYX_EXTENSIONS = frozenset({".yxmd", ".yxmc", ".yxwz"})
@@ -45,12 +46,24 @@ class AlteryxSourceAdapter:
             return None
         with path.open("rb") as stream:
             head = stream.read(64_000)
+        return self._match_head(head, path.suffix.casefold(), display_path)
+
+    def probe_bytes(self, content: bytes, display_path: str) -> SourceMatch | None:
+        """Recognize Alteryx XML bytes without touching disk."""
+        suffix = Path(display_path.split("!")[-1]).suffix.casefold()
+        if suffix not in ALTERYX_EXTENSIONS:
+            return None
+        return self._match_head(content[:64_000], suffix, display_path)
+
+    def _match_head(
+        self, head: bytes, suffix: str, display_path: str
+    ) -> SourceMatch | None:
         if b"<AlteryxDocument" not in head:
             return None
         asset_type = {
             ".yxmc": "macro",
             ".yxwz": "analytic_app",
-        }.get(path.suffix.casefold(), "workflow")
+        }.get(suffix, "workflow")
         return SourceMatch(
             adapter_id=self.adapter_id,
             platform=self.platform,
@@ -62,14 +75,12 @@ class AlteryxSourceAdapter:
 
     def parse(self, path: Path, match: SourceMatch) -> EtlPackage:
         """Convert an Alteryx workflow graph to canonical ETL IR."""
-        graph = self.legacy_graph(path)
-        content = path.read_bytes()
-        root = ElementTree.fromstring(
-            content,
-            forbid_dtd=True,
-            forbid_entities=True,
-            forbid_external=True,
-        )
+        return self.parse_with_graph(path, match)[0]
+
+    def parse_with_graph(self, path: Path, match: SourceMatch) -> tuple[EtlPackage, WorkflowGraph]:
+        """Parse once and return both the canonical IR and the legacy graph for Fabric engines."""
+        parsed = parse_workflow(path)
+        graph = parsed.graph
         asset_type = {
             ".yxmc": AssetType.MAPPLET,
             ".yxwz": AssetType.WORKFLOW,
@@ -111,19 +122,22 @@ class AlteryxSourceAdapter:
             connections=connections,
             source_location=SourceLocation(path=match.display_path),
         )
-        return EtlPackage(
-            source_platform=self.platform,
-            source_product=self.product,
-            product_version=root.get("yxmdVer"),
-            export_id=match.display_path,
-            source_sha256=hashlib.sha256(content).hexdigest(),
-            assets=(asset,),
-            connections=connections,
+        return (
+            EtlPackage(
+                source_platform=self.platform,
+                source_product=self.product,
+                product_version=parsed.product_version,
+                export_id=match.display_path,
+                source_sha256=graph.sha256,
+                assets=(asset,),
+                connections=connections,
+            ),
+            graph,
         )
 
     def legacy_graph(self, path: Path) -> WorkflowGraph:
         """Return the versioned Alteryx graph for compatibility callers."""
-        return parse_graph(path)
+        return parse_workflow(path).graph
 
 
 def _node_to_ir(node: GraphNode, display_path: str) -> EtlNode:

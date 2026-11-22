@@ -14,7 +14,8 @@ import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from accelerator.runtime.runs import RunService, _snapshot_id
+from accelerator.runtime.identity import snapshot_id as _snapshot_id
+from accelerator.runtime.runs import RunService
 from accelerator.server.api import app
 from etl_migration_core.contracts.ir import (
     EXTENSIBLE_SOURCE_IR_VERSION,
@@ -495,11 +496,8 @@ def test_plugin_discovery_rejects_invalid_extension() -> None:
     class InvalidExtensionAdapter(FakeAdapter):
         supported_extensions = ("../unsafe",)
 
-    registry = SourceAdapterRegistry(
-        (InvalidExtensionAdapter("invalid", "ssis", "SSIS", 100, b"ssis"),)
-    )
     with pytest.raises(ValueError, match="invalid source extension"):
-        registry.file_extensions()
+        SourceAdapterRegistry((InvalidExtensionAdapter("invalid", "ssis", "SSIS", 100, b"ssis"),))
 
 
 def test_external_file_adapter_cannot_claim_uncertified_builtin_source(tmp_path: Path) -> None:
@@ -615,7 +613,8 @@ def test_legacy_external_snapshot_requires_new_preview(tmp_path: Path) -> None:
         legacy = preview.model_copy(update={"snapshot_id": old_id, "workflows": [old_item]})
         with service._connection() as connection:
             connection.execute(
-                "INSERT INTO snapshots VALUES (?, ?)", (old_id, legacy.model_dump_json())
+                "INSERT INTO snapshots (id, preview, created_at) VALUES (?, ?, 0)",
+                (old_id, legacy.model_dump_json()),
             )
         with pytest.raises(ValueError, match="Confirmed source adapter changed"):
             service.create_run(old_id)

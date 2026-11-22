@@ -26,6 +26,7 @@ from etl_migration_core.contracts.ir import (
     SourcePlatform,
 )
 from etl_migration_core.sources.base import SourceMatch
+from etl_migration_core.sources.io import SourceTooLargeError, read_bounded
 
 MAX_EXPORT_BYTES = 100 * 1024 * 1024
 
@@ -34,6 +35,7 @@ class PowerCenterSourceAdapter:
     """Parse `pmrep ObjectExport` XML into canonical ETL IR."""
 
     adapter_id = "informatica-powercenter"
+    supported_extensions = (".xml",)
     platform = SourcePlatform.INFORMATICA_POWERCENTER
     product = "Informatica PowerCenter"
     adapter_version = "1.3.0"
@@ -47,7 +49,13 @@ class PowerCenterSourceAdapter:
             return None
         with path.open("rb") as stream:
             head = stream.read(64_000)
-        if b"<POWERMART" not in head:
+        return self.probe_bytes(head, display_path)
+
+    def probe_bytes(self, content: bytes, display_path: str) -> SourceMatch | None:
+        """Recognize PowerCenter `POWERMART` XML bytes without reading full files."""
+        if not display_path.split("!")[-1].casefold().endswith(".xml"):
+            return None
+        if b"<POWERMART" not in content[:64_000]:
             return None
         return SourceMatch(
             adapter_id=self.adapter_id,
@@ -60,9 +68,10 @@ class PowerCenterSourceAdapter:
 
     def parse(self, path: Path, match: SourceMatch) -> EtlPackage:
         """Parse mappings and workflow orchestration from one repository export."""
-        content = path.read_bytes()
-        if len(content) > MAX_EXPORT_BYTES:
-            raise ValueError("PowerCenter export exceeds the parser size limit")
+        try:
+            content = read_bounded(path, MAX_EXPORT_BYTES)
+        except SourceTooLargeError as error:
+            raise ValueError("PowerCenter export exceeds the parser size limit") from error
         root = ElementTree.fromstring(
             content,
             forbid_dtd=False,

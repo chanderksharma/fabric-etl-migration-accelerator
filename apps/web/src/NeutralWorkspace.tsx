@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RunResult } from "./App";
 import { isStringArray, type NeutralAssessment } from "./neutral-assessment";
 import { parseTargetCatalog, type TargetPlatformInfo } from "./target-platform";
@@ -14,6 +14,21 @@ type Evaluation = {
     recommendation_reason: string;
     diagnostics: string[];
   };
+};
+
+type TargetCapacityOutput = {
+  platform_id: string;
+  provider_version: string;
+  model_version: string;
+  status: string;
+  asset_count: number;
+  modeled_count: number;
+  recommendations: Array<{
+    scenario: string;
+    required_units: number;
+    unit_label: string;
+    recommended_tier: string;
+  }>;
 };
 
 function parseEvaluations(value: unknown): Evaluation[] {
@@ -49,6 +64,11 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
   const [evaluationError, setEvaluationError] = useState<string | null>(null);
   const [evaluating, setEvaluating] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(false);
+  const [capacityResults, setCapacityResults] = useState<TargetCapacityOutput[] | null>(null);
+  const [capacityError, setCapacityError] = useState<string | null>(null);
+  const [estimatingCapacity, setEstimatingCapacity] = useState(false);
+  const [search, setSearch] = useState("");
+  const [onlyManual, setOnlyManual] = useState(false);
   const evaluationEpoch = useRef(0);
 
   useEffect(() => {
@@ -102,6 +122,31 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
     return () => { evaluationEpoch.current += 1; };
   }, [assessment, request, runId, selected]);
 
+  const selectedTargetInfo = targets.find(item => item.platform_id === selected);
+  const supportsCapacity = Boolean(selectedTargetInfo?.capabilities.includes("capacity"));
+
+  const portfolioMetrics = useMemo(() => {
+    const items = assessment?.assessments ?? [];
+    return {
+      totalComponents: items.reduce((sum, item) => sum + item.component_count, 0),
+      totalConnections: items.reduce((sum, item) => sum + item.connection_count, 0),
+      totalEffort: items.reduce((sum, item) => sum + item.intrinsic_effort_days, 0),
+      manualReviewAssets: items.filter(item => item.unknown_components.length > 0).length,
+    };
+  }, [assessment]);
+
+  const filteredAssets = useMemo(() => {
+    const items = assessment?.assessments ?? [];
+    const term = search.trim().toLowerCase();
+    return items.filter(asset => {
+      if (onlyManual && asset.unknown_components.length === 0) return false;
+      if (!term) return true;
+      return asset.name.toLowerCase().includes(term) ||
+        asset.path.toLowerCase().includes(term) ||
+        asset.unknown_components.some(component => component.toLowerCase().includes(term));
+    });
+  }, [assessment, onlyManual, search]);
+
   async function evaluate() {
     if (!runId || !selected || evaluating) return;
     const epoch = ++evaluationEpoch.current;
@@ -121,6 +166,25 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
       }
     } finally {
       if (epoch === evaluationEpoch.current) setEvaluating(false);
+    }
+  }
+
+  async function estimateCapacity() {
+    if (!runId || !selected || !supportsCapacity || estimatingCapacity) return;
+    setEstimatingCapacity(true);
+    setCapacityError(null);
+    setCapacityResults(null);
+    try {
+      const response = await request(
+        `/api/runs/${runId}/targets/${encodeURIComponent(selected)}/capacity`,
+      );
+      const payload: unknown = await response.json();
+      if (!Array.isArray(payload)) throw new Error("Invalid target capacity response");
+      setCapacityResults(payload as TargetCapacityOutput[]);
+    } catch (caught) {
+      setCapacityError(caught instanceof Error ? caught.message : "Target capacity failed");
+    } finally {
+      setEstimatingCapacity(false);
     }
   }
 
@@ -153,8 +217,31 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
         <div className="notice">{assessment.workflow_count} asset{assessment.workflow_count === 1 ? "" : "s"} assessed;{" "}
           {assessment.failed_count} source parsing failures.
           Intrinsic effort is an estimate, not target-specific delivery effort.</div>
+        <div className="fact-grid section-gap">
+          <div className="fact"><span>Total assets</span><strong>{assessment.workflow_count}</strong></div>
+          <div className="fact"><span>Components / connections</span><strong>{portfolioMetrics.totalComponents} / {portfolioMetrics.totalConnections}</strong></div>
+          <div className="fact"><span>Manual review assets</span><strong>{portfolioMetrics.manualReviewAssets}</strong></div>
+          <div className="fact"><span>Intrinsic effort total</span><strong>{portfolioMetrics.totalEffort.toFixed(1)} days</strong></div>
+        </div>
+        <div className="toolbar section-gap">
+          <input
+            type="search"
+            aria-label="Filter neutral assets"
+            placeholder="Filter assets or unknown components..."
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+          />
+          <label className="deploy-checkbox">
+            <input
+              type="checkbox"
+              checked={onlyManual}
+              onChange={event => setOnlyManual(event.target.checked)}
+            />
+            <span>Manual review only</span>
+          </label>
+        </div>
         {assessment.failures.map(failure => <p className="errorMessage" key={failure}>{failure}</p>)}
-        {assessment.assessments.map(asset => <article className="panel section-gap" key={asset.path}>
+        {filteredAssets.map(asset => <article className="panel section-gap" key={asset.path}>
           <div className="panel-header"><div><h2>{asset.name}</h2><p>{asset.path}</p></div></div>
           <div className="fact-grid">
             <div className="fact"><span>Source</span><strong>{asset.source_product} ({asset.source_platform})</strong></div>
@@ -162,6 +249,16 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
             <div className="fact"><span>Complexity</span><strong>{asset.complexity_band} ({asset.complexity_score})</strong></div>
             <div className="fact"><span>Intrinsic effort estimate</span><strong>{asset.intrinsic_effort_days} days</strong></div>
           </div>
+          {asset.inventory && asset.inventory.length > 0 && <div className="tableWrap section-gap">
+            <table>
+              <thead><tr><th>Operation</th><th>Category</th><th>Count</th></tr></thead>
+              <tbody>{asset.inventory.map(item => <tr key={`${item.operation}:${item.classification}`}>
+                <td>{item.operation}</td>
+                <td>{item.classification}</td>
+                <td>{item.count}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>}
           {asset.unknown_components.length > 0 && <p>Requires manual review:{" "}
             <span>{asset.unknown_components.join(", ")}</span></p>}
         </article>)}
@@ -180,21 +277,35 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
               setLoadingSaved(true);
               setEvaluations(null);
               setEvaluationError(null);
+              setCapacityResults(null);
+              setCapacityError(null);
             }}>{targets.map(target => <option key={target.platform_id} value={target.platform_id}>
               {target.display_name}
             </option>)}</select>{" "}
             <button type="button" className="primary-button" onClick={() => void evaluate()}
               disabled={!selected || evaluating || loadingSaved || assessment.assessments.length === 0}>
               {evaluating ? "Evaluating..." : loadingSaved ? "Loading evaluation..." : "Evaluate target"}
-            </button>
+            </button>{" "}
+            {supportsCapacity && <button type="button" className="secondary-button" onClick={() => void estimateCapacity()}
+              disabled={estimatingCapacity || assessment.assessments.length === 0}>
+              {estimatingCapacity ? "Estimating..." : "Estimate target capacity"}
+            </button>}
           </>}
           {evaluationError && <p className="errorMessage" role="alert">{evaluationError}</p>}
+          {capacityError && <p className="errorMessage" role="alert">{capacityError}</p>}
           {evaluations?.length === 0 && <p>No target evaluations were returned.</p>}
           {evaluations?.map(item => <article key={`${item.source_path}:${item.asset_id}`}>
             <h3>{item.asset_name}: {item.evaluation.recommended_target}</h3>
             <p>{item.evaluation.recommendation_reason}</p>
             <p>Provider version: {item.provider_version}</p>
             {item.evaluation.diagnostics.map(diagnostic => <p key={diagnostic}>{diagnostic}</p>)}
+          </article>)}
+          {capacityResults?.map((estimate, index) => <article key={`${estimate.platform_id}:${index}`}>
+            <h3>Target capacity ({estimate.platform_id})</h3>
+            <p>Status: {estimate.status} · Modeled {estimate.modeled_count}/{estimate.asset_count}</p>
+            {estimate.recommendations.map(rec => <p key={rec.scenario}>
+              {rec.scenario}: {rec.recommended_tier} ({rec.required_units} {rec.unit_label})
+            </p>)}
           </article>)}
         </section>
       </>}

@@ -52,7 +52,7 @@ concurrency:
 jobs:
   plan:
     name: Plan ${{ inputs.promotion_scope }} promotion to ${{ inputs.target_stage }}
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: ${{ fromJSON(vars.DEPLOY_RUNNER_LABELS || '["self-hosted", "Windows", "X64"]') }}
     timeout-minutes: 10
     environment:
       name: ${{ inputs.target_stage == 'Production' && 'test' || 'dev' }}
@@ -111,7 +111,7 @@ jobs:
   promote:
     name: Promote to ${{ inputs.target_stage }}
     needs: plan
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: ${{ fromJSON(vars.DEPLOY_RUNNER_LABELS || '["self-hosted", "Windows", "X64"]') }}
     timeout-minutes: 30
     environment:
       name: ${{ inputs.target_stage == 'Production' && 'prod' || 'test' }}

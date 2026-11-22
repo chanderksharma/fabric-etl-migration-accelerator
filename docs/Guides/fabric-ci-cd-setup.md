@@ -385,6 +385,12 @@ Register an online self-hosted runner with these labels:
 
 Install PowerShell 7 on the runner.
 
+To use different labels, set the repository or organization variable
+`DEPLOY_RUNNER_LABELS` to a JSON array, for example `["self-hosted", "Windows", "deploy"]`.
+The deployment, pipeline-provisioning, and ALM promotion workflows all read it and
+default to the labels above. CI jobs have their own `CI_RUNNER_LABELS`, so the runners that
+hold Fabric credentials can stay separate from the runners that build pull requests.
+
 ### Configure the environment
 
 In the GitHub repository:

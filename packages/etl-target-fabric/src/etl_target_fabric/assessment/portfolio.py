@@ -5,6 +5,7 @@ from pathlib import Path
 
 from etl_migration_core.contracts.ir import SourcePlatform
 from etl_migration_core.intake.discovery import DiscoveryService
+from etl_migration_core.sources.alteryx import AlteryxSourceAdapter
 from etl_migration_core.sources.defaults import create_default_registry
 from etl_target_fabric.assessment.evaluator import apply_alteryx_native_route, apply_native_route
 from etl_target_fabric.assessment.ir_assessment import EtlAssessment, assess_package
@@ -58,13 +59,20 @@ class FabricAssessmentApplication:
             try:
                 with self._discovery.staged_workflow(candidate) as workflow_path:
                     if candidate.source_platform is SourcePlatform.ALTERYX:
-                        assessment = assess_workflow(workflow_path)
+                        graph = AlteryxSourceAdapter().legacy_graph(workflow_path)
+                        assessment = assess_workflow(workflow_path, graph=graph)
                         if route_alteryx:
-                            assessment = apply_alteryx_native_route(workflow_path, assessment)
+                            assessment = apply_alteryx_native_route(
+                                workflow_path, assessment, graph=graph
+                            )
                         assessment = replace(assessment, path=candidate.display_path)
                         assessments.append(
                             WorkflowAssessmentResponse.model_validate(assessment).model_copy(
-                                update={"capacity_profile": build_capacity_profile(workflow_path)}
+                                update={
+                                    "capacity_profile": build_capacity_profile(
+                                        workflow_path, graph=graph
+                                    )
+                                }
                             )
                         )
                     else:

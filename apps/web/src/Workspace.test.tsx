@@ -76,6 +76,28 @@ test("rechecks capabilities without exposing stale generation on return", async 
   expect(await screen.findByRole("alert")).toHaveTextContent("could not be loaded");
   expect(screen.queryByRole("button", {name: "Trigger GitHub Actions"})).not.toBeInTheDocument();
 });
+test("offers only the generation kinds the provider advertises", async () => {
+  const request = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({targets: [{
+      platform_id: "fabric", display_name: "Microsoft Fabric", provider_version: "1.0.0",
+      supported_ir_versions: ["1.0.0"], implemented: true, status: "ready",
+      capabilities: ["evaluate", "codegen"], target_kinds: ["notebook"], description: "Fabric",
+    }]}),
+  });
+  render(<FabricDeploymentPage active assessment={assessment} runId="test-ui" candidates={[]}
+    generating={false} generate={vi.fn()} request={request} onStartIntake={vi.fn()}/>);
+
+  expect(await screen.findByRole("button", {name: "Generate Notebook previews"}))
+    .toBeInTheDocument();
+  expect(screen.getByRole("link", {name: "Download Notebook package"})).toBeInTheDocument();
+  expect(screen.queryByRole("button", {name: "Generate Dataflow previews"}))
+    .not.toBeInTheDocument();
+  expect(screen.queryByRole("button", {name: "Generate Pipeline previews"}))
+    .not.toBeInTheDocument();
+  expect(screen.queryByRole("link", {name: "Download Pipeline package"})).not.toBeInTheDocument();
+});
+
 const evidence: EvidenceResponse = {
   schema_version: "1.1.0", graph_version: "1.1.0", run_id: "test-ui", snapshot_id: "snapshot-ui",
   total_workflows: 2, truncated: false,

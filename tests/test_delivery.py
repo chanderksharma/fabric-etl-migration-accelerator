@@ -15,7 +15,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, wait
 from contextlib import closing
 from pathlib import Path
 from threading import Event, Thread
-from typing import IO, Literal
+from typing import IO, Any, Literal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1057,7 +1057,7 @@ def test_snapshot_tampering_and_newer_schema_are_rejected(tmp_path: Path) -> Non
     with pytest.raises(ValueError, match="changed"):
         service.create_run(preview.snapshot_id)
     with closing(sqlite3.connect(service.database)) as connection, connection:
-        connection.execute("PRAGMA user_version=5")
+        connection.execute("PRAGMA user_version=99")
     with pytest.raises(ValueError, match="schema"):
         RunService(tmp_path / "state")
 
@@ -1319,22 +1319,56 @@ def test_workflow_bundle_is_byte_stable_and_contains_manual_install_guide(
 def test_workflow_bundle_generates_each_target_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from etl_target_fabric.compilers.alteryx import generate_candidate
+
     source = tmp_path / "orders.yxmd"
     source.write_bytes(WORKFLOW)
     with RunService(tmp_path / "state", artifact_root=tmp_path / "artifacts") as service:
         run = service.create_run(service.preview(source).snapshot_id)
         service.execute(run.id)
-        original_generate = service.generate
         calls: list[str] = []
 
-        def count_generate(identity: str, target: Target) -> list[Candidate]:
+        def count_generate(path: Path, target: Target, **kwargs: Any) -> Candidate:
             calls.append(target)
-            return original_generate(identity, target)
+            return generate_candidate(path, target, **kwargs)
 
-        monkeypatch.setattr(service, "generate", count_generate)
+        monkeypatch.setattr("accelerator.runtime.runs.generate_candidate", count_generate)
         service.workflow_package(run.id, "orders.yxmd")
 
     assert sorted(calls) == ["dataflow", "notebook", "pipeline"]
+
+
+def test_generation_parses_each_workflow_once_and_previews_compile_one_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from etl_migration_core.sources.alteryx.graph import ParsedWorkflow, parse_workflow
+
+    source = tmp_path / "orders.yxmd"
+    source.write_bytes(WORKFLOW)
+    parses: list[str] = []
+
+    def counting_parse(path: Path) -> ParsedWorkflow:
+        parses.append(path.name)
+        return parse_workflow(path)
+
+    monkeypatch.setattr(
+        "etl_migration_core.sources.alteryx.adapter.parse_workflow", counting_parse
+    )
+    with RunService(tmp_path / "state", artifact_root=tmp_path / "artifacts") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        service.execute(run.id)
+        assert len(parses) == 1, "cold assessment must parse the workflow once"
+        parses.clear()
+
+        service.execute(service.create_run(service.preview(source).snapshot_id).id)
+        assert parses == [], "a warm run reads results from the caches"
+
+        service.preview_candidates(run.id, "notebook")
+        assert len(parses) == 1, "a one-target preview parses once"
+        parses.clear()
+
+        service.write_all_artifacts(run.id)
+        assert len(parses) == 1, "three targets share one parse per workflow"
 
 
 def test_api_downloads_one_workflow_bundle(
@@ -2347,3 +2381,33 @@ def test_evidence_redacts_before_truncation_and_withholds_sensitive_expressions(
         safe_expression('[API key] = "should-not-leak"')
         == "[Credential-bearing expression withheld]"
     )
+
+
+def test_run_service_caches_parsed_ir_across_lifecycle_stages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from accelerator.targets import create_default_target_registry
+
+    source = Path(__file__).parent / "fixtures" / "powercenter" / "basic_repository.xml"
+    with RunService(tmp_path / "state") as service:
+        parse_calls = 0
+        original_parse = service.source_registry.parse
+
+        def counted_parse(path: Path, match: object) -> object:
+            nonlocal parse_calls
+            parse_calls += 1
+            return original_parse(path, match)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(service.source_registry, "parse", counted_parse)
+        preview = service.preview(source)
+        run = service.create_run(preview.snapshot_id)
+        service.execute(run.id)
+        assert parse_calls == 1
+
+        registry = create_default_target_registry(load_entry_points=False)
+        assert service.evaluate_target(run.id, "fabric", registry)
+        assert service.generate_for_target(run.id, "fabric", "notebook", registry)
+        assert service.estimate_target_capacity(run.id, "fabric", registry)
+        assert service.generate(run.id, "notebook")
+        assert service.evidence(run.id).workflows
+        assert parse_calls == 1

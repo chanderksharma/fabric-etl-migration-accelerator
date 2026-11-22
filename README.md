@@ -131,10 +131,12 @@ data-location, WebView2, deployment-authentication, and security details.
 uv run tool preview .\alteryx-workflows
 uv run tool assess .\alteryx-workflows
 uv run tool targets
+uv run tool plugins
 uv run tool generate <completed-run-id> --target all --output generated-fabric-workflows
+uv run tool gc --dry-run
 ```
 
-`assess` emits full assessment JSON (`exit 1` if any workflow fails parsing; `exit 2` on input/configuration rejection). `targets` lists registered destination platforms (`fabric` ready plus fail-closed `databricks`, `synapse`, and `snowflake` placeholders). `--target` accepts `dataflow`, `notebook`, `pipeline`, `both` (`dataflow` + `notebook`), or `all`.
+`assess` emits full assessment JSON (`exit 1` if any workflow fails parsing; `exit 2` on input/configuration rejection). `targets` lists registered destination platforms (`fabric` ready plus fail-closed `databricks`, `synapse`, and `snowflake` placeholders). `plugins` lists installed source adapters, target providers, and per-plugin load results, and exits `1` if an installed plugin failed to load. `gc` applies the local retention policy to runs, snapshots, publications, and caches. `--target` accepts `dataflow`, `notebook`, `pipeline`, `both` (`dataflow` + `notebook`), or `all`. The CLI and API share `ACCELERATOR_STATE_DIR`, `ACCELERATOR_ARTIFACT_DIR`, `ACCELERATOR_PLUGIN_ALLOWLIST`, and `ACCELERATOR_LOG_LEVEL`; see [Environment Variables](docs/Guides/installation.md#environment-variables).
 
 ### Modular PyPI Packages & Stateless CLIs
 
@@ -187,10 +189,11 @@ See [Installation and Runtime Modes](docs/Guides/installation.md) for workspace 
 ### Local Development & Verification
 
 ```powershell
-uv run --extra dev ruff check src packages tests
+uv run --extra dev ruff check src packages tests examples
 uv run --extra dev mypy
 uv run --extra dev pytest --cov-fail-under=80
-uvx pip-audit --strict
+uv export --locked --all-extras --no-emit-workspace --format requirements-txt --output-file $env:TEMP\audit-requirements.txt
+uvx pip-audit --strict --disable-pip -r $env:TEMP\audit-requirements.txt
 
 Set-Location apps\web
 npm run lint
@@ -224,7 +227,7 @@ See the [Fabric CI/CD Setup Guide](docs/Guides/fabric-ci-cd-setup.md) and [Deplo
 
 - **GitHub Actions** (`.github/workflows/`) and modular **GitLab CI** ([`.gitlab-ci.yml`](.gitlab-ci.yml) + `.gitlab/ci/`) support Development deployment, Deployment Pipeline provisioning, and governed Test/Production promotion. Both use protected environments, serialized Fabric operations, and the shared PowerShell deployment/ALM scripts.
 - **Microsoft Entra OIDC Federation**: Configure `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` with Workload Identity Federation (`id-token: write` / `AZURE_FEDERATED_TOKEN_FILE`); `AZURE_CLIENT_SECRET` is optional fallback only. Supply `FABRIC_WORKSPACE_ID` at dispatch time.
-- **Runner Policy**: Standard CI jobs ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) enforce Ruff, strict mypy, pytest (`>=80%` coverage), Web lint/tests/build, `pip-audit`, `npm audit`, and CodeQL SAST. Jobs default to `["self-hosted", "Windows", "X64"]` for Microsoft EMU compatibility and can target organization runner groups via `vars.CI_RUNNER_LABELS`.
+- **Runner Policy**: Standard CI jobs ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) enforce Ruff, strict mypy, pytest (`>=80%` coverage), Web lint/tests/build, `pip-audit`, `npm audit`, CodeQL SAST, and an entry-point check that installs the example plugins as real distributions. Jobs default to `["self-hosted", "Windows", "X64"]` for Microsoft EMU compatibility and can target organization runner groups via `vars.CI_RUNNER_LABELS`. The deployment workflows read `vars.DEPLOY_RUNNER_LABELS` (same default) so the runners that hold Fabric credentials can be a separate, trusted pool.
 - **Dispatch-Only Backend Integration**: Configure `GITHUB_AUTH_MODE=github-app` (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_PATH`, `GITHUB_ALLOWED_REPOSITORIES`) or `GITLAB_BASE_URL` / `GITLAB_TOKEN` / `GITLAB_ALLOWED_PROJECTS`. Neither integration mutates repository files or reads external logs.
 - **Saved-Query Validation**: Because Fabric rejects SPN-triggered Dataflow refresh (`SPNBasedRefreshNotAllowed`), live runs verify definition readback and validate load-enabled queries via `executeQuery` when runtime-ready (or report `BindingsRequired`).
 

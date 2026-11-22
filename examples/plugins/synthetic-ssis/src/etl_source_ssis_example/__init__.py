@@ -19,18 +19,13 @@ from etl_migration_core.contracts.ir import (
     SourceLocation,
 )
 from etl_migration_core.sources.base import SourceMatch
+from etl_migration_core.sources.io import SourceTooLargeError, read_bounded
 
 _DTS = "{www.microsoft.com/SqlServer/Dts}"
 _MAX_BYTES = 5 * 1024 * 1024
 
 
-def _read_package(path: Path) -> tuple[Element, str]:
-    if path.is_symlink():
-        raise ValueError("Linked SSIS files are not accepted")
-    if path.stat().st_size > _MAX_BYTES:
-        raise ValueError("Synthetic SSIS file exceeds the 5 MiB limit")
-    with path.open("rb") as stream:
-        content = stream.read(_MAX_BYTES + 1)
+def _read_package_bytes(content: bytes) -> tuple[Element, str]:
     if len(content) > _MAX_BYTES:
         raise ValueError("Synthetic SSIS file exceeds the 5 MiB limit")
     try:
@@ -40,6 +35,16 @@ def _read_package(path: Path) -> tuple[Element, str]:
     except (ParseError, DefusedXmlException) as error:
         raise ValueError("Invalid or unsafe synthetic SSIS XML") from error
     return root, hashlib.sha256(content).hexdigest()
+
+
+def _read_package(path: Path) -> tuple[Element, str]:
+    if path.is_symlink():
+        raise ValueError("Linked SSIS files are not accepted")
+    try:
+        content = read_bounded(path, _MAX_BYTES)
+    except SourceTooLargeError as error:
+        raise ValueError("Synthetic SSIS file exceeds the 5 MiB limit") from error
+    return _read_package_bytes(content)
 
 
 def _identity(element: Element) -> tuple[str, str]:
@@ -66,6 +71,15 @@ class SyntheticSsisAdapter:
         if path.suffix.casefold() != ".dtsx" or not path.is_file():
             return None
         root, _ = _read_package(path)
+        return self._match_root(root, display_path)
+
+    def probe_bytes(self, content: bytes, display_path: str) -> SourceMatch | None:
+        if not display_path.casefold().endswith(".dtsx"):
+            return None
+        root, _ = _read_package_bytes(content)
+        return self._match_root(root, display_path)
+
+    def _match_root(self, root: Element, display_path: str) -> SourceMatch | None:
         if root.tag != f"{_DTS}Executable" or root.get(f"{_DTS}ExecutableType") != "SSIS.Package.2":
             return None
         return SourceMatch(

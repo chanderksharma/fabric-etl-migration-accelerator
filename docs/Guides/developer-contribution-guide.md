@@ -27,7 +27,7 @@ semantic parity validation before promotion.
 | Source parsing and canonical ETL graphs | [Source adapters](../../packages/etl-migration-core/src/etl_migration_core/sources/) and [IR contracts](../../packages/etl-migration-core/src/etl_migration_core/contracts/ir.py) | [Source adapter tests](../../tests/test_source_adapters.py) and product-specific adapter tests |
 | Target-neutral complexity, effort, or evidence | [Assessment engine](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/engine.py), [workload profile](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/workload_profile.py), and [evidence extractor](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/evidence/extractor.py) | [Assessment package tests](../../packages/etl-portfolio-assessment/tests/test_assessment_package.py) and [target tests](../../tests/test_targets.py) |
 | Fabric fit, capacity, or generated definitions | [Fabric assessment](../../packages/etl-target-fabric/src/etl_target_fabric/assessment/), [capacity model](../../packages/etl-target-fabric/src/etl_target_fabric/capacity/), and [compilers](../../packages/etl-target-fabric/src/etl_target_fabric/compilers/) | [ETL assessment](../../tests/test_etl_assessment.py), [capacity](../../tests/test_capacity.py), and [generation tests](../../tests/test_etl_generation.py) |
-| Local API, durable runs, or CLI | [API](../../src/accelerator/server/api.py), [run service](../../src/accelerator/runtime/runs.py), and [CLI](../../src/accelerator/cli/app.py) | [API](../../tests/test_api.py), [CLI](../../tests/test_cli.py), and [multi-source application tests](../../tests/test_multisource_application.py) |
+| Local API, durable runs, or CLI | [API](../../src/accelerator/server/api.py) (routes), [upload staging](../../src/accelerator/server/uploads.py), [deployment resolution](../../src/accelerator/server/deployment.py), [run service](../../src/accelerator/runtime/runs.py) (orchestration), [SQLite store and retention](../../src/accelerator/runtime/store.py), [cache keys and snapshot IDs](../../src/accelerator/runtime/identity.py), [publications](../../src/accelerator/runtime/publication.py), [settings and logging](../../src/accelerator/settings.py), and [CLI](../../src/accelerator/cli/app.py) | [API](../../tests/test_api.py), [CLI](../../tests/test_cli.py), [resilience and retention](../../tests/test_runtime_resilience.py), and [multi-source application tests](../../tests/test_multisource_application.py) |
 | Local analyst experience | [Web app](../../apps/web/src/) | [App tests](../../apps/web/src/App.test.tsx) and [workspace tests](../../apps/web/src/Workspace.test.tsx) |
 | Fabric-native intake and reporting | [Fabric analyst app](../../apps/etl-migration-assessment-app/src/), [app functions](../../apps/etl-migration-assessment-app/rayfin/functions/src/), and [assessment notebook](../../notebooks/fabric-portfolio-assessment.ipynb) | App `*.spec.ts` and `*.spec.tsx` tests; [FEMA deployment tests](../../tests/test_fema_deployment.py) |
 | CI dispatch or Fabric deployment | [Delivery modules](../../src/accelerator/delivery/), [deployment script](../../scripts/Deploy-FabricArtifacts.ps1), and [CI/CD setup](fabric-ci-cd-setup.md) | [GitHub](../../tests/test_github_deployment.py), [GitLab](../../tests/test_gitlab_deployment.py), and [acceptance tests](../../tests/test_acceptance.py) |
@@ -154,6 +154,26 @@ examples and [PyPI Packages and Publishing](pypi-packages.md) for packaging.
 For a new wheel, review workspace dependencies, tests, build and publishing,
 and any local or Fabric runtime bundles that must include it.
 
+## Change the local run database
+
+The run database is owned by the [SQLite store](../../src/accelerator/runtime/store.py)
+and lives in users' `.accelerator` folders, so a schema change must work on state that an
+earlier release already wrote.
+
+1. Append a step to `MIGRATIONS` with the next version number and raise
+   `LATEST_SCHEMA_VERSION`. Never edit a step that has shipped, including the baseline:
+   a released database has exactly the tables that step created, so a table added to an
+   old step is missing from every existing database.
+2. Make the step idempotent (`CREATE TABLE IF NOT EXISTS`, add a column only when absent)
+   so an interrupted migration can be retried.
+3. Test it against a literal copy of the previous release's DDL, as
+   `SHIPPED_SCHEMA_4` does in the [resilience tests](../../tests/test_runtime_resilience.py),
+   not against the code under test, which would hide a missing table. Assert that the
+   migrated schema equals the schema of a fresh database.
+4. For a high-risk change, create state with the released code (for example from
+   `git archive HEAD src packages` extracted to a temporary folder) and open it with
+   the new code.
+
 ## Validate your change
 
 Use the existing environment and run the smallest relevant tests first. From
@@ -172,12 +192,28 @@ replace semantic parity testing or a separately authorized live Fabric run.
 Before committing, run the repository validation gate from the root:
 
 ```powershell
-uv run --extra dev ruff check src packages tests
+uv run --extra dev ruff check src packages tests examples
 uv run --extra dev mypy
 uv run --extra dev pytest --cov-fail-under=80
 ```
 
-From `apps\web`, run:
+If you changed plugin discovery, registration, or the example plugins, also prove the
+packaging path. CI does this in the `plugin-entry-points` job; to repeat it without
+touching your working environment, use a throwaway one:
+
+```powershell
+$env:UV_PROJECT_ENVIRONMENT = "$env:TEMP\accelerator-plugins-env"
+uv sync --extra dev --locked
+uv pip install --no-deps --python "$env:UV_PROJECT_ENVIRONMENT\Scripts\python.exe" `
+  .\examples\plugins\synthetic-ssis .\examples\plugins\synthetic-databricks
+$env:ACCELERATOR_REQUIRE_INSTALLED_PLUGINS = "1"
+uv run --no-sync pytest --no-cov tests\test_installed_plugins.py
+uv run --no-sync tool plugins
+```
+
+`tool plugins` exits with code 1 when an installed plugin fails to load. Put new tests
+in a focused module for the area you changed rather than in `tests\test_delivery.py`;
+`tests\conftest.py` already clears the `ACCELERATOR_*` settings for every test.
 
 ```powershell
 npm run lint

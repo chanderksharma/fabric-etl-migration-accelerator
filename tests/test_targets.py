@@ -38,6 +38,7 @@ from etl_migration_core.contracts.spi import (
     TargetPlatformInfo,
     UnsupportedTargetCapabilityError,
 )
+from etl_migration_core.host import PluginHost
 from etl_portfolio_assessment.assessment.engine import assess_package_neutral
 from etl_portfolio_assessment.assessment.workload_profile import extract_workload_profile
 from etl_portfolio_assessment.service.application import PortfolioAssessmentApplication
@@ -186,8 +187,92 @@ def test_target_registry_rejects_misleading_capability_metadata(
     assert response.status_code == 409
     assert "inconsistent metadata" in response.json()["detail"]
     catalog = client.get("/api/targets")
-    assert catalog.status_code == 409
-    assert "inconsistent metadata" in catalog.json()["detail"]
+    assert catalog.status_code == 200
+    assert catalog.json()["targets"] == []
+    assert catalog.json()["faults"][0]["platform_id"] == "example"
+    assert "inconsistent metadata" in catalog.json()["faults"][0]["detail"]
+
+
+def test_one_faulty_target_provider_does_not_hide_healthy_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class BrokenProvider:
+        platform_id = "broken"
+        display_name = "Broken"
+        provider_version = "1.0.0"
+        supported_ir_versions = ("1.0.0",)
+        implemented = True
+        capabilities: tuple[TargetCapability, ...] = ("evaluate",)
+        description = "Raises while describing itself"
+
+        def info(self) -> TargetPlatformInfo:
+            raise RuntimeError("provider exploded")
+
+        def evaluator(self) -> TargetEvaluator | None:
+            raise RuntimeError("provider exploded")
+
+    registry = create_default_target_registry(load_entry_points=False)
+    registry.register(BrokenProvider())
+    monkeypatch.setattr(app.state, "target_registry", registry, raising=False)
+    client = TestClient(app, base_url="http://127.0.0.1")
+
+    payload = client.get("/api/targets").json()
+    assert {item["platform_id"] for item in payload["targets"]} == {
+        "databricks",
+        "fabric",
+        "snowflake",
+        "synapse",
+    }
+    assert payload["faults"] == [
+        {
+            "platform_id": "broken",
+            "detail": "TargetProviderFaultError: Target provider 'broken' faulted during "
+            "describe: RuntimeError: provider exploded",
+        }
+    ]
+    assert client.get("/api/targets/broken").status_code == 409
+    package = _sample_package()
+    with pytest.raises(ValueError, match="faulted during describe"):
+        registry.evaluate_asset("broken", package, package.assets[0], base_reason="test")
+
+
+def test_target_registry_records_broken_entry_points_when_isolating(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class EntryPoint:
+        def __init__(self, name: str, loader: object) -> None:
+            self.name = name
+            self._loader = loader
+
+        def load(self) -> object:
+            if isinstance(self._loader, Exception):
+                raise self._loader
+            return self._loader
+
+    healthy = create_default_target_registry(load_entry_points=False).get("fabric")
+    monkeypatch.setattr(
+        "etl_migration_core.targets.registry.entry_points",
+        lambda **_kwargs: [
+            EntryPoint("broken", ImportError("No module named 'missing_plugin'")),
+            EntryPoint("hidden", healthy),
+            EntryPoint("healthy", healthy),
+        ],
+    )
+
+    registry = TargetPlatformRegistry(builtin_placeholder_providers())
+    with pytest.raises(ImportError, match="missing_plugin"):
+        registry.load_entry_points()
+
+    registry = TargetPlatformRegistry(builtin_placeholder_providers())
+    assert registry.load_entry_points(allowlist={"broken", "healthy"}, on_error="record") == 1
+    outcomes = {item.name: item for item in registry.plugin_results}
+    assert outcomes["broken"].status == "failed"
+    assert "ImportError: No module named 'missing_plugin'" in (outcomes["broken"].detail or "")
+    assert outcomes["hidden"].status == "skipped"
+    assert outcomes["healthy"].status == "loaded"
+    assert outcomes["healthy"].provides == "fabric"
+    assert registry.origin_of("fabric") == "plugin:healthy"
+    assert registry.origin_of("databricks") == "builtin"
 
 
 def test_target_registry_reports_duplicate_entry_points(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -207,6 +292,84 @@ def test_target_registry_reports_duplicate_entry_points(monkeypatch: pytest.Monk
     registry = TargetPlatformRegistry([provider])
     with pytest.raises(ValueError, match="duplicate target platform entry point"):
         registry.load_entry_points()
+
+
+def test_target_kinds_are_advertised_and_validated_against_the_code_generator() -> None:
+    registry = create_default_target_registry(load_entry_points=False)
+    assert registry.get_info("fabric").target_kinds == ("dataflow", "notebook", "pipeline")
+    assert registry.get_info("databricks").target_kinds == ()
+
+    class GeneratorWithoutKinds:
+        platform_id = "kinds"
+        display_name = "Kinds"
+        provider_version = "1.0.0"
+        supported_ir_versions = ("1.0.0",)
+        implemented = True
+        capabilities: tuple[TargetCapability, ...] = ("codegen",)
+        description = "Advertises codegen but forgets to publish its target kinds"
+
+        def info(self) -> TargetPlatformInfo:
+            return TargetPlatformInfo(
+                platform_id=self.platform_id,
+                display_name=self.display_name,
+                provider_version=self.provider_version,
+                implemented=True,
+                status="ready",
+                capabilities=self.capabilities,
+            )
+
+        def evaluator(self) -> TargetEvaluator | None:
+            return None
+
+        def code_generator(self) -> object:
+            return registry.get("fabric").code_generator()  # type: ignore[attr-defined]
+
+    registry.register(GeneratorWithoutKinds())
+
+    catalog = registry.catalog()
+    assert [fault.platform_id for fault in catalog.faults] == ["kinds"]
+    assert "inconsistent metadata" in catalog.faults[0].detail
+    assert {info.platform_id for info in catalog.targets} == {
+        "databricks",
+        "fabric",
+        "snowflake",
+        "synapse",
+    }
+
+
+def test_plugin_host_reports_invalid_providers_as_structured_diagnostics() -> None:
+    class BrokenProvider:
+        platform_id = "broken"
+        display_name = "Broken"
+        provider_version = "1.0.0"
+        supported_ir_versions = ("1.0.0",)
+        implemented = True
+        capabilities: tuple[TargetCapability, ...] = ("evaluate",)
+        description = "Raises while describing itself"
+
+        def info(self) -> TargetPlatformInfo:
+            raise RuntimeError("provider exploded")
+
+        def evaluator(self) -> TargetEvaluator | None:
+            return None
+
+    registry = create_default_target_registry(load_entry_points=False)
+    registry.register(BrokenProvider())
+
+    catalog = PluginHost(None, registry).catalog()
+
+    assert [(item.code, item.severity, item.stage) for item in catalog.diagnostics] == [
+        ("TARGET_PROVIDER_INVALID", "error", "plugin")
+    ]
+    assert "broken: TargetProviderFaultError" in catalog.diagnostics[0].message
+    assert {item.platform_id for item in catalog.targets} == {
+        "databricks",
+        "fabric",
+        "snowflake",
+        "synapse",
+    }
+    assert {item.origin for item in catalog.targets} == {"builtin"}
+    assert catalog.failed_count == 0
 
 
 def test_packaged_example_is_manual_review_only() -> None:
@@ -462,3 +625,48 @@ def test_neutral_assessment_and_workload_profile_contain_no_fabric_terms(
     neutral_estate = PortfolioAssessmentApplication().assess_neutral(sample_dir)
     assert neutral_estate.failed_count == 0
     assert neutral_estate.workflow_count > 0
+
+
+def test_sources_status_and_provider_capability_apis(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = Path(__file__).parent / "fixtures" / "powercenter" / "basic_repository.xml"
+    with RunService(tmp_path / "state") as service:
+        preview = service.preview(source)
+        run = service.create_run(preview.snapshot_id)
+        service.execute(run.id)
+        monkeypatch.setattr(app.state, "run_service", service, raising=False)
+        client = TestClient(app, base_url="http://127.0.0.1")
+
+        sources_resp = client.get("/api/sources")
+        assert sources_resp.status_code == 200
+        source_ids = {item["adapter_id"] for item in sources_resp.json()["sources"]}
+        assert {"alteryx", "informatica-idmc", "informatica-powercenter"} <= source_ids
+
+        status_resp = client.get(f"/api/runs/{run.id}/status")
+        assert status_resp.status_code == 200
+        assert status_resp.json()["status"] == "completed"
+        assert "result" not in status_resp.json()
+
+        slim_run = client.get(f"/api/runs/{run.id}?include_result=false")
+        assert slim_run.status_code == 200
+        assert slim_run.json()["result"] is None
+
+        gen_resp = client.post(
+            f"/api/runs/{run.id}/targets/fabric/generate?target_kind=notebook"
+        )
+        assert gen_resp.status_code == 200
+        assert gen_resp.json()[0]["platform_id"] == "fabric"
+        assert gen_resp.json()[0]["artifacts"]
+
+        cap_resp = client.get(f"/api/runs/{run.id}/targets/fabric/capacity")
+        assert cap_resp.status_code == 200
+        assert cap_resp.json()[0]["platform_id"] == "fabric"
+
+        assert (
+            client.post(
+                f"/api/runs/{run.id}/targets/snowflake/generate?target_kind=notebook"
+            ).status_code
+            == 409
+        )
+        assert client.get(f"/api/runs/{run.id}/targets/snowflake/capacity").status_code == 409

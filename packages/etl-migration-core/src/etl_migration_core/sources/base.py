@@ -69,3 +69,11 @@ class SourceFileDiscoveryAdapter(Protocol):
     @property
     def supported_extensions(self) -> tuple[str, ...]:
         """Return lowercase extensions accepted by the adapter."""
+
+
+@runtime_checkable
+class SourceStreamProbeAdapter(Protocol):
+    """Optional in-memory byte probe to avoid temporary files during archive discovery."""
+
+    def probe_bytes(self, content: bytes, display_path: str) -> SourceMatch | None:
+        """Return a confidence-ranked match from raw file bytes without executing content."""

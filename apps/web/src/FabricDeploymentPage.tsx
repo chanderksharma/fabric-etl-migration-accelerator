@@ -47,7 +47,11 @@ export function FabricDeploymentPage({
     }
   }
   const [selectedTargetPlatform, setSelectedTargetPlatform] = useState("fabric");
-  const fabricCodegenAvailable = targetPlatforms.some(canGenerateFabric);
+  const fabricPlatform = targetPlatforms.find(canGenerateFabric);
+  const fabricCodegenAvailable = fabricPlatform !== undefined;
+  // Providers that do not advertise target kinds keep every generation option.
+  const offers = (kind: Target) =>
+    !fabricPlatform?.target_kinds?.length || fabricPlatform.target_kinds.includes(kind);
   const [previewFilter, setPreviewFilter] = useState<"all" | "deployable" | "scaffold">("all");
   const [selectedWorkflowPath, setSelectedWorkflowPath] = useState<string>(
     () => preselectedWorkflowPath ?? "",
@@ -209,42 +213,54 @@ export function FabricDeploymentPage({
               <h3>Preview generated code</h3>
               <p>Compile definitions and inspect diagnostics, required bindings, and generated code.</p>
               <div className="deploy-actions">
-                <button
-                  className="secondary-button"
-                  disabled={generating}
-                  onClick={() => void generate("notebook")}
-                >
-                  Generate Notebook previews
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={generating}
-                  onClick={() => void generate("dataflow")}
-                >
-                  Generate Dataflow previews
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={generating}
-                  onClick={() => void generate("pipeline")}
-                >
-                  Generate Pipeline previews
-                </button>
+                {offers("notebook") && (
+                  <button
+                    className="secondary-button"
+                    disabled={generating}
+                    onClick={() => void generate("notebook")}
+                  >
+                    Generate Notebook previews
+                  </button>
+                )}
+                {offers("dataflow") && (
+                  <button
+                    className="secondary-button"
+                    disabled={generating}
+                    onClick={() => void generate("dataflow")}
+                  >
+                    Generate Dataflow previews
+                  </button>
+                )}
+                {offers("pipeline") && (
+                  <button
+                    className="secondary-button"
+                    disabled={generating}
+                    onClick={() => void generate("pipeline")}
+                  >
+                    Generate Pipeline previews
+                  </button>
+                )}
               </div>
             </div>
             <div className="output-group">
               <h3>Download Fabric packages</h3>
               <p>Build and download a ZIP of generated artifacts for each Fabric item type.</p>
               <div className="deploy-actions">
-                <a className="secondary-button" href={`/api/runs/${runId}/candidates?target=notebook`}>
-                  Download Notebook package
-                </a>
-                <a className="secondary-button" href={`/api/runs/${runId}/candidates?target=dataflow`}>
-                  Download Dataflow package
-                </a>
-                <a className="secondary-button" href={`/api/runs/${runId}/candidates?target=pipeline`}>
-                  Download Pipeline package
-                </a>
+                {offers("notebook") && (
+                  <a className="secondary-button" href={`/api/runs/${runId}/candidates?target=notebook`}>
+                    Download Notebook package
+                  </a>
+                )}
+                {offers("dataflow") && (
+                  <a className="secondary-button" href={`/api/runs/${runId}/candidates?target=dataflow`}>
+                    Download Dataflow package
+                  </a>
+                )}
+                {offers("pipeline") && (
+                  <a className="secondary-button" href={`/api/runs/${runId}/candidates?target=pipeline`}>
+                    Download Pipeline package
+                  </a>
+                )}
               </div>
             </div>
           </div>

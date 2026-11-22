@@ -12,10 +12,12 @@ import zipfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 from etl_migration_core.contracts.ir import SourcePlatform
 from etl_target_fabric.compilers.alteryx import Candidate, Target
+
+IdentityMode = Literal["content", "asset"]
 
 
 class AssessmentTargetSummary(Protocol):
@@ -39,8 +41,14 @@ def write_candidates(
     artifact_root: Path,
     generate_fn: Callable[[Target], list[Candidate]],
     assessments: Sequence[AssessmentTargetSummary],
+    identity_mode: IdentityMode = "content",
+    write_plan: bool = True,
 ) -> ArtifactWriteResult:
-    """Persist Fabric definitions, manifests, and deployment plans for one run."""
+    """Persist Fabric definitions, manifests, and (optionally) the deployment plan for one run.
+
+    ``write_plan=False`` skips compiling the other targets and the cross-target deployment
+    plan; use it for previews and single-target packages that never read that plan.
+    """
     if not re.fullmatch(r"[a-f0-9]{32}", run_id):
         raise ValueError("Run ID must be a 32-character lowercase hexadecimal value")
     candidates = generate_fn(target)
@@ -54,7 +62,7 @@ def write_candidates(
         paths.add(path_key)
         if candidate.validation_state in {"blocked", "scaffold"}:
             continue
-        logical_id = _fabric_logical_id(candidate)
+        logical_id = _fabric_logical_id(candidate, identity_mode=identity_mode)
         previous = identities.get(logical_id)
         if previous is not None:
             raise ValueError(
@@ -63,10 +71,14 @@ def write_candidates(
             )
         identities[logical_id] = candidate.workflow
     plan_targets: tuple[Target, ...] = ("dataflow", "notebook", "pipeline")
-    plan_candidates = {
-        plan_target: candidates if plan_target == target else generate_fn(plan_target)
-        for plan_target in plan_targets
-    }
+    plan_candidates = (
+        {
+            plan_target: candidates if plan_target == target else generate_fn(plan_target)
+            for plan_target in plan_targets
+        }
+        if write_plan
+        else {}
+    )
     resolved_root = artifact_root.resolve()
     resolved_root.mkdir(parents=True, exist_ok=True)
     _write_artifact_guide(resolved_root)
@@ -98,7 +110,8 @@ def write_candidates(
             )
         else:
             definition = _local_definition_files(
-                target, _fabric_definition(candidate, relative.name)
+                target,
+                _fabric_definition(candidate, relative.name, identity_mode=identity_mode),
             )
             files = list(definition)
             updated = candidate.model_copy(
@@ -138,14 +151,15 @@ def write_candidates(
         ),
     )
     _write_combined_index(resolved_root, run_id)
-    _write_deployment_plan(
-        resolved_root,
-        run_id,
-        plan_candidates["dataflow"],
-        plan_candidates["notebook"],
-        plan_candidates["pipeline"],
-        assessments,
-    )
+    if write_plan:
+        _write_deployment_plan(
+            resolved_root,
+            run_id,
+            plan_candidates["dataflow"],
+            plan_candidates["notebook"],
+            plan_candidates["pipeline"],
+            assessments,
+        )
     _write_latest_index(resolved_root, run_id, target, index_name)
     return ArtifactWriteResult(resolved_root, written)
 
@@ -226,18 +240,52 @@ def _candidate_artifact_path(candidate: Candidate) -> Path:
     platform_root = {
         SourcePlatform.INFORMATICA_POWERCENTER: "informatica-powercenter",
         SourcePlatform.INFORMATICA_IDMC: "informatica-idmc",
-    }[candidate.source_platform]
+    }.get(
+        candidate.source_platform,
+        re.sub(r"[^A-Za-z0-9-]+", "-", str(candidate.source_platform)).strip("-") or "source",
+    )
     asset_name = candidate.native_id or candidate.workflow.rsplit("!", 1)[-1]
     return Path(platform_root) / _artifact_path(asset_name)
 
 
-def _fabric_logical_id(candidate: Candidate) -> str:
+def _fabric_logical_id(
+    candidate: Candidate, *, identity_mode: IdentityMode = "content"
+) -> str:
+    if identity_mode == "asset":
+        asset_key = candidate.native_id or _candidate_artifact_path(candidate).as_posix()
+        return str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"{candidate.target}:{candidate.source_platform}:{asset_key}",
+            )
+        )
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{candidate.target}:{candidate.source_sha256}"))
 
 
-def _fabric_definition(candidate: Candidate, slug: str) -> dict[str, str]:
+def build_logical_id_migration_plan(
+    candidates: Sequence[Candidate],
+) -> list[dict[str, str]]:
+    """Produce a deterministic mapping from legacy content IDs to stable asset IDs."""
+    return [
+        {
+            "workflow": candidate.workflow,
+            "target": candidate.target,
+            "legacy_logical_id": _fabric_logical_id(candidate, identity_mode="content"),
+            "stable_logical_id": _fabric_logical_id(candidate, identity_mode="asset"),
+        }
+        for candidate in candidates
+        if candidate.validation_state not in {"blocked", "scaffold"}
+    ]
+
+
+def _fabric_definition(
+    candidate: Candidate,
+    slug: str,
+    *,
+    identity_mode: IdentityMode = "content",
+) -> dict[str, str]:
     display_name = Path(candidate.workflow.replace("!", "/")).stem[:120] or slug
-    logical_id = _fabric_logical_id(candidate)
+    logical_id = _fabric_logical_id(candidate, identity_mode=identity_mode)
     source_label = (
         "Alteryx"
         if candidate.source_platform is SourcePlatform.ALTERYX

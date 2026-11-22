@@ -23,7 +23,11 @@ from etl_migration_core.contracts.ir import (
     SourceLocation,
     SourcePlatform,
 )
-from etl_migration_core.intake.discovery import hash_idmc_directory
+from etl_migration_core.intake.discovery import (
+    hash_idmc_directory,
+    validate_archive_entries,
+)
+from etl_migration_core.intake.domain import DiscoveryLimits
 from etl_migration_core.sources.base import SourceMatch
 
 MAX_ENTRIES = 10_000
@@ -123,26 +127,22 @@ class _ZipReader:
     def __init__(self, path: Path) -> None:
         self.archive = zipfile.ZipFile(path)
         entries = self.archive.infolist()
-        if len(entries) > MAX_ENTRIES:
-            raise ValueError("IDMC package exceeds the entry limit")
-        total = 0
+        validate_archive_entries(
+            path,
+            entries,
+            DiscoveryLimits(
+                max_file_bytes=MAX_JSON_BYTES,
+                max_archive_entries=MAX_ENTRIES,
+                max_archive_uncompressed_bytes=MAX_EXPANDED_BYTES,
+                max_compression_ratio=MAX_COMPRESSION_RATIO,
+            ),
+        )
         self.names: set[str] = set()
         for entry in entries:
-            member = PurePosixPath(entry.filename)
-            if member.is_absolute() or ".." in member.parts:
-                raise ValueError("IDMC package contains an unsafe path")
             if entry.file_size > MAX_JSON_BYTES and entry.filename.endswith(".json"):
                 raise ValueError("IDMC JSON asset exceeds the size limit")
             if entry.compress_size == 0 and entry.file_size:
                 raise ValueError("IDMC package contains an invalid compressed entry")
-            if (
-                entry.compress_size
-                and entry.file_size / entry.compress_size > MAX_COMPRESSION_RATIO
-            ):
-                raise ValueError("IDMC package exceeds the compression-ratio limit")
-            total += entry.file_size
-            if total > MAX_EXPANDED_BYTES:
-                raise ValueError("IDMC package exceeds the expanded-size limit")
             self.names.add(entry.filename.rstrip("/"))
 
     def json(self, name: str) -> dict[str, JsonValue]:

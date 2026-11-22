@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections import Counter
 from dataclasses import dataclass
 
@@ -12,86 +14,70 @@ from etl_migration_core.contracts.ir import (
     NodeKind,
     SourcePlatformId,
 )
-from etl_portfolio_assessment.assessment.effort import assessment_effort_days
+from etl_migration_core.contracts.operations import (
+    HEAVY_OPERATIONS,
+    NEUTRAL_OPERATIONS,
+    ORCHESTRATION_OPERATIONS,
+    TABULAR_OPERATIONS,
+    classify_operation_category,
+    operation_table_fingerprint,
+)
+from etl_portfolio_assessment.assessment.effort import (
+    MAX_EFFORT_DAYS,
+    MIN_EFFORT_DAYS,
+    assessment_effort_days,
+)
 
-NEUTRAL_ASSESSMENT_VERSION = "1.0.1"
+CLASSIFICATION_WEIGHTS: dict[str, int] = {
+    "neutral": 0,
+    "tabular": 1,
+    "orchestration": 2,
+    "script": 3,
+    "manual": 6,
+}
+DEPENDENCY_WEIGHT = 2
+MEDIUM_BAND_FLOOR = 20
+HIGH_BAND_FLOOR = 40
+WAVE_BY_BAND: dict[str, str] = {"Low": "Wave 1", "Medium": "Wave 3", "High": "Wave 2"}
+MANUAL_REVIEW_WAVE = "Wave 4"
 
-NEUTRAL_OPERATIONS = frozenset({"annotation", "container", "end", "start"})
-HEAVY_OPERATIONS = frozenset(
-    {
-        "advanced",
-        "custom_transformation",
-        "java",
-        "python",
-        "rtool",
-        "script",
-        "spatial",
-        "predictive",
-        "multirowformula",
+# Bump the semantic version for any rule or logic change. The fingerprint covers the data
+# tables and constants above, so a forgotten bump still invalidates caches and fails the
+# golden test instead of reusing stale results.
+NEUTRAL_RULES_VERSION = "1.2.0"
+
+
+def _rules_fingerprint() -> str:
+    payload = {
+        "operations": operation_table_fingerprint(),
+        "weights": CLASSIFICATION_WEIGHTS,
+        "dependency_weight": DEPENDENCY_WEIGHT,
+        "band_floors": [MEDIUM_BAND_FLOOR, HIGH_BAND_FLOOR],
+        "waves": WAVE_BY_BAND,
+        "manual_review_wave": MANUAL_REVIEW_WAVE,
+        "effort_days": [MIN_EFFORT_DAYS, MAX_EFFORT_DAYS],
     }
-)
-ORCHESTRATION_OPERATIONS = frozenset(
-    {
-        "assignment",
-        "command",
-        "decision",
-        "detour",
-        "download",
-        "dynamicinput",
-        "email",
-        "mapping_task",
-        "mappingtask",
-        "runcommand",
-        "session",
-        "taskflow",
-        "workflow",
-        "worklet",
-    }
-)
-TABULAR_OPERATIONS = frozenset(
-    {
-        "aggregator",
-        "alteryxselect",
-        "appendfields",
-        "autofield",
-        "browse",
-        "comment",
-        "crosstab",
-        "datetime",
-        "dbfileinput",
-        "dbfileoutput",
-        "explorerbox",
-        "expression",
-        "filter",
-        "formula",
-        "inputdata",
-        "join",
-        "joiner",
-        "lookup",
-        "merge",
-        "outputdata",
-        "recordid",
-        "regex",
-        "router",
-        "sample",
-        "select",
-        "sequence_generator",
-        "sort",
-        "sorter",
-        "source",
-        "source_qualifier",
-        "summarize",
-        "target",
-        "textinput",
-        "textbox",
-        "toolcontainer",
-        "transpose",
-        "union",
-        "unique",
-        "update_strategy",
-        "xml_source_qualifier",
-    }
-)
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+    return digest[:12]
+
+
+NEUTRAL_RULES_FINGERPRINT = _rules_fingerprint()
+NEUTRAL_ASSESSMENT_VERSION = f"{NEUTRAL_RULES_VERSION}+{NEUTRAL_RULES_FINGERPRINT}"
+
+__all__ = [
+    "CLASSIFICATION_WEIGHTS",
+    "HEAVY_OPERATIONS",
+    "NEUTRAL_ASSESSMENT_VERSION",
+    "NEUTRAL_OPERATIONS",
+    "NEUTRAL_RULES_FINGERPRINT",
+    "NEUTRAL_RULES_VERSION",
+    "ORCHESTRATION_OPERATIONS",
+    "TABULAR_OPERATIONS",
+    "NeutralAssetAssessment",
+    "NeutralComponentItem",
+    "assess_package_neutral",
+    "classify_neutral_operation",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,18 +114,7 @@ class NeutralAssetAssessment:
 
 def classify_neutral_operation(operation: str, *, has_issues: bool = False) -> str:
     """Classify a canonical operation purely by source semantics (target-free)."""
-    if has_issues:
-        return "manual"
-    normalized = operation.casefold().replace(" ", "_")
-    if normalized in NEUTRAL_OPERATIONS:
-        return "neutral"
-    if normalized in HEAVY_OPERATIONS:
-        return "script"
-    if normalized in ORCHESTRATION_OPERATIONS:
-        return "orchestration"
-    if normalized in TABULAR_OPERATIONS:
-        return "tabular"
-    return "manual"
+    return classify_operation_category(operation, has_issues=has_issues)
 
 
 def assess_package_neutral(package: EtlPackage) -> tuple[NeutralAssetAssessment, ...]:
@@ -188,26 +163,12 @@ def _assess_asset_neutral(
         dict.fromkeys(item.operation for item in inventory if item.classification == "manual")
     )
     score = sum(
-        item.count
-        * {
-            "neutral": 0,
-            "tabular": 1,
-            "orchestration": 2,
-            "script": 3,
-            "manual": 6,
-        }[item.classification]
-        for item in inventory
-    ) + connection_count + len(asset.dependencies) * 2
-    band = "Low" if score < 20 else "Medium" if score < 40 else "High"
-    wave_tier = (
-        "Wave 4"
-        if unknown
-        else "Wave 2"
-        if band == "High"
-        else "Wave 3"
-        if band == "Medium"
-        else "Wave 1"
+        item.count * CLASSIFICATION_WEIGHTS[item.classification] for item in inventory
+    ) + connection_count + len(asset.dependencies) * DEPENDENCY_WEIGHT
+    band = (
+        "Low" if score < MEDIUM_BAND_FLOOR else "Medium" if score < HIGH_BAND_FLOOR else "High"
     )
+    wave_tier = MANUAL_REVIEW_WAVE if unknown else WAVE_BY_BAND[band]
     manual_count = sum(item.count for item in inventory if item.classification == "manual")
     dependencies = tuple(
         dict.fromkeys(

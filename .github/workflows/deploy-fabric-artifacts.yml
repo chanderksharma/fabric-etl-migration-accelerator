@@ -110,7 +110,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy generated definitions
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: ${{ fromJSON(vars.DEPLOY_RUNNER_LABELS || '["self-hosted", "Windows", "X64"]') }}
     timeout-minutes: 30
     environment:
       name: dev

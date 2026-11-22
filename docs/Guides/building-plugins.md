@@ -98,9 +98,24 @@ databricks = "etl_target_databricks.provider:DatabricksTargetProvider"
 When installed alongside `etl-migration-core`, `create_target_registry()` automatically supersedes the built-in `"databricks"` placeholder with `DatabricksTargetProvider`, and `GET /api/targets` or `uv run tool targets` reports `"status": "ready"`.
 
 Use `TargetPlatformRegistry.evaluate_asset` to check the advertised evaluation
-capability and exact IR version before calling the evaluator. For completed local runs,
+capability and IR compatibility before calling the evaluator. Providers can also
+implement the optional `@runtime_checkable` protocols `TargetCodeGeneratorProvider`
+and `TargetCapacityProvider` from
+`etl_migration_core.contracts.spi`, and declare SemVer minor compatibility ranges
+such as `"1.*"` or `"^1.0.0"` via `supported_ir_versions`. A provider that implements
+`TargetCodeGeneratorProvider` must also publish the kinds its generator accepts in
+`TargetPlatformInfo.target_kinds` (for Fabric: `dataflow`, `notebook`, `pipeline`); the
+registry rejects metadata that disagrees with the generator, and the portal offers only
+the advertised kinds. There is no deployment SPI: CI dispatch is Fabric-specific today
+and is not a pluggable capability. Use
+`assert_source_adapter_conformance` and `assert_target_provider_conformance` in
+`etl_migration_core.contracts.testing` to validate metadata consistency, determinism,
+stream probing, and unsupported-IR rejection in plugin test suites. For completed local runs,
 `POST /api/runs/{run_id}/targets/{platform_id}/evaluate` evaluates each confirmed
-canonical asset and returns separate results without changing the existing assessment.
+canonical asset and returns separate results without changing the existing assessment;
+`POST /api/runs/{run_id}/targets/{platform_id}/generate?target_kind=...` and
+`GET /api/runs/{run_id}/targets/{platform_id}/capacity` invoke registered `codegen`
+and `capacity` providers.
 Results are saved per run and platform, with the most recent evaluation replacing the
 previous one. The endpoint does not enable target-specific generation or deployment
 in the portal. Provider metadata must match its declared version, IR versions,
@@ -129,7 +144,9 @@ Duplicate source adapter entry points are rejected. Existing Fabric evaluation a
 reject sources they have not certified. Adapters can declare
 `supported_extensions` as lowercase extensions such as `(".dtsx",)` to enable
 local-file and ZIP member discovery and target-neutral run assessment for extensions
-not reserved by built-in intake. New plugin file formats must use an external source identifier;
+not reserved by built-in intake. Each extension must be a dot followed by 1 to 16
+lowercase letters, digits, hyphens, or underscores; registration rejects anything else,
+including uppercase such as `".DTSX"`. New plugin file formats must use an external source identifier;
 they cannot claim a built-in source identity through extension discovery.
 External snapshots record the selected adapter identity and its adapter, parser,
 registry, and rules versions. Changing any of these requires a new preview. Older
@@ -152,6 +169,48 @@ ssis = "etl_source_ssis.adapter:SsisSourceAdapter"
 ```
 
 Keep source adapters strictly free of target-platform constructs (`Dataflow`, `Databricks`, `F-SKU`). Always parse untrusted XML using `defusedxml` with external entity expansion disabled, and never execute embedded workflow scripts.
+
+### Failure isolation contract
+
+The host treats every plugin as untrusted for availability (not for sandboxing; plugins
+still run in-process with the application's privileges). Follow this contract so a bad
+input never becomes a failed run:
+
+- Return `None` from `probe` for content you do not recognize.
+- Raise `ValueError` for content that is recognized but invalid, and `OSError` for
+  unreadable files. These are reported as a skipped file or one failed workflow.
+- Any other exception from `probe` or `parse` is isolated as an adapter fault
+  (`SourceAdapterFaultError`, a `ValueError`) and reported with the adapter identity and
+  stage. The same applies to target providers (`TargetProviderFaultError`).
+- Read files with `etl_migration_core.sources.read_bounded(path, limit)`. It sizes the read
+  from the real file size and rejects oversized or growing files, unlike `read(limit + 1)`,
+  which allocates the full limit for every file.
+- Importing the entry point must not have side effects. A plugin that fails to import,
+  duplicates an existing identity, declares an identity or version attribute that is not a
+  string, or declares an invalid `supported_extensions` entry is recorded in
+  `registry.plugin_results` and `GET /api/plugins` while the built-in adapters keep
+  working. `create_default_registry` and `create_default_target_registry` isolate
+  failures by default; pass `plugin_errors="raise"` in a CI job that must fail on a broken
+  plugin. Set `ACCELERATOR_PLUGIN_ALLOWLIST` to load only approved entry points: every
+  default registry honors it, including the library facades and the stateless
+  `etl-assess` and `etl-fabric` CLIs, and an explicit `plugin_allowlist=` argument
+  overrides it.
+- `GET /api/targets` returns the valid targets plus a `faults` list instead of failing the
+  whole catalog when one provider reports inconsistent metadata.
+
+Operations that cannot be isolated in-process, such as an infinite loop or a native
+crash, are bounded by the run lease and quarantined after five interrupted attempts.
+
+### Verify an installed plugin
+
+Unit tests that import your adapter or provider directly do not prove packaging. After
+installing your distribution next to the accelerator, run `uv run tool plugins`. It lists
+every source adapter, target provider, and entry-point result (`loaded`, `failed`, or
+`skipped`, with the owning distribution) and exits with code 1 when a plugin fails to load,
+so it can gate a CI job. The repository's `plugin-entry-points` job does this with both
+example plugins; see
+[Validate your change](developer-contribution-guide.md#validate-your-change) to repeat it
+locally.
 
 ## Consuming stateless CLIs from IDE extensions
 

@@ -154,6 +154,11 @@ test("assesses a plugin archive neutrally and evaluates an installed target", as
       total_size_bytes: 12, workflows: [workflow], skipped: [],
     },
     "/api/runs": {id: "plugin-run", status: "queued", result: null},
+    "/api/runs/plugin-run/status": {
+      id: "plugin-run", status: "completed", processed: 1, total: 1,
+      error: null, result: {workflow_count: 0, failed_count: 1, assessments: [],
+        failures: ["Fabric assessment does not support source"], workflows: [workflow]},
+    },
     "/api/runs/plugin-run": {
       id: "plugin-run", status: "completed", processed: 1, total: 1,
       error: null, result: {workflow_count: 0, failed_count: 1, assessments: [],
@@ -217,6 +222,14 @@ test("assesses a plugin archive neutrally and evaluates an installed target", as
   expect(fetchMock).not.toHaveBeenCalledWith(
     expect.stringContaining("/previews"), expect.anything(),
   );
+  fireEvent.change(screen.getByLabelText("Filter neutral assets"), {
+    target: {value: "missing"},
+  });
+  expect(screen.queryByRole("heading", {name: "Package"})).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Filter neutral assets"), {
+    target: {value: ""},
+  });
+  expect(await screen.findByRole("heading", {name: "Package"})).toBeInTheDocument();
 });
 
 test("restores external runs into the neutral workspace and reports target failures", async () => {
@@ -227,11 +240,13 @@ test("restores external runs into the neutral workspace and reports target failu
   };
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url === "/api/runs/saved-plugin") return {ok: true, json: async () => ({
-      id: "saved-plugin", status: "completed", processed: 1, total: 1,
-      result: {workflow_count: 0, failed_count: 1, assessments: [], failures: [],
-        workflows: [workflow]},
-    })};
+    if (url === "/api/runs/saved-plugin" || url === "/api/runs/saved-plugin/status") {
+      return {ok: true, json: async () => ({
+        id: "saved-plugin", status: "completed", processed: 1, total: 1,
+        result: {workflow_count: 0, failed_count: 1, assessments: [], failures: [],
+          workflows: [workflow]},
+      })};
+    }
     if (url.endsWith("/neutral-assessment")) return {ok: true, json: async () => ({
       workflow_count: 1, failed_count: 0, failures: [], assessments: [{
         path: "source.dtsx!Package", name: "Package", source_platform: "ssis",
@@ -273,6 +288,71 @@ test("supports keyboard selection of input modes", () => {
   const zip = screen.getByRole("radio", { name: /Select ZIP/ });
   expect(zip).toHaveAttribute("aria-checked", "true");
   expect(zip).toHaveFocus();
+});
+
+test("polls the lightweight run status and loads the full result once", async () => {
+  const requests: string[] = [];
+  let statusPolls = 0;
+  const full = completedRun();
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    requests.push(`${init?.method ?? "GET"} ${url}`);
+    if (url === "/api/snapshots/upload") return {ok: true, json: async () => ({
+      snapshot_id: "snapshot", workflow_count: 1, skipped_count: 0, total_size_bytes: 12,
+      workflows: [{display_path: "orders.yxmd", sha256: "abc"}], skipped: [],
+    })};
+    if (url === "/api/runs") return {ok: true, json: async () => ({
+      id: "saved-run", status: "queued", processed: 0, total: 1, cache_hits: 0,
+      error: null, result: null,
+    })};
+    if (url === "/api/runs/saved-run/status") {
+      statusPolls += 1;
+      return {ok: true, json: async () => ({
+        id: "saved-run", snapshot_id: "snapshot", processed: 1, total: 1, cache_hits: 0,
+        error: null, status: statusPolls < 2 ? "running" : "completed",
+      })};
+    }
+    if (url === "/api/runs/saved-run") return {ok: true, json: async () => full};
+    return {
+      ok: false, status: 404, headers: new Headers({"content-type": "application/json"}),
+      json: async () => ({detail: "Not mocked"}),
+    };
+  }));
+  render(<App />);
+  fireEvent.change(screen.getByLabelText("Choose files"), {
+    target: {files: [new File(["<Workflow />"], "orders.yxmd")]},
+  });
+  fireEvent.click(await screen.findByRole("button", {name: "Confirm and assess"}));
+
+  expect(await screen.findByRole(
+    "heading", {name: "Portfolio Migration Summary"}, {timeout: 4000},
+  )).toBeInTheDocument();
+  expect(statusPolls).toBe(2);
+  expect(requests.filter(request => request === "GET /api/runs/saved-run")).toHaveLength(1);
+});
+
+test("lists installed plugins and warns when a plugin failed to load", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "/api/sources") return {ok: true, json: async () => ({sources: [
+      {adapter_id: "alteryx", product: "Alteryx Designer", origin: "builtin",
+        supported_extensions: []},
+      {adapter_id: "synthetic-ssis", product: "Synthetic SSIS example", origin: "plugin:ssis",
+        supported_extensions: [".dtsx"]},
+    ]})};
+    if (url === "/api/plugins") return {ok: true, json: async () => ({
+      allowlist: null, failed_count: 1, plugins: [],
+    })};
+    throw new Error(`Unexpected request: ${url}`);
+  }));
+  render(<App />);
+
+  fireEvent.click(screen.getByRole("radio", {name: /Installed plugins/}));
+
+  const summary = await screen.findByTestId("plugin-sources");
+  expect(summary).toHaveTextContent("Installed: Synthetic SSIS example (.dtsx).");
+  expect(summary).toHaveTextContent("1 installed plugin failed to load");
+  expect(screen.getByLabelText("Choose files")).toHaveAttribute("accept", ".dtsx");
 });
 
 test("recursively reads a dropped folder and preserves upload paths", async () => {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from enum import StrEnum
 from typing import Annotated, Literal
 
@@ -18,6 +19,48 @@ from pydantic import (
 
 IR_VERSION = "1.0.0"
 EXTENSIBLE_SOURCE_IR_VERSION = "1.1.0"
+_SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+_WILDCARD_RE = re.compile(r"^(\d+)\.\*$")
+_CARET_RE = re.compile(r"^\^(\d+)\.(\d+)\.(\d+)$")
+
+
+def _parse_semver(version: str) -> tuple[int, int, int] | None:
+    match = _SEMVER_RE.fullmatch(version.strip())
+    if match is None:
+        return None
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
+def is_ir_compatible(
+    package_ir_version: str, supported_versions: Sequence[str]
+) -> bool:
+    """Check exact IR version or SemVer major/minor compatibility ranges.
+
+    Exact literals such as ``("1.0.0",)`` preserve strict matching; providers
+    opting into forward-compatible minor versions can advertise ``"1.*"`` or
+    ``"^1.0.0"``.
+    """
+    if package_ir_version in supported_versions:
+        return True
+    parsed_package = _parse_semver(package_ir_version)
+    if parsed_package is None:
+        return False
+    pkg_major, pkg_minor, pkg_patch = parsed_package
+    for spec in supported_versions:
+        wildcard = _WILDCARD_RE.fullmatch(spec.strip())
+        if wildcard is not None and pkg_major == int(wildcard.group(1)):
+            return True
+        caret = _CARET_RE.fullmatch(spec.strip())
+        if caret is not None:
+            spec_major = int(caret.group(1))
+            spec_minor = int(caret.group(2))
+            spec_patch = int(caret.group(3))
+            if pkg_major == spec_major and (pkg_minor, pkg_patch) >= (
+                spec_minor,
+                spec_patch,
+            ):
+                return True
+    return False
 
 
 class SourcePlatform(StrEnum):

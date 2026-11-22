@@ -184,7 +184,12 @@ To inspect registered target platforms and roadmap placeholder status from the m
 
 ```powershell
 uv run tool targets
+uv run tool plugins
 ```
+
+`tool plugins` (and `GET /api/plugins`) also reports every installed plugin as `loaded`,
+`failed`, or `skipped` with the reason, so a plugin that does not appear in the portal can
+be diagnosed without reading logs. See [Troubleshooting](troubleshooting.md#plugins-faults-and-local-state).
 
 See [Building Source and Target Plugins](building-plugins.md) to register custom source adapters or implement providers for Databricks, Azure Synapse, or Snowflake, and [PyPI Packages and Publishing Guide](pypi-packages.md) for installation, build, and release instructions.
 
