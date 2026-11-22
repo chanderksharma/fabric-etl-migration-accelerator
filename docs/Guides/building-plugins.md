@@ -22,6 +22,14 @@ See [Figure ARCH-02](../Architecture/arch-02-pluggable-solution-architecture.vsd
 
 Target platforms register via open string identifiers (`"fabric"`, `"databricks"`, `"synapse"`, `"snowflake"`, or custom IDs) using `importlib.metadata` entry points in group `etl_migration.targets`. Built-in roadmap placeholders (`databricks`, `synapse`, `snowflake`) fail closed until an implementing plugin wheel is installed.
 
+The following example illustrates provider registration, not a complete or
+validated Databricks evaluator. A real evaluator must check supported
+semantics and report unsupported operations and required bindings. The
+current provider protocol exposes metadata and evaluation; registering a
+provider alone does not connect its generation or deployment to the local
+application. See the [developer contribution guide](developer-contribution-guide.md)
+for integration steps.
+
 ### Implement the provider protocol
 
 ```python
@@ -108,6 +116,11 @@ When installed alongside `etl-migration-core`, `create_target_registry()` automa
 ## Adding a source adapter plugin
 
 Source adapters normalize native ETL exports (such as SSIS `.dtsx`, Talend, or DataStage) into `EtlPackage` and register under the `etl_migration.sources` entry-point group.
+
+These formats are extension examples, not current built-in support. A new
+adapter also needs compatible source-platform contracts, secure discovery,
+assessment, and runtime integration. See the
+[developer contribution guide](developer-contribution-guide.md#extend-a-source-system).
 
 ```toml
 [project.entry-points."etl_migration.sources"]

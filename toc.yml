@@ -1,44 +1,56 @@
 - name: Overview
   href: index.md
-- name: Repository Guide (README)
+- name: Repository Overview
   href: README.md
-- name: Guides
+- name: Start Here
   items:
     - name: Getting Started
       href: docs/Guides/getting-started.md
     - name: User Guide
       href: docs/Guides/user-guide.md
-    - name: Installation & Runtime Modes
+    - name: Installation and Runtime Modes
       href: docs/Guides/installation.md
     - name: Fabric Capacity Planning
       href: docs/Guides/capacity-planning.md
-    - name: Fabric CI/CD Setup (OIDC)
-      href: docs/Guides/fabric-ci-cd-setup.md
-    - name: Building Source & Target Plugins
-      href: docs/Guides/building-plugins.md
-    - name: PyPI Packages & Publishing
-      href: docs/Guides/pypi-packages.md
     - name: Troubleshooting
       href: docs/Guides/troubleshooting.md
-- name: Architecture & Design
+- name: Business and Requirements
   items:
-    - name: System Architecture
-      href: docs/Architecture/system-architecture.md
-    - name: "ADR-001: Source Adapters & Canonical IR"
-      href: docs/Architecture/ADR-001-etl-source-adapters.md
-    - name: Local Architecture Decisions
-      href: docs/Planning/local-architecture-decisions.md
-    - name: Implementation Plan
-      href: docs/Planning/accelerator-implementation-plan.md
+    - name: Business Requirements Document
+      href: docs/brds/fabric-etl-migration-accelerator-brd.md
     - name: Pluggable Architecture Business Requirements
       href: docs/Planning/pluggable-architecture-business-requirements.md
-    - name: Pluggable Architecture Analysis and Target Approach
+    - name: Accelerator Implementation Plan
+      href: docs/Planning/accelerator-implementation-plan.md
+    - name: Pluggable Architecture Analysis
       href: docs/Planning/pluggable-architecture-analysis-and-approach.md
     - name: Pluggable Architecture Implementation Plan
       href: docs/Planning/pluggable-architecture-implementation-plan.md
-- name: Security & Quality
+- name: Architecture and Extensions
   items:
-    - name: Threat Model (STRIDE)
+    - name: System Architecture
+      href: docs/Architecture/system-architecture.md
+    - name: ADR-001 Source Adapters and Canonical ETL IR
+      href: docs/Architecture/ADR-001-etl-source-adapters.md
+    - name: Local Architecture Decisions
+      href: docs/Planning/local-architecture-decisions.md
+    - name: Building Source and Target Plugins
+      href: docs/Guides/building-plugins.md
+    - name: PyPI Packages and Publishing
+      href: docs/Guides/pypi-packages.md
+- name: Delivery and Operations
+  items:
+    - name: Fabric CI/CD Setup
+      href: docs/Guides/fabric-ci-cd-setup.md
+    - name: Deployment Strategy
+      href: docs/Release/deployment-strategy.md
+    - name: Rollback Plan
+      href: docs/Release/rollback-plan.md
+    - name: Release Notes
+      href: docs/Release/release-notes.md
+- name: Security and Quality
+  items:
+    - name: Threat Model
       href: docs/Security/threat-model.md
     - name: Security Policy
       href: SECURITY.md
@@ -48,17 +60,11 @@
       href: docs/Quality/audit-findings-log.md
     - name: Prototype UI Review
       href: docs/Quality/prototype-ui-review.md
-- name: Release & Operations
+- name: Contribute and Support
   items:
-    - name: Release Notes (v1.0.0)
-      href: docs/Release/release-notes.md
-    - name: Deployment Strategy
-      href: docs/Release/deployment-strategy.md
-    - name: Rollback Plan
-      href: docs/Release/rollback-plan.md
-- name: InnerSource Governance
-  items:
-    - name: Contributing Guide
+    - name: Developer Contribution Guide
+      href: docs/Guides/developer-contribution-guide.md
+    - name: Contributing
       href: CONTRIBUTING.md
     - name: Support
       href: SUPPORT.md

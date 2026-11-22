@@ -1,18 +1,69 @@
-# Microsoft Fabric ETL Migration Accelerator
+---
+title: Microsoft Fabric ETL Migration Accelerator Documentation
+description: Documentation hub for using, extending, operating, and governing the Microsoft Fabric ETL Migration Accelerator
+ms.date: 2026-11-22
+ms.topic: overview
+---
 
-Welcome to the Chrysalis **Docs-as-Code** documentation portal for the **Microsoft Fabric ETL Migration Accelerator (`v1.0.0`)**.
+This documentation supports the Microsoft Fabric ETL Migration Accelerator
+(FEMA), an internal tool for assessing Alteryx Designer, Informatica
+PowerCenter, and Informatica IDMC estates and preparing reviewed migration
+artifacts for Microsoft Fabric.
 
-This InnerSource IP Collection provides deterministic multi-source ETL estate discovery, canonical graph assessment, compiler-grounded Microsoft Fabric definition generation (**Dataflow Gen2**, **Fabric Notebook**, and **Data Pipeline**), and secretless **Microsoft Entra OIDC** CI/CD deployment for **Alteryx Designer**, **Informatica PowerCenter**, and **Informatica IDMC** workloads.
+![Pluggable and extensible ETL migration solution architecture](docs/Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png)
 
-![Pluggable & Extensible ETL Migration Solution Architecture](docs/Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png)
+## Choose your path
 
-## Major Sections
+| If you need to... | Start with... | Then use... |
+| --- | --- | --- |
+| Assess an estate | [Getting Started](docs/Guides/getting-started.md) | [User Guide](docs/Guides/user-guide.md), [Installation and Runtime Modes](docs/Guides/installation.md) |
+| Plan capacity | [Fabric Capacity Planning](docs/Guides/capacity-planning.md) | [User Guide](docs/Guides/user-guide.md) |
+| Generate and deploy artifacts | [User Guide](docs/Guides/user-guide.md) | [Fabric CI/CD Setup](docs/Guides/fabric-ci-cd-setup.md), [Deployment Strategy](docs/Release/deployment-strategy.md) |
+| Fix a bug or add a feature | [Developer Contribution Guide](docs/Guides/developer-contribution-guide.md) | [Contributing](CONTRIBUTING.md) |
+| Add a source or target provider | [Building Source and Target Plugins](docs/Guides/building-plugins.md) | [System Architecture](docs/Architecture/system-architecture.md), [ADR-001](docs/Architecture/ADR-001-etl-source-adapters.md) |
+| Troubleshoot a local or Fabric run | [Troubleshooting](docs/Guides/troubleshooting.md) | [Installation and Runtime Modes](docs/Guides/installation.md) |
+| Understand business scope | [Business Requirements Document](docs/brds/fabric-etl-migration-accelerator-brd.md) | [Pluggable Architecture Business Requirements](docs/Planning/pluggable-architecture-business-requirements.md) |
 
-- **[Repository Overview (`README.md`)](README.md)** — Full functional scope, modular PyPI packages, compiler boundaries, quick-start commands, and InnerSource visibility scope.
-- **[User Guide](docs/Guides/user-guide.md)** & **[Getting Started](docs/Guides/getting-started.md)** — End-to-end walkthroughs across the Fabric-native FEMA workspace, 7-tab React portfolio workbench (`Portfolio` assessment separated from `Fabric Deployment` code generation/dispatch), Windows desktop, and stateless `etl-assess` / `etl-fabric` CLIs.
-- **[PyPI Packages & Publishing](docs/Guides/pypi-packages.md)** & **[Building Source & Target Plugins](docs/Guides/building-plugins.md)** — Installing, consuming, and publishing `etl-migration-core`, `etl-portfolio-assessment`, `etl-target-fabric`, and `fabric-etl-migration-accelerator`, plus SPI extension contracts.
-- **[Installation & Runtime Modes](docs/Guides/installation.md)** — Wheel-based local runtime (`scripts/Start-LocalApp.ps1`), editable workstation setup, CLI-only mode, wheel-backed Windows desktop and Docker containers, and one-step FEMA workspace deployment (Lakehouse, Runtime 2.0 Environment, Notebook, 5-page Direct Lake Power BI report, and Fabric analyst app).
-- **[Fabric CI/CD Setup](docs/Guides/fabric-ci-cd-setup.md)** — Secretless Microsoft Entra Workload Identity Federation (OIDC) deployment via GitHub Actions and GitLab CI.
-- **[System Architecture](docs/Architecture/system-architecture.md)** & **[ADR-001](docs/Architecture/ADR-001-etl-source-adapters.md)** — Canonical ETL IR, target routing rules, and security boundaries.
-- **[Threat Model](docs/Security/threat-model.md)** & **[Security Policy](SECURITY.md)** — STRIDE threat analysis, archive/XML safety caps, and SDL CI enforcement.
-- **[Contributing Guide](CONTRIBUTING.md)** & **[Support](SUPPORT.md)** — Chrysalis InnerSource stakeholder roles, repository content structure, toolchain, and feedback channels.
+## Guides
+
+### User workflows
+
+* [Getting Started](docs/Guides/getting-started.md)
+* [User Guide](docs/Guides/user-guide.md)
+* [Installation and Runtime Modes](docs/Guides/installation.md)
+* [Fabric Capacity Planning](docs/Guides/capacity-planning.md)
+* [Fabric CI/CD Setup](docs/Guides/fabric-ci-cd-setup.md)
+* [Troubleshooting](docs/Guides/troubleshooting.md)
+
+### Developer workflows
+
+* [Developer Contribution Guide](docs/Guides/developer-contribution-guide.md)
+* [Building Source and Target Plugins](docs/Guides/building-plugins.md)
+* [PyPI Packages and Publishing](docs/Guides/pypi-packages.md)
+* [Contributing](CONTRIBUTING.md)
+
+## Product and architecture
+
+* [Business Requirements Document](docs/brds/fabric-etl-migration-accelerator-brd.md)
+* [Pluggable Architecture Business Requirements](docs/Planning/pluggable-architecture-business-requirements.md)
+* [System Architecture](docs/Architecture/system-architecture.md)
+* [ADR-001: Source Adapters and Canonical ETL IR](docs/Architecture/ADR-001-etl-source-adapters.md)
+* [Pluggable Architecture Analysis and Target Approach](docs/Planning/pluggable-architecture-analysis-and-approach.md)
+* [Pluggable Architecture Implementation Plan](docs/Planning/pluggable-architecture-implementation-plan.md)
+* [Accelerator Implementation Plan](docs/Planning/accelerator-implementation-plan.md)
+* [Local Architecture Decisions](docs/Planning/local-architecture-decisions.md)
+* [Acceptance Scenarios](specs/features/accelerator.feature)
+
+## Security, quality, and operations
+
+* [Threat Model](docs/Security/threat-model.md)
+* [Security Policy](SECURITY.md)
+* [Security Scan Results](docs/Quality/security-scan-results.md)
+* [Audit Findings Disposition](docs/Quality/audit-findings-log.md)
+* [Prototype UI Review](docs/Quality/prototype-ui-review.md)
+* [Release Notes](docs/Release/release-notes.md)
+* [Deployment Strategy](docs/Release/deployment-strategy.md)
+* [Rollback Plan](docs/Release/rollback-plan.md)
+* [Support](SUPPORT.md)
+* [Third-Party OSS Notice](NOTICE.md)
+* [Repository Overview](README.md)

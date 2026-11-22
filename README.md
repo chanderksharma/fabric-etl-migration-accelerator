@@ -28,7 +28,52 @@ Take these quick actions depending on your role:
 1. **Explore the Architecture & Capabilities**: Read [System Architecture](docs/Architecture/system-architecture.md), [ADR-001: Source Adapters & Canonical ETL IR](docs/Architecture/ADR-001-etl-source-adapters.md), [Building Source and Target Plugins](docs/Guides/building-plugins.md), and [Release Notes v1.0.0](docs/Release/release-notes.md).
 2. **Walk Through Every Feature**: Follow the [User Guide](docs/Guides/user-guide.md) and [Getting Started Guide](docs/Guides/getting-started.md) using the repository's built-in synthetic Alteryx (`alteryx-workflows/`) and Informatica (`tests/fixtures/`) estates.
 3. **Configure Fabric Dev CI/CD**: Follow [Fabric CI/CD Setup](docs/Guides/fabric-ci-cd-setup.md) to connect GitHub Actions or GitLab CI to a Microsoft Fabric `dev` workspace via Entra OIDC.
-4. **Ask Questions or Plan a Contribution**: Open a GitHub Issue to propose a new Alteryx plugin or Informatica transformation mapping, and review [`CONTRIBUTING.md`](CONTRIBUTING.md).
+4. **Contribute**: Review the [Developer Contribution Guide](docs/Guides/developer-contribution-guide.md) and [`CONTRIBUTING.md`](CONTRIBUTING.md) before proposing a source adapter, transformation mapping, UI improvement, or deployment change.
+
+---
+
+## Documentation
+
+Use the [documentation landing page](index.md) for role-based reading paths.
+
+#### Start, assess, and operate
+
+* [Getting Started](docs/Guides/getting-started.md)
+* [User Guide](docs/Guides/user-guide.md)
+* [Installation and Runtime Modes](docs/Guides/installation.md)
+* [Fabric Capacity Planning](docs/Guides/capacity-planning.md)
+* [Fabric CI/CD Setup](docs/Guides/fabric-ci-cd-setup.md)
+* [Troubleshooting](docs/Guides/troubleshooting.md)
+
+#### Develop and extend
+
+* [Developer Contribution Guide](docs/Guides/developer-contribution-guide.md)
+* [Building Source and Target Plugins](docs/Guides/building-plugins.md)
+* [PyPI Packages and Publishing](docs/Guides/pypi-packages.md)
+* [Contributing](CONTRIBUTING.md)
+* [Acceptance Scenarios](specs/features/accelerator.feature)
+
+#### Understand requirements and architecture
+
+* [Business Requirements Document](docs/brds/fabric-etl-migration-accelerator-brd.md)
+* [Pluggable Architecture Business Requirements](docs/Planning/pluggable-architecture-business-requirements.md)
+* [System Architecture](docs/Architecture/system-architecture.md)
+* [ADR-001: Source Adapters and Canonical ETL IR](docs/Architecture/ADR-001-etl-source-adapters.md)
+* [Pluggable Architecture Analysis](docs/Planning/pluggable-architecture-analysis-and-approach.md)
+* [Pluggable Architecture Implementation Plan](docs/Planning/pluggable-architecture-implementation-plan.md)
+* [Accelerator Implementation Plan](docs/Planning/accelerator-implementation-plan.md)
+* [Local Architecture Decisions](docs/Planning/local-architecture-decisions.md)
+
+#### Review security, quality, and releases
+
+* [Threat Model](docs/Security/threat-model.md) and [Security Policy](SECURITY.md)
+* [Security Scan Results](docs/Quality/security-scan-results.md)
+* [Audit Findings Disposition](docs/Quality/audit-findings-log.md)
+* [Prototype UI Review](docs/Quality/prototype-ui-review.md)
+* [Release Notes](docs/Release/release-notes.md)
+* [Deployment Strategy](docs/Release/deployment-strategy.md)
+* [Rollback Plan](docs/Release/rollback-plan.md)
+* [Support](SUPPORT.md) and [Third-Party OSS Notice](NOTICE.md)
 
 ---
 

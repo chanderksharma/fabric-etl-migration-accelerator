@@ -5,6 +5,9 @@ description: Development workflow, toolchain, security guardrails, and contribut
 
 Thank you for contributing to the **Microsoft Fabric ETL Migration Accelerator**. This project follows Microsoft **InnerSource** practices as defined by Chrysalis.
 
+For step-by-step bug fixes, features, and source or target extensions, see the
+[Developer Contribution Guide](docs/Guides/developer-contribution-guide.md).
+
 ---
 
 ## Introduction

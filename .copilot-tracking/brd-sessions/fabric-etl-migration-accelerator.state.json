@@ -1,0 +1,90 @@
+{
+  "brdFile": "docs/brds/fabric-etl-migration-accelerator-brd.md",
+  "lastAccessed": "2026-11-22T05:08:13+05:30",
+  "currentPhase": "requirements-elicitation",
+  "questionsAsked": [
+    "business-objective-targets",
+    "stakeholders-and-approvers",
+    "near-term-target-platform-scope",
+    "deployment-stages-and-approval",
+    "pilot-estate-and-baselines"
+  ],
+  "answeredQuestions": {
+    "initiative": "Microsoft Fabric ETL Migration Accelerator",
+    "scope": "Repository evidence covers Alteryx Designer, Informatica PowerCenter, and Informatica IDMC source assessment with Microsoft Fabric target evaluation, generation, capacity estimation, and controlled development deployment. Stakeholder requested near-term Databricks evaluation, generation, and deployment, plus UAT deployment.",
+    "business-objective-targets": "TBD",
+    "stakeholders-and-approvers": "Fabric stakeholder group confirmed; accountable role, sponsor, owner, and approvers remain TBD",
+    "near-term-target-platform-scope": "Yes, include Databricks evaluation, generation, and deployment",
+    "deployment-stages-and-approval": "UAT with QA approval; QA evidence, authority, and later stages need clarification",
+    "pilot-estate-and-baselines": "CK is a project; representative workload details need clarification"
+  },
+  "referencesProcessed": [
+    {
+      "file": "README.md",
+      "status": "analyzed",
+      "keyFindings": "Product summary, users, capabilities, security boundaries, internal visibility, and current platform scope."
+    },
+    {
+      "file": "docs/Planning/pluggable-architecture-business-requirements.md",
+      "status": "analyzed",
+      "keyFindings": "Target-neutral assessment, target comparison, independent generation and deployment, BR-001 through BR-012, and roadmap estimates."
+    },
+    {
+      "file": "docs/Architecture/system-architecture.md",
+      "status": "analyzed",
+      "keyFindings": "Canonical ETL flow, compiler routing, Fabric ALM, and quality attributes."
+    },
+    {
+      "file": "docs/Architecture/ADR-001-etl-source-adapters.md",
+      "status": "analyzed",
+      "keyFindings": "Source adapters, canonical IR, compatibility requirements, and fail-closed generation boundaries."
+    },
+    {
+      "file": "docs/Guides/user-guide.md",
+      "status": "analyzed",
+      "keyFindings": "User workflows, runtime modes, generated artifact states, migration waves, and operational guardrails."
+    },
+    {
+      "file": "docs/Guides/capacity-planning.md",
+      "status": "analyzed",
+      "keyFindings": "Capacity estimate assumptions, scenarios, exclusions, and required production validation."
+    },
+    {
+      "file": "docs/Release/release-notes.md",
+      "status": "analyzed",
+      "keyFindings": "v1.0.0 capabilities, known boundaries, and validation summary."
+    },
+    {
+      "file": "packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/engine.py",
+      "status": "analyzed",
+      "keyFindings": "Complexity classifications, bands, and migration wave assignment."
+    },
+    {
+      "file": "packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/effort.py",
+      "status": "analyzed",
+      "keyFindings": "Bounded residual engineering effort estimation rules."
+    },
+    {
+      "file": "packages/etl-target-fabric/src/etl_target_fabric/capacity/model.py",
+      "status": "analyzed",
+      "keyFindings": "Versioned Fabric capacity model, component categories, source weights, and F-SKU ranges."
+    }
+  ],
+  "nextActions": [
+    "Confirm measurable objectives, baselines, targets, and timeframes.",
+    "Identify the accountable business role, sponsor, product owner, operational owner, and approvers for the confirmed Fabric stakeholder group.",
+    "Define Databricks supported operations, validation boundaries, and delivery sequence.",
+    "Define QA evidence and approval authority for UAT and confirm any required stages after UAT.",
+    "Select representative workloads from the CK project for measuring actual effort and capacity."
+  ],
+  "qualityChecks": [
+    "business-problem-defined",
+    "scope-clarified-from-repository-evidence",
+    "business-requirements-linked-to-objectives",
+    "unknown-targets-marked-for-stakeholder-confirmation"
+  ],
+  "userPreferences": {
+    "detail-level": "comprehensive",
+    "question-style": "structured"
+  }
+}
