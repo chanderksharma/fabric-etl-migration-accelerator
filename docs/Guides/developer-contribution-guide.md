@@ -188,6 +188,15 @@ Select tests for the changed layer; include an affected end-to-end workflow.
 For example, [acceptance tests](../../tests/test_acceptance.py) check generated
 artifact and deployment contracts using local or mocked behavior. They do not
 replace semantic parity testing or a separately authorized live Fabric run.
+If you change a compiler or the artifact writer, also run
+[the sample-estate digest](../../tests/test_golden_digest.py). It hashes a fresh
+write of the synthetic sample estate and does not overwrite
+`generated-fabric-workflows/`. Refresh the fixture only for an intentional output
+change:
+
+```powershell
+uv run --extra dev python tests\test_golden_digest.py
+```
 
 Before committing, run the repository validation gate from the root:
 

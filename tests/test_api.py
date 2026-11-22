@@ -100,6 +100,21 @@ def test_upload_preview_processes_browser_files() -> None:
     assert body["skipped_count"] == 1
 
 
+def test_folder_upload_accepts_more_than_one_thousand_named_files() -> None:
+    files = [
+        ("files", (f"notes-{index}.txt", b"x", "text/plain"))
+        for index in range(1001)
+    ]
+    response = TestClient(app, base_url="http://localhost").post(
+        "/api/intake/upload",
+        data={"mode": "folder"},
+        files=files,
+    )
+
+    assert "Too many files" not in response.text
+    assert response.status_code == 200
+
+
 def test_upload_preview_rejects_path_traversal() -> None:
     response = TestClient(app, base_url="http://localhost").post(
         "/api/intake/upload",

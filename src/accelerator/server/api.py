@@ -37,6 +37,7 @@ from accelerator.delivery.gitlab import (
     GitLabDeploymentService,
 )
 from accelerator.delivery.provenance import PublicationDispatch
+from accelerator.runtime.models import GenerationJob
 from accelerator.runtime.runs import (
     Run,
     RunService,
@@ -59,7 +60,7 @@ from accelerator.server.schemas import (
     SourcesResponse,
     TargetsResponse,
 )
-from accelerator.server.uploads import stage_uploads
+from accelerator.server.uploads import BoundedUploadRoute, stage_uploads
 from accelerator.settings import Settings, configure_logging
 from accelerator.targets import (
     TargetPlatformRegistry,
@@ -104,13 +105,22 @@ async def lifespan(api: FastAPI) -> AsyncIterator[None]:
     async def resume_pending() -> None:
         while True:
             try:
-                for identity in await run_in_threadpool(api.state.run_service.pending):
+                service = api.state.run_service
+                for identity in await run_in_threadpool(service.pending):
                     if (
                         identity not in futures
                         and len(futures) < 2
                         and retry_after.get(identity, 0) <= time.monotonic()
                     ):
-                        futures[identity] = executor.submit(api.state.run_service.execute, identity)
+                        futures[identity] = executor.submit(service.execute, identity)
+                for job_id in await run_in_threadpool(service.pending_generation_jobs):
+                    key = f"job:{job_id}"
+                    if (
+                        key not in futures
+                        and len(futures) < 2
+                        and retry_after.get(key, 0) <= time.monotonic()
+                    ):
+                        futures[key] = executor.submit(service.execute_generation_job, job_id)
                 for identity, future in list(futures.items()):
                     if future.done():
                         del futures[identity]
@@ -134,6 +144,7 @@ async def lifespan(api: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Alteryx to Fabric Accelerator", version=__version__, lifespan=lifespan)
+app.router.route_class = BoundedUploadRoute
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 app.state.csrf_token = secrets.token_urlsafe(32)
 application = AssessmentApplication()
@@ -476,6 +487,42 @@ def export_capacity(
 def cancel_run(identity: str) -> Run:
     get_run(identity)
     return run_service().cancel(identity)
+
+
+@app.post("/api/runs/{identity}/jobs", response_model=GenerationJob, status_code=202)
+def create_generation_job(identity: str, target: Target = "notebook") -> GenerationJob:
+    get_run(identity, include_result=False)
+    try:
+        return run_service().create_generation_job(identity, target)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.get("/api/runs/{identity}/jobs", response_model=list[GenerationJob])
+def list_generation_jobs(identity: str) -> list[GenerationJob]:
+    try:
+        return run_service().generation_jobs(identity)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get(
+    "/api/runs/{identity}/workflows/{workflow_index}/candidates",
+    response_model=list[Candidate],
+)
+def workflow_candidates(
+    identity: str,
+    workflow_index: int,
+    target: Target = "notebook",
+) -> list[Candidate]:
+    try:
+        return run_service().workflow_candidates(identity, workflow_index, target)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @app.post("/api/runs/{identity}/generate", response_model=list[Candidate])

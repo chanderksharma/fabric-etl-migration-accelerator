@@ -14,6 +14,7 @@ from xml.etree.ElementTree import fromstring
 from pydantic import BaseModel, Field
 
 from etl_migration_core.contracts.ir import AssetType, SourcePlatform
+from etl_migration_core.m_literals import m_string, m_text_is_well_formed
 from etl_migration_core.sources.alteryx import AlteryxSourceAdapter
 from etl_migration_core.sources.alteryx.graph import (
     GRAPH_VERSION,
@@ -138,7 +139,7 @@ def generate_candidate(
                 else None
             )
             if dag_result is not None:
-                return Candidate(
+                return _fail_closed_m(Candidate(
                     workflow=path.name,
                     target=target,
                     validation_state="generated_unvalidated",
@@ -156,7 +157,7 @@ def generate_candidate(
                     loaded_queries=dag_result.loaded_queries,
                     query_groups=dag_result.query_groups,
                     query_group_assignments=dag_result.query_group_assignments,
-                )
+                ))
             diagnostics.append("Only a supported linear or Union/CrossTab graph is native")
             if target == "dataflow":
                 nodes = []
@@ -286,7 +287,10 @@ def generate_candidate(
                         f"    Step{index} = Table.SelectColumns(Previous, {{{columns}}})"
                     )
             elif operation == "formula":
-                formulas = fromstring(node.configuration["FormulaFields"])
+                formula_xml = _required_configuration(node, "FormulaFields", diagnostics)
+                if formula_xml is None:
+                    continue
+                formulas = fromstring(formula_xml)
                 for formula in formulas:
                     formula_field = formula.get("field", "")
                     expression = formula.get("expression", "")
@@ -305,7 +309,10 @@ def generate_candidate(
                             f"Previous, {_m_string(formula_field)}, each {translated})"
                         )
             elif operation == "sort":
-                sort_fields = fromstring(node.configuration["SortInfo"])
+                sort_xml = _required_configuration(node, "SortInfo", diagnostics)
+                if sort_xml is None:
+                    continue
+                sort_fields = fromstring(sort_xml)
                 specs = [
                     (sort_field.get("field", ""), sort_field.get("order", "Ascending"))
                     for sort_field in sort_fields
@@ -335,7 +342,10 @@ def generate_candidate(
                 else:
                     statements.append(f"    Step{index} = Table.FirstN(Previous, {count})")
             elif operation == "unique":
-                unique_fields = fromstring(node.configuration["UniqueFields"])
+                unique_xml = _required_configuration(node, "UniqueFields", diagnostics)
+                if unique_xml is None:
+                    continue
+                unique_fields = fromstring(unique_xml)
                 names = [unique_field.get("field", "") for unique_field in unique_fields]
                 if not names or any(not name for name in names):
                     diagnostics.append(f"Tool {node.id}: invalid unique fields")
@@ -386,7 +396,10 @@ def generate_candidate(
                         f"{json.dumps(format_string)}))"
                     )
             elif operation == "regex":
-                regex_fields = fromstring(node.configuration["ParseComplex"])
+                regex_xml = _required_configuration(node, "ParseComplex", diagnostics)
+                if regex_xml is None:
+                    continue
+                regex_fields = fromstring(regex_xml)
                 source_field = _text(node, "Field")
                 pattern = _text(node, "RegExExpression")
                 outputs = [field.get("field", "") for field in regex_fields]
@@ -440,7 +453,7 @@ def generate_candidate(
                     + ",\n".join(normalized)
                     + f"\nin\n    {previous}\n"
                 )
-        return Candidate(
+        return _fail_closed_m(Candidate(
             workflow=path.name,
             target=target,
             validation_state="scaffold" if diagnostics else "generated_unvalidated",
@@ -453,7 +466,7 @@ def generate_candidate(
             code=code,
             diagnostics=diagnostics,
             required_bindings=[*required_bindings, "independent semantic parity"],
-        )
+        ))
     except WorkflowParseError as error:
         return Candidate(
             workflow=path.name,
@@ -1682,15 +1695,41 @@ def _m_value(value: str | None) -> str:
     return _m_string(value)
 
 
-def _m_string(value: str) -> str:
-    return (
-        '"'
-        + value.replace("#", "#(#)")
-        .replace('"', '""')
-        .replace("\r", "#(cr)")
-        .replace("\n", "#(lf)")
-        + '"'
+def _required_configuration(
+    node: GraphNode, key: str, diagnostics: list[str]
+) -> str | None:
+    """Return required tool XML, or record a scaffold diagnostic when it is absent."""
+    value = node.configuration.get(key)
+    if not value:
+        diagnostics.append(f"Tool {node.id}: missing {key}")
+        return None
+    return value
+
+
+def _fail_closed_m(candidate: Candidate) -> Candidate:
+    """Scaffold dataflow output whose Power Query text is not lexically valid."""
+    if (
+        candidate.target != "dataflow"
+        or candidate.validation_state != "generated_unvalidated"
+        or m_text_is_well_formed(candidate.code)
+    ):
+        return candidate
+    message = "Generated Power Query M is not well-formed"
+    return candidate.model_copy(
+        update={
+            "validation_state": "scaffold",
+            "translation_mode": "scaffold",
+            "deployable": False,
+            "definition_ready": False,
+            "runtime_ready": False,
+            "diagnostics": [*candidate.diagnostics, message],
+            "code": message,
+        }
     )
+
+
+def _m_string(value: str) -> str:
+    return m_string(value)
 
 
 def _linear_nodes(

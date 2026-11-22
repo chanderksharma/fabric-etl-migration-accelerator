@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import typer
-import uvicorn
 
 from accelerator.runtime.runs import RunService
 from accelerator.settings import DEFAULT_STATE_DIR, Settings, configure_logging
@@ -107,6 +106,8 @@ def preview(
 @app.command()
 def serve(port: Annotated[int, typer.Option(min=1024, max=65535)] = 8050) -> None:
     """Serve the built analyst UI and API together, on loopback only."""
+    import uvicorn
+
     uvicorn.run("accelerator.api:app", host="127.0.0.1", port=port)
 
 

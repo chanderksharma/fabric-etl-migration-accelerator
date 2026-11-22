@@ -291,15 +291,33 @@ keys to `runtime/identity.py`, publications to `runtime/publication.py`, and mod
 `runtime/models.py`; the API moved upload staging, schemas, and deployment resolution
 into their own modules; `PluginHost` gives the API and CLI one typed plugin catalog.
 
+**Suggested-order follow-up.** The third review's order is applied as a refactor, not a
+compiler rewrite. Missing linear Alteryx configuration keys now scaffold, and an unexpected
+generation fault becomes a blocked candidate so one bad workflow does not drop the estate;
+`OSError` and `sqlite3.Error` still fail the write. Power Query literals share
+`m_literals.m_string`, and malformed M is not marked `generated_unvalidated`. Remaining
+effort uses one integer half-even helper in `etl_migration_core.planning`. Folder upload
+raises only the named-file cap, to 10,000. `tests/test_golden_digest.py` hashes a fresh
+write of `alteryx-workflows` plus `tests/fixtures/powercenter` (17 workflows, three
+targets) after masking the run id and host path separators. That digest does not replace
+`generated-fabric-workflows/`, which acceptance tests still read. Generation jobs and a
+content-addressed candidate cache are additive; synchronous generate and preview stay
+synchronous. `ArtifactSet` is a target-neutral projection and is not added to the Fabric
+artifact tree. Schema 7 adds `generation_jobs`; the schema-4 baseline is unchanged.
+Uvicorn is imported only when serving, and a missing `spi_version` remains `1.0.0`.
+
 **Still open.** Splitting `RunService` into collaborator objects is deliberately
 deferred: many tests and the portal depend on its internal hooks, so it needs
-characterization tests first. `tests/test_delivery.py` (about 2,400 lines) should be split
+characterization tests first. A wholesale compiler split into handlers and emitters is
+also deferred; the golden digest is the safety net for that later change, not a claim
+that it is done. `tests/test_delivery.py` (about 2,400 lines) should be split
 by area; new tests already go in focused modules. Operation traits were not introduced because Fabric's
 compiler coverage is narrower than the neutral categories, so deriving Fabric support
-from them would over-claim. The out-of-process plugin protocol, a content-addressed
-stage store, an OpenAPI-generated web client, and authenticated server mode depend on a
-product decision about shared deployment. The logical-ID migration is not wired into the
-runtime, and real CI and Fabric deployments remain untested. The GitLab deployment job
-keeps its fixed runner tag, and the Fabric compiler re-parses already-defused node
-configuration fragments with the standard-library XML parser (22 sites), which is not
-exploitable today but is worth moving to `defusedxml` as defense in depth.
+from them would over-claim. Process-pool parallelism, an out-of-process plugin protocol,
+a content-addressed stage store, an OpenAPI-generated web client, authenticated server
+mode, and a new database depend on measurement or a product decision about shared
+deployment. The logical-ID migration is not wired into the runtime, and real CI and Fabric
+deployments remain untested. The GitLab deployment job keeps its fixed runner tag, and
+the Fabric compiler re-parses already-defused node configuration fragments with the
+standard-library XML parser (22 sites), which is not exploitable today but is worth
+moving to `defusedxml` as defense in depth.

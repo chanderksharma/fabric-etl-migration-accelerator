@@ -1,0 +1,846 @@
+{
+  "workflow_count": 17,
+  "targets": [
+    "dataflow",
+    "notebook",
+    "pipeline"
+  ],
+  "mask": [
+    "run_id",
+    "host-path-separator"
+  ],
+  "files": [
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/dataflow-create-item.json",
+      "sha256": "28cd44c5f053e530ba46c02d743707708124c4a387238b23cd1d9a340926bf55"
+    },
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/dataflow-manifest.json",
+      "sha256": "d8f278b7be041ce3585da094be815510b514612cff842ed503a8ae23a5b52df9"
+    },
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/dataflow-mashup.pq",
+      "sha256": "0e2811ff91492b8a8cb7010464bfd5423ab248458165c5eef660b4ea6cd5fa04"
+    },
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/dataflow-queryMetadata.json",
+      "sha256": "62e5ca35dda7582c8fcfc762e600c3d4a04cbe3607aac47f36206bba0c5cf5d3"
+    },
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/dataflow.platform.json",
+      "sha256": "8670d7b52c8e20ac3d31d435f10b4044bdc27dd06921b4c6926c17608b1c355f"
+    },
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/notebook-content.ipynb",
+      "sha256": "17143c869fce340a222cb66f642750d667812b7c6ade8a0607820a6b3ac44c2e"
+    },
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/notebook-create-item.json",
+      "sha256": "31182a7252fa7898ebc0b5dfd1ff62e38a500267f1751567ddd67bfec7c5362a"
+    },
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/notebook-manifest.json",
+      "sha256": "50b61ca7290ccdcb26de03fe01294b54b257f52f197eb0481d38fb4111fe7f4b"
+    },
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/notebook.platform.json",
+      "sha256": "2dae5c83ce7330ad9df25935f8d2bf9eea3600bc03b256ba786393bd6a3f413c"
+    },
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/pipeline-diagnostics.json",
+      "sha256": "1d49901bde6625b4eea3ce115b93b2bc706891f97d4f3721c00da573786f9a23"
+    },
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/pipeline-manifest.json",
+      "sha256": "20c42edb9bcc7f43bf88c31030be81b2f91617af90b92b422735f9ac1eeded42"
+    },
+    {
+      "path": "alteryx-workflows/01_low_clean_orders/README.md",
+      "sha256": "a1c4e2f822388516e0f6326c25a5055c4ec03b868839b7dc780cab0396bbc597"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/dataflow-create-item.json",
+      "sha256": "2bb5f6e8b80413b75a653867a1b03b0619e8d1c592be55683eddfc7401cef82e"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/dataflow-manifest.json",
+      "sha256": "11d605d6ca0badc01ee3291703e466ee39c8c708731c91bdf9a5d762c819b3d0"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/dataflow-mashup.pq",
+      "sha256": "b03fd6f527582b5d5980ba0c21a36f2007865b2ead40c678c8bfb8442561c104"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/dataflow-queryMetadata.json",
+      "sha256": "e39b5e4e1b9e3bfa34d4fc073efb8214987d48ba1f753a2cd8eed5c76115f918"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/dataflow.platform.json",
+      "sha256": "0c7c6381478b539c254ea7eb6fc4aa7ec806849e8c262cace37e4c67705279e5"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/notebook-content.ipynb",
+      "sha256": "7efa66f39013dff00a9afeee4e65c14a32391297a7d591efc3c45d3a593c1fcb"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/notebook-create-item.json",
+      "sha256": "4740d824de22715091d7e1b8e4c275c3a4b32580f972d90f3017f023a3fae568"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/notebook-manifest.json",
+      "sha256": "645192e6659b842849f275b80b98ac75161ed2bf9f4c587f0cf417287dd1c885"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/notebook.platform.json",
+      "sha256": "4d4aa0de36e224f3417d4192a40c87967747b343956f6c49d443e15294a4bd3b"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/pipeline-diagnostics.json",
+      "sha256": "0a6efae537bc34b437a27adbfd8086a88d40ccf9d1b4936ea366c6e0b2edc8f8"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/pipeline-manifest.json",
+      "sha256": "303b4800755073c461b9f3afa083167efd7ffb0c1af3e8f9cc7834dd3e22768e"
+    },
+    {
+      "path": "alteryx-workflows/02_low_west_sample/README.md",
+      "sha256": "898ad738385d5fddc74d058e009123d2550a946d3482bceb5f9a7305dd864e01"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/dataflow-create-item.json",
+      "sha256": "0618684f37b13b255498d987a4aab8cde0fc152e61c160b706e3d02461f77633"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/dataflow-manifest.json",
+      "sha256": "0ea67765c16ec6cc2ab7fe67ba949c05f49fe7a82786b8c04ce29936b4c0d3a6"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/dataflow-mashup.pq",
+      "sha256": "011295629c0d83586728f8a3fb77d6edb53e20c4fa29a5f0e2abfd0b0751d495"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/dataflow-queryMetadata.json",
+      "sha256": "835da7de304ac255a19abd6c019738157e90311e617de63f192640762333ea89"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/dataflow.platform.json",
+      "sha256": "96ba07a9a833ec0e19b4417df75a78266283c4ee6b3c2ed8bf693931430baf5f"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/notebook-content.ipynb",
+      "sha256": "05cc925631fe9bd20fc4350c7cd8babbe67ecefe3fd872f9842f90261c307709"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/notebook-create-item.json",
+      "sha256": "3bc746540eb4025cd1d2e64873faa314a38fd17ddc3d9f4615ab1af4db2053c3"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/notebook-manifest.json",
+      "sha256": "ae59576a27473e21012c1851857defb7f5ff73814bf5fb021b37e595faa15e54"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/notebook.platform.json",
+      "sha256": "0e5d29b8b94d99e08fc9694876d3d6110d598f41f37e6c65aabde210e3ec3039"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/pipeline-diagnostics.json",
+      "sha256": "fe103ffca655af47e6740e624394aeb4386400babc81917f8b1d5baa226436bb"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/pipeline-manifest.json",
+      "sha256": "f518c099f1333fd4756cb94ef207b1ead19ab0cfa6d38d079618fc3d7b80b1aa"
+    },
+    {
+      "path": "alteryx-workflows/03_low_unique_customers/README.md",
+      "sha256": "31821b3f31c17e565a3f6193ee81eeb525d6aed0ad49da005baf9d5fe5480e14"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/dataflow-create-item.json",
+      "sha256": "9b52adf5e233ac04ad42f16165cac8cedf74c8617ab3810208cc2b201a8cb0ab"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/dataflow-manifest.json",
+      "sha256": "99dafb13021639c3837712ae407e3f38b39fd4a01f667dd4892d3270e3a760a5"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/dataflow-mashup.pq",
+      "sha256": "aad2ea64d01a6d8d51003dff4cb948290609e5f3c0a9848e5d22b93e2c245a9d"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/dataflow-queryMetadata.json",
+      "sha256": "7fce6441c15b1380f443d5915b58240e5cb3da6a5e4a93430ebf93e60eaf64a1"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/dataflow.platform.json",
+      "sha256": "9a32364537e0c38140ea0002707356dd2acabd8885747844f01767f7c99a20e6"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/notebook-content.ipynb",
+      "sha256": "ba063305dd4f74a2036aa0ae85af53f479a2c6e284c9d7beda9931798570d7a3"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/notebook-create-item.json",
+      "sha256": "5e10c37ec06ab0e74a9bb8fa3fca4ddbb51810098c23bdd23df4d77d5968ba4b"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/notebook-manifest.json",
+      "sha256": "aa428487a84e795ef3031b77455c6f14be8468c5b9b4a43f129c0ca36568fbbc"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/notebook.platform.json",
+      "sha256": "c6bc2327b1d8b48c3d117c53a81d024c90d16c4fc2c30af3d0123aa7e2903e4a"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/pipeline-diagnostics.json",
+      "sha256": "57ba7cbcc5db04975402b7bcc1d1579035ca66d952a33ecc8f015e835b7f65d3"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/pipeline-manifest.json",
+      "sha256": "67d75a3eb74e7abfe9392adabcfae3fab627f9ff289deff1d1cd658b9369d7e4"
+    },
+    {
+      "path": "alteryx-workflows/04_low_parse_sku_dates/README.md",
+      "sha256": "938ca6afb1dd23de397eb61bc6a99fa134441dcd3004ce9d1671e53be2b2a7a3"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/dataflow-create-item.json",
+      "sha256": "1c217180516b2191100fbd54b63970b0a44fc2a1af1fce1df6df7d609324fb31"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/dataflow-manifest.json",
+      "sha256": "7e512a6ccd4f61a388a78b4d3dd04954dacd407d1cacb8c5813527500f866b85"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/dataflow-mashup.pq",
+      "sha256": "913ae3dd2bfe94b16e611a2a107b72fbaaca17a6490dbb21af26c24448373b0f"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/dataflow-queryMetadata.json",
+      "sha256": "7d8cdb9a5e59f762a324671423cdacff7c43b7c3cc3ba9fcba3b1125fba5cc37"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/dataflow.platform.json",
+      "sha256": "dfd6330175e0e49d84149ae5e24cbd79b69d688230dd21d0763d5ad68eefc18e"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/notebook-content.ipynb",
+      "sha256": "4b374560cec8c4cabc0f359ea35f9d480b83bca5e065cfcbf731527176f28f92"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/notebook-create-item.json",
+      "sha256": "60aa4620938f2f736cb4344dd6f4ec3ba7c6852b1212b9db3231e8b7965971f3"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/notebook-manifest.json",
+      "sha256": "67335594f4c5527738b0d8c7d6c8bd059bd72e8d9b4321d7e44531adc5d1506d"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/notebook.platform.json",
+      "sha256": "4737a7412cda582a382c70aa265f18ef374249e2c8d144ba0320454498d3cde3"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/pipeline-diagnostics.json",
+      "sha256": "bfa84c53072613259a934e32d7753267fb1303b4d3e0883667cf1e5a56d11bc3"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/pipeline-manifest.json",
+      "sha256": "28876e4cad13665bcee61037360df588483b71de6895ce55f02dc5b4ed62139d"
+    },
+    {
+      "path": "alteryx-workflows/05_high_spend_by_tier/README.md",
+      "sha256": "d6b7c2e3c1dbba0ea3b685ea170ea74f83c70300073478d70b83dc09df6a0046"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/dataflow-create-item.json",
+      "sha256": "0c26899428ed36f1e4492feb93ad9a5d29117138a51d650c9a3d51c92ae53dab"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/dataflow-manifest.json",
+      "sha256": "3537eec0a39908c848a0fe2f4299b5406194c5856fa7b7ee51ddf25e31b7df8e"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/dataflow-mashup.pq",
+      "sha256": "45ab4e517e4fccf93e8d1c18aff5ece45808bee54e4723f8ec4615421e67c059"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/dataflow-queryMetadata.json",
+      "sha256": "f195e7e5a55dd1915c6e2c21fe1fa04cc9f600b98256402e471fda8b8c3df9aa"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/dataflow.platform.json",
+      "sha256": "15a659ed24aabed9e0bc114cefcefd220065776a507d8e26de8447c37fbae8a7"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/notebook-content.ipynb",
+      "sha256": "75f44c5fd2ee852928fd22f9a0b4912e7a27be5ba6b4018faef20946dab36587"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/notebook-create-item.json",
+      "sha256": "4e08444aae4d875766bd84d0a55851f8eed9b6c082eb92cdf3b9dd8a05010f2e"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/notebook-manifest.json",
+      "sha256": "aa34158c5bae8da31316f9d24cab58e5913de504cf0aa14177cac4b7cdbae93c"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/notebook.platform.json",
+      "sha256": "bc3db15c609c598914527f200f77489b6bbce2b91af304c645870e58de3dc75e"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/pipeline-diagnostics.json",
+      "sha256": "3864fb42ebb8291a8ef0327b621ddb8b7486e22741e8496f67133259d3488f07"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/pipeline-manifest.json",
+      "sha256": "80735657770aaf5ac30231d5c4e6233295acce15620d44167655c5b21125dc1e"
+    },
+    {
+      "path": "alteryx-workflows/06_high_channel_crosstab/README.md",
+      "sha256": "c9b73a299fee06a45d84c458db5f8105b83f9e58d4282dbcaffcd04b905dab69"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/dataflow-create-item.json",
+      "sha256": "47479f4419d02c58e5d2621b2910a1a35a06addc61da6de104d9d136f8b214e9"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/dataflow-manifest.json",
+      "sha256": "75681fe3f879585a2e95467e26dc461b9df7d5b25c11576a6695815484080662"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/dataflow-mashup.pq",
+      "sha256": "5e48c492e4632bd9ace8703503ee42364b59f89221a08ecf45697ab337061b22"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/dataflow-queryMetadata.json",
+      "sha256": "b72dab6bd292419d78cff5505fafa141d8b634c8112aa4c53fe766156012fc06"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/dataflow.platform.json",
+      "sha256": "67b8ecdace63bc41d1e79942454412b025cb9930857f9c5b3c7ef06708908c35"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/deployment-bundle.json",
+      "sha256": "9667a91910c27b9ea17cf46600c82fa8c8ad86d0822ac7df5aaaa85976c0deae"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/notebook-content.ipynb",
+      "sha256": "5be0766bbbf35591ed6561425b35c18d81efb0e486a1d53fdb7529a361cebdd4"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/notebook-create-item.json",
+      "sha256": "328e6bbf6ee59bf616ab1e1b4ac23989ca8c7b8c4d2ea73953725612c6e3c00f"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/notebook-manifest.json",
+      "sha256": "bc2988432ff6d5288a66919577c238d159fb2cce2534e1cd1186038da6ff8d59"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/notebook.platform.json",
+      "sha256": "012c46e5a53294c60788dd083b2ca34063c5cfcad8d20e66b21331ab386718df"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/pipeline-content.json",
+      "sha256": "9b78f32a35096e38b1e6ee030625ca4a5385f1516a1ff7a26ccdead23bac83a8"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/pipeline-create-item.json",
+      "sha256": "e392ce93d7c10fdeaa33b3c30ca91a93e8fa42da871f07748a7d18f8626ee6c3"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/pipeline-diagnostics.json",
+      "sha256": "b8e8fd0e22a3f83f5facb036b5ea5c88e717c141a324c0593358e87605ed6ae3"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/pipeline-manifest.json",
+      "sha256": "f4b0a6b5cc345b496faa3714197a57792527cf2a9d6900e589d852562b30e6ee"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/pipeline.platform.json",
+      "sha256": "2ff7d34ac891ccf907e8722c842d4a8c36b70dcf73016ebcb27e2e1502d327e4"
+    },
+    {
+      "path": "alteryx-workflows/07_high_target_variance/README.md",
+      "sha256": "3e17042ac3bc272df341c185d11cf7461483bfcda99bcccf248412d66952a015"
+    },
+    {
+      "path": "alteryx-workflows/08_very_high_customer_attainment/dataflow-diagnostics.json",
+      "sha256": "88cc41fca901b63709859ce816795c9df373d986775078cf681652a51f397760"
+    },
+    {
+      "path": "alteryx-workflows/08_very_high_customer_attainment/dataflow-manifest.json",
+      "sha256": "66052f1bafea3df907dc933f6ba1581f3452a38dd332fc8ba3cb116720666b9d"
+    },
+    {
+      "path": "alteryx-workflows/08_very_high_customer_attainment/notebook-content.ipynb",
+      "sha256": "f2d0d9727948bd5fcf71943356ebe0eb1a5dd5b059c2733a475b8773f3aadeea"
+    },
+    {
+      "path": "alteryx-workflows/08_very_high_customer_attainment/notebook-create-item.json",
+      "sha256": "dc3f27484b7d30870290ed6b285e8a2854231828b86f8b8e84aa1eb07d0a6c94"
+    },
+    {
+      "path": "alteryx-workflows/08_very_high_customer_attainment/notebook-manifest.json",
+      "sha256": "b891f7469c737c554a4ab2c5cc285fc4c054d197d29715ecab3d612ac6e2bd6f"
+    },
+    {
+      "path": "alteryx-workflows/08_very_high_customer_attainment/notebook.platform.json",
+      "sha256": "ed046d0a822e5665dcbf3bc722cda5112c9eaa97bf6131477d1a41471be77162"
+    },
+    {
+      "path": "alteryx-workflows/08_very_high_customer_attainment/pipeline-diagnostics.json",
+      "sha256": "488d9df76368a258fe267b5c678a249c5f80740b9b13c03f19de618b01208a41"
+    },
+    {
+      "path": "alteryx-workflows/08_very_high_customer_attainment/pipeline-manifest.json",
+      "sha256": "b65481bedd00ee720733f2401869e53a7f9a01e4d545dbf2f7332dc95108dcde"
+    },
+    {
+      "path": "alteryx-workflows/08_very_high_customer_attainment/README.md",
+      "sha256": "b96f8383a4fc3cdd4839ce9e0f53e9720137f2451b38f8cef6505d772e5c51fb"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/dataflow-create-item.json",
+      "sha256": "aab96aac45a68f37bbeebfc5fc64fd7dc53c7c006f9c0f35e57ba634bac4a2ad"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/dataflow-manifest.json",
+      "sha256": "8f5fdd9f8bcfd5423b841cd3c877a96fe4900313c6b01407e321b08d07b2f7d9"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/dataflow-mashup.pq",
+      "sha256": "95b864e1e6c5ffc0de08b32fcc5e7d822969e349d1d698a6f38052e5d11f8d89"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/dataflow-queryMetadata.json",
+      "sha256": "98944dd7519585af7e0cf8bd55363a097d5b27a6ae0116b8bfab7f444a4c52a0"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/dataflow.platform.json",
+      "sha256": "23727c1109a76164a677036d2d14963d34643f24ed169b395c5cb36f15c523c3"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/notebook-content.ipynb",
+      "sha256": "bcbc477c74650eef77b532d3ad1590e0cb1270e6981deecd27ec695f78eaae7d"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/notebook-create-item.json",
+      "sha256": "7ed2940931749163ebf66672f99774c5ab56bc2ba26a6f60c5d7541abbff61fa"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/notebook-manifest.json",
+      "sha256": "3b35ec78001546662cb573bdf0fd9db4b705b35a7382fd1ec06a760e3c84304e"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/notebook.platform.json",
+      "sha256": "10f16b88ca41897f7d059a5253bfd05f60ad582311d3f6ccd2024ce253f9c86d"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/pipeline-diagnostics.json",
+      "sha256": "64d1886414116fe05bf1e9ae0cdb69320338562422edddb0b221a649ff03eb47"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/pipeline-manifest.json",
+      "sha256": "c2ac0f26c8d3a0ce9396aff715e64ea345e33b60925bde4e21c3db695033f7bf"
+    },
+    {
+      "path": "alteryx-workflows/09_very_high_batch_reconcile/README.md",
+      "sha256": "1ee69c25dfb12540b1504b70f3f564d162926bd97e34634127fdb4a0135d02b3"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/dataflow-create-item.json",
+      "sha256": "7d2226d57d9956a016abd01f15086eeb37415a14ba84b117ee273cbd6a161c36"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/dataflow-manifest.json",
+      "sha256": "b237cdf19c1e61bd67df91a0641b5d976aee01bf9f64992c264f03222668d923"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/dataflow-mashup.pq",
+      "sha256": "8cfa502a20d193291fdae5c8f3d1eff2a108a7efa0943948a622deaacd84ff1f"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/dataflow-queryMetadata.json",
+      "sha256": "8365bacd28eb612cf163921457f76866220db1f48b2a5a4194345628aeb67929"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/dataflow.platform.json",
+      "sha256": "e0a072f57cd9534fd0b13735f3255b797012274ccc8b2deeef5ae42a393516cc"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/deployment-bundle.json",
+      "sha256": "3946eca7535aa820c0f225119b94a021bd3b2b08b5006fc376c4afdc6cb30efd"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/notebook-content.ipynb",
+      "sha256": "1613737d940362604c79f46e96550e8d44f36f33eea7694ce56f8e1780a8bf45"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/notebook-create-item.json",
+      "sha256": "5f953a0880f13804048e5c3d2f0d77d7e4e394aa5faadeb6bd902ec9f3edcea4"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/notebook-manifest.json",
+      "sha256": "7a297ba036d460fae451d8337b82fdd253e2287382144dc9238fb3e863b0c20a"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/notebook.platform.json",
+      "sha256": "590e9ac11000982a3807406e1019410663207039194b294d8b89fb30d693f820"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/pipeline-content.json",
+      "sha256": "9b78f32a35096e38b1e6ee030625ca4a5385f1516a1ff7a26ccdead23bac83a8"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/pipeline-create-item.json",
+      "sha256": "5b38f119f1cfec39d7997941d3f58e23170e85bbe67dd41c22c45364fa222622"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/pipeline-diagnostics.json",
+      "sha256": "2c9b9059ede6c761773ce3501796a590620b41f987da5081e2f6a0c7d66a167c"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/pipeline-manifest.json",
+      "sha256": "e801030b442dfbcba7c499e97ca0226ab9cc6adb872514843fa3438996398b13"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/pipeline.platform.json",
+      "sha256": "d0065071e72e6c67e400e900e41054882d233d407600887bef81ab0797b73a6e"
+    },
+    {
+      "path": "alteryx-workflows/10_very_high_sales_pipeline/README.md",
+      "sha256": "30dc27217c26a475d8b71922409355e6a9300f9f9330bea80bc20bda70088c99"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/dataflow-create-item.json",
+      "sha256": "38b1d05224c239c79d3d4420b010e13846329a0b8ae259551a1c88ca841c417e"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/dataflow-manifest.json",
+      "sha256": "9fc407fedf794f8d2b2f250b230e9b2848fb9f551e222a0ec6f0af79aedc280b"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/dataflow-mashup.pq",
+      "sha256": "0ddff2ac283097d3d6e6c51ff0b6c2a35c5f012106dcb760db4ae0584b9c692a"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/dataflow-queryMetadata.json",
+      "sha256": "62dccf82382cb36ae7fd1e4c597eaf18fe21e321b9a0db9ee7617c9ba32a439d"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/dataflow.platform.json",
+      "sha256": "a78f11374f3fcf3441967d9747b98fa052c9eaf09a7441586673627d61613dd4"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/notebook-content.ipynb",
+      "sha256": "ae44358b055e8e98f1919bfa4e017bf4467287d6453c91a7ca54dfd6410f00c2"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/notebook-create-item.json",
+      "sha256": "79598aa80fd1810b26423a9b75da36b8401dcfa28d9847c0c0910443ffd9c2d4"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/notebook-manifest.json",
+      "sha256": "1342c54484344720731bb39f676a352cb7876e0232bafe62320cb85baf923175"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/notebook.platform.json",
+      "sha256": "f87f0d07abf611221a680d1abc2a22021c9046c6458debbca6bb29a0d4d5b63f"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/pipeline-diagnostics.json",
+      "sha256": "3e74226847ec52714234446c219fc56e6ecb6c8ee31021c85a8c3491e9afaff0"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/pipeline-manifest.json",
+      "sha256": "97f654cfb85ad5929f4f22c4f455e54b3eb2f768f67f12245219ccab6adae2c2"
+    },
+    {
+      "path": "alteryx-workflows/11_multi_container_reconciliation/README.md",
+      "sha256": "e66b3f71668cd11cdb4c6236dea64bc3df4293f538c641f5e049dd4c981527d5"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/dataflow-create-item.json",
+      "sha256": "b05b022ba1b3f5219df77c589d26119b3de401f92fa3bcfb871e92d73138b15a"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/dataflow-manifest.json",
+      "sha256": "c8937e7a5543b12996529652537bb0548ff01879e786c9b511c04676b413e0fa"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/dataflow-mashup.pq",
+      "sha256": "bcf2557b0690fc996651173b6a66ae058895d164143b548502e3d0f47fe25da7"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/dataflow-queryMetadata.json",
+      "sha256": "de0dfdc57d8ff5666ff98c3ac4969f03ada8a79540ff9b8b553c4375737b5bb2"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/dataflow.platform.json",
+      "sha256": "11f5a1720da8dd8535410c5f7ac1d65c0ca79a4bc69ced48a34ed283781180da"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/notebook-content.ipynb",
+      "sha256": "71db6ebb2655b220b8d0c945ac4fb13e5318d861907fb0988524b90baef39853"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/notebook-create-item.json",
+      "sha256": "c54e4fb2a60d5a0085a147d7c99206643b3dee0dd2ee4a430ea9f88a8e52c215"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/notebook-manifest.json",
+      "sha256": "1393daca48876a0df7350611d572cb33f98752b170de609c40dee91517031036"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/notebook.platform.json",
+      "sha256": "0e2aef93b4f7d5738fd128551a0fe7ffb0bfc7feb02e4f006178a88f83c9b50a"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/pipeline-diagnostics.json",
+      "sha256": "8fcb9c6e9ae0c27db5b4dd9e4fd8cd77119704f72b834220a4c0b09cf4b3035c"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/pipeline-manifest.json",
+      "sha256": "1181566887592bb6740db292a5fef8257586d2be8ce0fc060d2247da354590e0"
+    },
+    {
+      "path": "alteryx-workflows/my_alteryx-workflow/README.md",
+      "sha256": "7e99e50b79cd3be8dd7321a108547b721224ab705467e82b9ec9208f06d2a63c"
+    },
+    {
+      "path": "alteryx-workflows/sample_alteryx_workflow/dataflow-diagnostics.json",
+      "sha256": "3d79090f1f978a4809796f991a5fe4ff7e8d8ef91b5103f94bf43a3326564549"
+    },
+    {
+      "path": "alteryx-workflows/sample_alteryx_workflow/dataflow-manifest.json",
+      "sha256": "33d1f298e2cee4cdabf0c940058b4226066e0d73ec4416a74c0eb50d7038e70d"
+    },
+    {
+      "path": "alteryx-workflows/sample_alteryx_workflow/notebook-diagnostics.json",
+      "sha256": "3d79090f1f978a4809796f991a5fe4ff7e8d8ef91b5103f94bf43a3326564549"
+    },
+    {
+      "path": "alteryx-workflows/sample_alteryx_workflow/notebook-manifest.json",
+      "sha256": "722cd8364917b02dde67e2972198cc8f30016d998c50a9f2439390f18e65dc11"
+    },
+    {
+      "path": "alteryx-workflows/sample_alteryx_workflow/pipeline-diagnostics.json",
+      "sha256": "0b8ebb6362ed0d76d5f86d25b7cde53954eccc101f93d342ab55c17d0f280e6d"
+    },
+    {
+      "path": "alteryx-workflows/sample_alteryx_workflow/pipeline-manifest.json",
+      "sha256": "bedd0eb74623e0a5bca0cd6db3e08b2b572565dc18867e569e0e2392dfe4603d"
+    },
+    {
+      "path": "alteryx-workflows/sample_alteryx_workflow/README.md",
+      "sha256": "6588fc27fb01cbe12875de356b6b8a237c517f47e1784190e330ff4e44c789b2"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/dataflow-create-item.json",
+      "sha256": "4df0ef3465645ebaff70e0b193c7161078754afe88b23d16cd9959c1582cc97b"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/dataflow-manifest.json",
+      "sha256": "d3b22de52f9c49b2e8d665d1307ee76cd70d2d333a9bdce556fb73ccd9bbb0b7"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/dataflow-mashup.pq",
+      "sha256": "4d84807386992721a1c63075f050e2ef01141e593ef7675ab40807cff4189346"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/dataflow-queryMetadata.json",
+      "sha256": "5e05920cd82a2bee33408932e7edeeb48f61469b6c2f9cf42759e77d2efd5d03"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/dataflow.platform.json",
+      "sha256": "2c6a0cf635a261b93b8e1cddf4ee577f393654a7a58046fa49b6e642a779280c"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/notebook-content.ipynb",
+      "sha256": "e6e5d58b231a1e87a23f74aba8e62f261f3af7dacd0cfc52be77d0f1ad690ff0"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/notebook-create-item.json",
+      "sha256": "afdd04f8773f55bbb7967f3a3a55ab22b23380f563d6e28932296004ffd77c88"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/notebook-manifest.json",
+      "sha256": "2f732dc6ee12c0165d30bce36ae90808ad73bf6c476af89e511af52c7f6aa308"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/notebook.platform.json",
+      "sha256": "9b70ecf6a20243e507252ba31c86981483b4a5a9b8f14085e9e32434b94be267"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/pipeline-diagnostics.json",
+      "sha256": "206281c41554a57a58155ba91ab1e3f7440914fefdec85099520906006e1d6a2"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/pipeline-manifest.json",
+      "sha256": "e7f3fb731fb32e39c323407b3fb6098c776890174806dc30892dfcc9d7ff04c4"
+    },
+    {
+      "path": "alteryx-workflows/sample_container_sequence/README.md",
+      "sha256": "2107fba03d5edaf106d537d5d03c5b45ff6c5f69b3111c5288c7c7178593e5ee"
+    },
+    {
+      "path": "alteryx-workflows/sample_merge_append_joins/dataflow-diagnostics.json",
+      "sha256": "2171149940d6766507633ffa507a25e988401f6a3b0fc72ad4c00583679de2f2"
+    },
+    {
+      "path": "alteryx-workflows/sample_merge_append_joins/dataflow-manifest.json",
+      "sha256": "ec82351f17faaaf49b59518437139092ffb464518fb1c9edf13f96be532d49fb"
+    },
+    {
+      "path": "alteryx-workflows/sample_merge_append_joins/notebook-content.ipynb",
+      "sha256": "6553ce87a99ada44268135b703bf5c5ec3f1b62660c048f4628a1d993ff3f223"
+    },
+    {
+      "path": "alteryx-workflows/sample_merge_append_joins/notebook-create-item.json",
+      "sha256": "4be33c0f5e0129aec83c1c96da3ece769031d37ba9fd9c1b7d050b07043af3d7"
+    },
+    {
+      "path": "alteryx-workflows/sample_merge_append_joins/notebook-manifest.json",
+      "sha256": "d3270762df9b526c9954278c5e8afa343f0f17d554e59a7d44c22c1b8ca9eb76"
+    },
+    {
+      "path": "alteryx-workflows/sample_merge_append_joins/notebook.platform.json",
+      "sha256": "73f49b8e8644a715378162525af480401cba28b5e8780797d9a88eab604bc088"
+    },
+    {
+      "path": "alteryx-workflows/sample_merge_append_joins/pipeline-diagnostics.json",
+      "sha256": "dbf7f774df956470f2b83ceb9cc4a9548b1b98d8394f3e8327d59ebb358c5657"
+    },
+    {
+      "path": "alteryx-workflows/sample_merge_append_joins/pipeline-manifest.json",
+      "sha256": "8598eee2f5dd66ec50062fa4e288d36a78330a6f1c820f2d2c9e211bd1fe748b"
+    },
+    {
+      "path": "alteryx-workflows/sample_merge_append_joins/README.md",
+      "sha256": "c4766e00f25e32df3db7d4fe2c0d482a3f1452d898e5c3191f51d998561c73aa"
+    },
+    {
+      "path": "artifact-index-dataflow.json",
+      "sha256": "6371a2b2096ed626b32796187c282aa22cfd3e7ed2f017c7de9b7f9b625531a9"
+    },
+    {
+      "path": "artifact-index-notebook.json",
+      "sha256": "86e2077412f43ff106e26d55eeba406b15e588fd50f4321132457bab14093461"
+    },
+    {
+      "path": "artifact-index-pipeline.json",
+      "sha256": "507cfd340acaa9ecaf5a04f12dc8e5937042aba33a7eac7ced85b6b0528a2596"
+    },
+    {
+      "path": "artifact-index.json",
+      "sha256": "d9e3c7b02109bf9d8c1379022c22d95754604f426b7ee20a93b75f5ebd829341"
+    },
+    {
+      "path": "deployment-plan.json",
+      "sha256": "466ae7077cf4fab47b806c6babf44480eb18753b052297141b63e13dbf8807ee"
+    },
+    {
+      "path": "DEPLOYMENT.txt",
+      "sha256": "4d55aec2ce943c54646c3806e6800288217065a41bba7eb8925e6fdad641ab63"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/dataflow-create-item.json",
+      "sha256": "2b9b6b0c1291598f3dd8fd9b5a2838823e16441dd923869a8d0e34d32ba53c6c"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/dataflow-manifest.json",
+      "sha256": "9871393787d0ff46c11e47f1bd1d75c029bbfb5cddc8c00b24293d272a83dd85"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/dataflow-mashup.pq",
+      "sha256": "050bbb56ccfa8c3903f5fc52aac703fdf2bd1f1e272db3cdf612654faedbab6b"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/dataflow-queryMetadata.json",
+      "sha256": "b28141da65db759810b2af0aae00c59eb90282f67876edf9b7c2033265a44b35"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/dataflow.platform.json",
+      "sha256": "c9d02a017f6952d9c03d36992ed7110f06be60682de16a2d2fa5027e4d427cb4"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/notebook-content.ipynb",
+      "sha256": "040407faa7d3566085f87279340935c99d87777ab858c003158870fc89bbe366"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/notebook-create-item.json",
+      "sha256": "ef0b13128435077e8b7acabf14dd2421fd90e6d7293582d11a3fa8f5d6c1c734"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/notebook-manifest.json",
+      "sha256": "068f821bcfc40dc7523f5f16a2ec43a07a21a2ede478a6e5a2a79eec3580b526"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/notebook.platform.json",
+      "sha256": "6a837c52924ebe511ca31d3f1a0c72765c928cbf4fb648de2dc6428ee9a834c6"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/pipeline-diagnostics.json",
+      "sha256": "34ac0d7c52fb5bbb9b221c27da9cfed0ab1c3ca7e9537b9ba584ed3b5a927fd4"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/pipeline-manifest.json",
+      "sha256": "a93676c88c6ab4fbdf8c7ef1999d0f47b063d70f120ddd5b6f00b732377752df"
+    },
+    {
+      "path": "informatica-powercenter/wf_orders/README.md",
+      "sha256": "1b2bdb4572f8eba5816b4247eab33b8ab86a35006890101e36145df140881060"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/dataflow-create-item.json",
+      "sha256": "9603d6062d14daca8455a9eacdad85a5edfc6c2617fb6cbec219c04a0e55fa5b"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/dataflow-manifest.json",
+      "sha256": "4ee4df9d165aeb217c247f9fbc60c2d7f813ac71d3c8db048ea7d14c225f0735"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/dataflow-mashup.pq",
+      "sha256": "081b25ea0dde8e77e3a27143325c41d40b3a82a6649f6bb905b7a5c357581350"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/dataflow-queryMetadata.json",
+      "sha256": "b974f904d248f5a3dee5a049d65c66c5b805f51843afac2789f03eadc7888399"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/dataflow.platform.json",
+      "sha256": "6e40f23c65af0112c4b4b1e905572f75a0950cc5ea449d6f76d4be6f647e2fe3"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/notebook-content.ipynb",
+      "sha256": "3f29384bef8792ba7c1b32b48d35c79794a9721e024730e21fb38f4bccfa0c90"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/notebook-create-item.json",
+      "sha256": "bfe34e9b93d2ffca3aa813469271bfb130e7104d04ef3a21937cbcf3645d4c39"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/notebook-manifest.json",
+      "sha256": "dcf7c67d4f412449c8c47e96fbbb524cdbfb8ac810b84f7fb6fc6e2d4d84718e"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/notebook.platform.json",
+      "sha256": "ac9d63c68d35118fb70783d9f00b32333559b67adf67ae6f8898c2af878e331b"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/pipeline-diagnostics.json",
+      "sha256": "1cd926b78f2ee1935c5783a1c66c703a3885689a879e3a0e5bbc4432959b247b"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/pipeline-manifest.json",
+      "sha256": "b87a4a0bbc742f078071906c9eed75f8b17679ba093cf32d69c2244fdfd9ed4d"
+    },
+    {
+      "path": "informatica-powercenter/wf_STG_Ledger_Validation/README.md",
+      "sha256": "e03365da2ad37b4e503354d7fd03d3f2b8e1b83b789283558974757a56370d67"
+    },
+    {
+      "path": "latest.json",
+      "sha256": "d8cbdb04dbf0879ee5d85f77742b7d55c2ce5edd42f493b744b5b04141bb093a"
+    }
+  ]
+}

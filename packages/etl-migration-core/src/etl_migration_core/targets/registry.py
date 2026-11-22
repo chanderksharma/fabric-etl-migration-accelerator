@@ -24,6 +24,7 @@ from etl_migration_core.plugins import (
     PluginErrorMode,
     PluginLoadResult,
     fault_detail,
+    require_compatible_spi,
 )
 
 TARGET_ENTRY_POINT_GROUP = "etl_migration.targets"
@@ -127,6 +128,7 @@ class TargetPlatformRegistry:
         origin: str = BUILTIN_ORIGIN,
     ) -> None:
         """Register one unique target platform provider."""
+        require_compatible_spi(provider, f"target provider {type(provider).__name__}")
         platform_id = provider.platform_id.strip().casefold()
         if not platform_id:
             raise ValueError("target platform_id is required")

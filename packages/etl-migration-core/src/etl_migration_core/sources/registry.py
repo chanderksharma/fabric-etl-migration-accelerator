@@ -16,6 +16,7 @@ from etl_migration_core.plugins import (
     PluginErrorMode,
     PluginLoadResult,
     fault_detail,
+    require_compatible_spi,
 )
 from etl_migration_core.sources.base import (
     SourceAdapter,
@@ -135,6 +136,7 @@ class SourceAdapterRegistry:
         enters, so one malformed plugin is rejected (and recorded by ``load_entry_points``)
         instead of failing every later discovery or the plugin catalog itself.
         """
+        require_compatible_spi(adapter, f"source adapter {type(adapter).__name__}")
         for attribute in _STRING_ATTRIBUTES:
             if not isinstance(getattr(adapter, attribute, None), str):
                 raise ValueError(

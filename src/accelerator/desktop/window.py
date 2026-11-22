@@ -19,8 +19,6 @@ from types import TracebackType
 from typing import IO, Self, cast
 from urllib.request import Request, urlopen
 
-import uvicorn
-
 APP_NAME = "Fabric ETL Migration Accelerator"
 APP_FOLDER = "Fabric ETL Migration Accelerator"
 DESKTOP_TOKEN_HEADER = "x-accelerator-desktop-token"
@@ -142,6 +140,8 @@ class EmbeddedServer(AbstractContextManager["EmbeddedServer"]):
     """Run Uvicorn on a pre-bound random loopback port."""
 
     def __init__(self, token: str) -> None:
+        import uvicorn
+
         from accelerator.server.api import app
 
         self.token = token

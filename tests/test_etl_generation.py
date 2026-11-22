@@ -4,6 +4,8 @@ import ast
 import json
 from pathlib import Path
 
+import pytest
+
 from etl_migration_core.contracts.ir import (
     AssetType,
     EtlAsset,
@@ -26,6 +28,81 @@ from etl_target_fabric.compilers.ir import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _literal_package(expression: str) -> tuple[EtlPackage, EtlAsset]:
+    graph = EtlGraph(
+        kind=GraphKind.MAPPING,
+        nodes=(
+            EtlNode(native_id="src", name="Orders", operation="source", kind=NodeKind.SOURCE),
+            EtlNode(
+                native_id="exp",
+                name="Literals",
+                operation="expression",
+                kind=NodeKind.TRANSFORMATION,
+                ports=(
+                    EtlPort(
+                        name="Label",
+                        direction="output",
+                        data_type="string",
+                        expression=expression,
+                    ),
+                ),
+            ),
+            EtlNode(native_id="tgt", name="Out", operation="target", kind=NodeKind.TARGET),
+        ),
+        edges=(
+            EtlEdge(source="src", target="exp", source_port="Label", target_port="Label"),
+            EtlEdge(source="exp", target="tgt", source_port="Label", target_port="Label"),
+        ),
+    )
+    asset = EtlAsset(
+        native_id="m_literals",
+        name="m_literals",
+        asset_type=AssetType.MAPPING,
+        mapping_graphs=(graph,),
+    )
+    package = EtlPackage(
+        source_platform=SourcePlatform.INFORMATICA_POWERCENTER,
+        source_product="Informatica PowerCenter",
+        export_id="repo",
+        assets=(asset,),
+    )
+    return package, asset
+
+
+def test_powercenter_text_literals_compile_to_well_formed_m() -> None:
+    from etl_migration_core.m_literals import m_text_is_well_formed
+
+    for expression, expected in (
+        ("'Café'", '"Café"'),
+        ("'\"'", '""""'),
+        ("'#(lf)'", '"#(#)(lf)"'),
+    ):
+        package, asset = _literal_package(expression)
+        candidate = compile_asset(package, asset, "dataflow")
+        assert candidate.validation_state == "generated_unvalidated"
+        assert expected in candidate.code
+        assert m_text_is_well_formed(candidate.code)
+    assert m_text_is_well_formed("shared Rows = #table(type table [Id = number], {{1}})")
+
+
+def test_malformed_power_query_is_scaffolded_before_publish(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "etl_target_fabric.compilers.ir.m_text_is_well_formed",
+        lambda _code: False,
+    )
+    package, asset = _literal_package("'ok'")
+
+    dataflow = compile_asset(package, asset, "dataflow")
+    pipeline = compile_asset(package, asset, "pipeline")
+
+    assert dataflow.validation_state == "scaffold"
+    assert dataflow.deployable is False
+    assert "Generated Power Query M is not well-formed" in dataflow.diagnostics
+    assert pipeline.deployable is False
 
 
 def test_expression_mapping_compiles_bounded_powercenter_functions() -> None:

@@ -20,9 +20,10 @@ from etl_migration_core.contracts.ir import (
     NodeKind,
     SourcePlatform,
 )
+from etl_migration_core.m_literals import m_string, m_text_is_well_formed
 
 CompilationTarget = Literal["dataflow", "notebook", "pipeline"]
-ETL_COMPILER_VERSION = "1.4.0"
+ETL_COMPILER_VERSION = "1.4.1"
 SUPPORTED_IR_VERSIONS = (IR_VERSION, EXTENSIBLE_SOURCE_IR_VERSION)
 SUPPORTED_MAPPING_OPERATIONS = frozenset(
     {
@@ -93,8 +94,8 @@ def compile_asset(
             "Exactly one mapping graph is required for this compiler subset",
         )
     if len(asset.mapping_graphs) > 1:
-        return _compile_multi_mapping(package, asset, target)
-    return _compile_mapping(package, asset, asset.mapping_graphs[0], target)
+        return _fail_closed_m(_compile_multi_mapping(package, asset, target))
+    return _fail_closed_m(_compile_mapping(package, asset, asset.mapping_graphs[0], target))
 
 
 def compile_asset_targets(
@@ -1194,7 +1195,7 @@ def _dataflow_router_branch_steps(
         step = _unique_m_step(f"{route_name}_alias{index}", used_step_names)
         steps.append(
             f"{step} = Table.AddColumn("
-            f"{previous}, {json.dumps(alias_name)}, each Record.Field(_, {json.dumps(ref_field)}))"
+            f"{previous}, {m_string(alias_name)}, each Record.Field(_, {m_string(ref_field)}))"
         )
         previous = step
     steps.append(f"{route_name} = Table.SelectRows({previous}, each {condition})")
@@ -1211,7 +1212,7 @@ def _dataflow_node_steps(
 ) -> tuple[list[str], str] | None:
     key = binding_key or node.native_id
     if node.operation == "source":
-        return [f"{name} = Record.Field(SourceBindings, {json.dumps(key)})"], name
+        return [f"{name} = Record.Field(SourceBindings, {m_string(key)})"], name
     if len(sources) != 1:
         return None
     if node.operation in {"source_qualifier", "xml_source_qualifier", "target"}:
@@ -1232,7 +1233,7 @@ def _dataflow_node_steps(
             )
             steps.append(
                 f"{step} = Table.AddColumn("
-                f"{previous}, {json.dumps(field)}, each {expression})"
+                f"{previous}, {m_string(field)}, each {expression})"
             )
             previous = step
         return steps, previous
@@ -1247,7 +1248,7 @@ def _dataflow_node_steps(
         ]
         if not group_fields:
             return None
-        columns = ", ".join(json.dumps(field) for field in group_fields)
+        columns = ", ".join(m_string(field) for field in group_fields)
         return (
             [
                 f"{name} = Table.Distinct(Table.SelectColumns({sources[0]}, "
@@ -1260,7 +1261,7 @@ def _dataflow_node_steps(
             return None
         return (
             [
-                f"{name} = Record.Field(SqlTransformBindings, {json.dumps(key)})"
+                f"{name} = Record.Field(SqlTransformBindings, {m_string(key)})"
                 f"({sources[0]})"
             ],
             name,
@@ -1415,12 +1416,12 @@ def _translate_powercenter_expression(
 
     string_match = re.fullmatch(r"'([^']*)'|\"([^\"]*)\"", value)
     if string_match:
-        literal = json.dumps(
+        raw = (
             string_match.group(1)
             if string_match.group(1) is not None
             else string_match.group(2)
         )
-        return literal if target == "dataflow" else f"F.lit({literal})"
+        return m_string(raw) if target == "dataflow" else f"F.lit({json.dumps(raw)})"
 
     if re.fullmatch(r"-?\d+(?:\.\d+)?", value):
         return value if target == "dataflow" else f"F.lit({value})"
@@ -1679,7 +1680,7 @@ def _translate_condition(
     is_number = number is not None
     if target == "dataflow":
         m_operator = "<>" if operator == "!=" else "=" if operator in {"=", "=="} else operator
-        literal = value if is_number else json.dumps(value)
+        literal = value if is_number else m_string(value)
         return f'Record.Field(_, "{field}") {m_operator} {literal}'
     py_operator = "==" if operator == "=" else operator
     literal = value if is_number else json.dumps(value)
@@ -1735,6 +1736,28 @@ def _node_name(identity: str, graph: EtlGraph) -> str:
     return next(
         (node.name for node in graph.nodes if node.native_id == identity),
         identity,
+    )
+
+
+def _fail_closed_m(candidate: EtlCompiledCandidate) -> EtlCompiledCandidate:
+    """Scaffold dataflow output whose Power Query text is not lexically valid."""
+    if (
+        candidate.target != "dataflow"
+        or candidate.validation_state != "generated_unvalidated"
+        or m_text_is_well_formed(candidate.code)
+    ):
+        return candidate
+    message = "Generated Power Query M is not well-formed"
+    return EtlCompiledCandidate(
+        asset_id=candidate.asset_id,
+        name=candidate.name,
+        target=candidate.target,
+        validation_state="scaffold",
+        deployable=False,
+        runtime_ready=False,
+        code=message,
+        diagnostics=(*candidate.diagnostics, message),
+        required_bindings=candidate.required_bindings,
     )
 
 

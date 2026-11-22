@@ -10,17 +10,19 @@ import sqlite3
 import tempfile
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import replace
 from pathlib import Path
 from typing import Self
 
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
+from accelerator.runtime.artifacts import project_candidate
 from accelerator.runtime.identity import (
     assessment_cache_key,
+    candidate_cache_key,
     ir_cache_key,
     neutral_cache_key,
 )
@@ -30,6 +32,7 @@ from accelerator.runtime.identity import snapshot_id as _snapshot_id
 from accelerator.runtime.models import (
     TARGET_EVALUATION_LIST,
     ArtifactPublication,
+    GenerationJob,
     Run,
     RunStatus,
     RunTargetEvaluation,
@@ -147,6 +150,41 @@ AssessmentOutcome = tuple[
     list[NeutralAssessmentResponse],
     str | None,
 ]
+
+
+class _LeaseLost(Exception):
+    """The generation job lease was claimed by another worker."""
+
+
+def _blocked_generation_candidate(
+    item: WorkflowCandidateResponse, target: Target, message: str
+) -> Candidate:
+    platform = item.source_platform
+    return Candidate(
+        workflow=item.display_path,
+        target=target,
+        validation_state="blocked",
+        translation_mode="scaffold",
+        source_sha256=item.sha256,
+        code_sha256=hashlib.sha256(message.encode()).hexdigest(),
+        diagnostics=[message],
+        source_platform=(
+            platform if isinstance(platform, SourcePlatform) else SourcePlatform.ALTERYX
+        ),
+    )
+
+
+def _generation_job(row: sqlite3.Row) -> GenerationJob:
+    payload = row["result"]
+    return GenerationJob(
+        id=row["id"],
+        run_id=row["run_id"],
+        target=row["target"],
+        status=row["status"],
+        attempts=row["attempts"],
+        error=row["error"],
+        candidates=TypeAdapter(list[Candidate]).validate_json(payload) if payload else None,
+    )
 
 
 def _unexpected_failure(item: WorkflowCandidateResponse, error: Exception) -> str:
@@ -787,31 +825,266 @@ class RunService:
         return self._generate_targets(self._snapshot(run.snapshot_id), (target,))[target]
 
     def _generate_targets(
-        self, snapshot: SnapshotPreview, targets: tuple[Target, ...]
+        self,
+        snapshot: SnapshotPreview,
+        targets: tuple[Target, ...],
+        renew: Callable[[], bool] | None = None,
     ) -> dict[Target, list[Candidate]]:
-        """Parse each workflow once and compile every requested target from that parse."""
+        """Parse each workflow once and compile every requested target from that parse.
+
+        One workflow's unexpected fault becomes a blocked candidate. Disk, database,
+        and ValueError contract failures still abort the estate: a partial write is
+        not a successful one, and an unsupported source is a caller-visible rejection.
+        """
         generated: dict[Target, list[Candidate]] = {target: [] for target in targets}
         for item in snapshot.workflows:
-            path = Path(item.source_path)
-            if item.source_platform is SourcePlatform.ALTERYX:
-                try:
-                    graph: WorkflowGraph | None = AlteryxSourceAdapter().legacy_graph(path)
-                except WorkflowParseError:
-                    graph = None  # generate_candidate reports it as a blocked candidate
+            if renew is not None and not renew():
+                raise _LeaseLost()
+            local: dict[Target, list[Candidate]] = {target: [] for target in targets}
+            try:
+                self._generate_item(item, targets, local)
+            except (OSError, sqlite3.Error, ValueError, _LeaseLost):
+                raise
+            except Exception as error:  # one workflow must not abort the estate
+                message = (
+                    f"unexpected generation fault: {item.display_path}: "
+                    f"{redact(fault_detail(error))}"
+                )
+                logger.error(
+                    "Unexpected generation fault for %s", item.display_path, exc_info=error
+                )
                 for target in targets:
                     generated[target].append(
-                        generate_candidate(path, target, graph=graph).model_copy(
-                            update={"workflow": item.display_path}
-                        )
+                        _blocked_generation_candidate(item, target, message)
                     )
                 continue
-            package = self._parse_item(item)
             for target in targets:
-                generated[target].extend(
-                    _informatica_candidate(item.display_path, package, asset, target)
-                    for asset in package.assets
-                )
+                generated[target].extend(local[target])
         return generated
+
+    def _generate_item(
+        self,
+        item: WorkflowCandidateResponse,
+        targets: tuple[Target, ...],
+        generated: dict[Target, list[Candidate]],
+    ) -> None:
+        if item.source_platform is SourcePlatform.ALTERYX:
+            self._generate_alteryx_item(item, targets, generated)
+            return
+        package = self._parse_item(item)
+        for asset in package.assets:
+            for target in targets:
+                generated[target].append(
+                    self._cached_informatica_candidate(item, package, asset, target)
+                )
+
+    def _generate_alteryx_item(
+        self,
+        item: WorkflowCandidateResponse,
+        targets: tuple[Target, ...],
+        generated: dict[Target, list[Candidate]],
+    ) -> None:
+        path = Path(item.source_path)
+        pending: list[tuple[Target, str]] = []
+        for target in targets:
+            key = candidate_cache_key(
+                source_sha256=item.sha256,
+                display_path=item.display_path,
+                platform=str(item.source_platform),
+                target=target,
+                asset_id=item.display_path,
+            )
+            cached = self._read_cached_candidate(key)
+            if cached is not None:
+                generated[target].append(cached)
+            else:
+                pending.append((target, key))
+        if not pending:
+            return
+        try:
+            graph: WorkflowGraph | None = AlteryxSourceAdapter().legacy_graph(path)
+        except WorkflowParseError:
+            graph = None
+        for target, key in pending:
+            candidate = generate_candidate(path, target, graph=graph).model_copy(
+                update={"workflow": item.display_path}
+            )
+            self._store_cached_candidate(key, candidate)
+            generated[target].append(candidate)
+
+    def _cached_informatica_candidate(
+        self,
+        item: WorkflowCandidateResponse,
+        package: EtlPackage,
+        asset: EtlAsset,
+        target: Target,
+    ) -> Candidate:
+        key = candidate_cache_key(
+            source_sha256=item.sha256,
+            display_path=item.display_path,
+            platform=str(item.source_platform),
+            target=target,
+            asset_id=asset.native_id,
+        )
+        cached = self._read_cached_candidate(key)
+        if cached is not None:
+            return cached
+        candidate = _informatica_candidate(item.display_path, package, asset, target)
+        self._store_cached_candidate(key, candidate)
+        return candidate
+
+    def _read_cached_candidate(self, key: str) -> Candidate | None:
+        cached = self._store.cache_get("cache", key)
+        if cached is None:
+            return None
+        try:
+            return Candidate.model_validate_json(cached)
+        except ValidationError:
+            return None
+
+    def _store_cached_candidate(self, key: str, candidate: Candidate) -> None:
+        self._store.cache_put("cache", key, candidate.model_dump_json())
+        self._store.cache_put(
+            "cache",
+            "artifact:" + key,
+            project_candidate(candidate).model_dump_json(),
+        )
+
+    def workflow_candidates(
+        self, identity: str, workflow_index: int, target: Target
+    ) -> list[Candidate]:
+        """Return one workflow's candidates from the cache, without writing an artifact tree."""
+        run = self.get_run(identity, include_result=False)
+        if run.status != "completed":
+            raise ValueError("Complete an assessment before generating candidates")
+        snapshot = self._snapshot(run.snapshot_id)
+        if not 0 <= workflow_index < len(snapshot.workflows):
+            raise KeyError("Workflow index not found")
+        narrowed = snapshot.model_copy(update={"workflows": [snapshot.workflows[workflow_index]]})
+        return self._generate_targets(narrowed, (target,))[target]
+
+    def create_generation_job(self, identity: str, target: Target) -> GenerationJob:
+        """Queue generation. The synchronous generate and preview routes stay unchanged."""
+        run = self.get_run(identity, include_result=False)
+        if run.status != "completed":
+            raise ValueError("Complete an assessment before generating candidates")
+        job_id = uuid.uuid4().hex
+        now = time.time()
+        with self._connection() as connection:
+            connection.execute(
+                """INSERT INTO generation_jobs
+                (id, run_id, target, status, created_at) VALUES (?, ?, ?, 'queued', ?)""",
+                (job_id, identity, target, now),
+            )
+        return GenerationJob(id=job_id, run_id=identity, target=target, status="queued")
+
+    def generation_jobs(self, identity: str) -> list[GenerationJob]:
+        self.get_run(identity, include_result=False)
+        with self._connection() as connection:
+            rows = connection.execute(
+                """SELECT id, run_id, target, status, attempts, error, result
+                FROM generation_jobs WHERE run_id=? ORDER BY created_at, id""",
+                (identity,),
+            ).fetchall()
+        return [_generation_job(row) for row in rows]
+
+    def pending_generation_jobs(self) -> list[str]:
+        with self._connection() as connection:
+            return [
+                row["id"]
+                for row in connection.execute(
+                    """SELECT id FROM generation_jobs
+                    WHERE status='queued' OR (status='running' AND lease<?)""",
+                    (time.time(),),
+                )
+            ]
+
+    def execute_generation_job(self, job_id: str) -> None:
+        """Compute and cache candidates. This must not call the artifact writer."""
+        claimed = self._claim_generation_job(job_id)
+        if claimed is None:
+            return
+        run_id, target, epoch = claimed
+        try:
+            run = self.get_run(run_id, include_result=False)
+            if run.status != "completed":
+                raise ValueError("Complete an assessment before generating candidates")
+            snapshot = self._snapshot(run.snapshot_id)
+            generated = self._generate_targets(
+                snapshot,
+                (target,),
+                renew=lambda: self._renew_generation_lease(job_id, epoch),
+            )
+            if not self._renew_generation_lease(job_id, epoch):
+                return
+            payload = TypeAdapter(list[Candidate]).dump_json(generated[target]).decode()
+            with self._connection() as connection:
+                connection.execute(
+                    """UPDATE generation_jobs SET status='completed', result=?, error=NULL, lease=0
+                    WHERE id=? AND epoch=? AND status='running'""",
+                    (payload, job_id, epoch),
+                )
+        except _LeaseLost:
+            return
+        except Exception as error:
+            expected = isinstance(error, OSError | ValueError | KeyError | sqlite3.Error)
+            if not expected:
+                logger.exception("Generation job %s failed unexpectedly", job_id)
+            with self._connection() as connection:
+                connection.execute(
+                    """UPDATE generation_jobs SET status='failed', error=?, lease=0
+                    WHERE id=? AND epoch=? AND status='running'""",
+                    (
+                        redact(str(error) if expected else f"Unexpected {fault_detail(error)}"),
+                        job_id,
+                        epoch,
+                    ),
+                )
+
+    def _claim_generation_job(self, job_id: str) -> tuple[str, Target, int] | None:
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            now = time.time()
+            claimable = connection.execute(
+                """SELECT run_id, target, attempts FROM generation_jobs
+                WHERE id=? AND (status='queued' OR (status='running' AND lease<?))""",
+                (job_id, now),
+            ).fetchone()
+            if claimable is None:
+                return None
+            if claimable["attempts"] >= MAX_RUN_ATTEMPTS:
+                connection.execute(
+                    """UPDATE generation_jobs SET status='failed', error=?, lease=0 WHERE id=?""",
+                    (
+                        f"Generation job abandoned after {MAX_RUN_ATTEMPTS} interrupted attempts",
+                        job_id,
+                    ),
+                )
+                return None
+            connection.execute(
+                """UPDATE generation_jobs
+                SET status='running', epoch=epoch+1, attempts=attempts+1, lease=?
+                WHERE id=?""",
+                (now + LEASE_SECONDS, job_id),
+            )
+            epoch = int(
+                connection.execute(
+                    "SELECT epoch FROM generation_jobs WHERE id=?", (job_id,)
+                ).fetchone()["epoch"]
+            )
+            target = claimable["target"]
+            if target not in {"notebook", "dataflow", "pipeline"}:
+                raise ValueError(f"Unsupported generation target {target!r}")
+            return claimable["run_id"], target, epoch
+
+    def _renew_generation_lease(self, job_id: str, epoch: int) -> bool:
+        with self._connection() as connection:
+            updated = connection.execute(
+                """UPDATE generation_jobs SET lease=?
+                WHERE id=? AND epoch=? AND status='running'""",
+                (time.time() + LEASE_SECONDS, job_id, epoch),
+            ).rowcount
+        return bool(updated)
 
     def evaluate_target(
         self, identity: str, platform_id: str, registry: TargetPlatformRegistry

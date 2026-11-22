@@ -1,5 +1,6 @@
 """Canonical IR and Service Provider Interface (SPI) contracts."""
 
+from etl_migration_core.contracts.artifacts import ArtifactFile, ArtifactSet
 from etl_migration_core.contracts.ir import (
     EXTENSIBLE_SOURCE_IR_VERSION,
     IR_VERSION,
@@ -51,6 +52,8 @@ __all__ = [
     "EXTENSIBLE_SOURCE_IR_VERSION",
     "IR_SPI_VERSION",
     "IR_VERSION",
+    "ArtifactFile",
+    "ArtifactSet",
     "AssetType",
     "Diagnostic",
     "EtlAsset",

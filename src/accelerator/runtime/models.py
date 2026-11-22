@@ -9,6 +9,7 @@ from pydantic import BaseModel, TypeAdapter
 
 from etl_migration_core.contracts.spi import TargetEvaluation
 from etl_target_fabric.assessment.schemas import DiscoverySummaryResponse, EstateAssessmentResponse
+from etl_target_fabric.compilers.alteryx import Candidate, Target
 
 RunState = Literal["queued", "running", "completed", "failed", "cancelled"]
 
@@ -51,6 +52,18 @@ class RunTargetEvaluation(BaseModel):
     ir_version: str
     provider_version: str
     evaluation: TargetEvaluation
+
+
+class GenerationJob(BaseModel):
+    """Durable generation request. Completed jobs carry candidates; they do not write files."""
+
+    id: str
+    run_id: str
+    target: Target
+    status: RunState
+    attempts: int = 0
+    error: str | None = None
+    candidates: list[Candidate] | None = None
 
 
 class ArtifactPublication(BaseModel):

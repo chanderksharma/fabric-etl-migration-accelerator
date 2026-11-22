@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-LATEST_SCHEMA_VERSION = 6
+LATEST_SCHEMA_VERSION = 7
 MAX_IDLE_CONNECTIONS = 8
 CACHE_TOUCH_INTERVAL_SECONDS = 24 * 60 * 60
 TERMINAL_STATUSES = ("completed", "failed", "cancelled")
@@ -111,12 +111,40 @@ def _add_run_timings(connection: sqlite3.Connection) -> None:
     _add_column(connection, "runs", "timings TEXT")
 
 
+def _add_generation_jobs(connection: sqlite3.Connection) -> None:
+    """Add durable generation jobs.
+
+    Candidates stay in the generic cache, not this table's writer.
+    """
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS generation_jobs (
+            id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            target TEXT NOT NULL,
+            status TEXT NOT NULL,
+            epoch INTEGER NOT NULL DEFAULT 0,
+            lease REAL NOT NULL DEFAULT 0,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL DEFAULT 0,
+            error TEXT,
+            result TEXT
+        )"""
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS generation_jobs_status ON generation_jobs (status, lease)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS generation_jobs_run ON generation_jobs (run_id)"
+    )
+
+
 # Ordered, append-only. Each step is idempotent so a partially applied step can be retried,
 # and a step that has shipped must never change: add a new one instead.
 MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
     (4, _create_baseline),
     (5, _add_ir_cache_and_retention),
     (6, _add_run_timings),
+    (7, _add_generation_jobs),
 )
 
 
@@ -245,10 +273,18 @@ class RunStore:
             runs = connection.execute(
                 "SELECT id, snapshot, status, created_at FROM runs"
             ).fetchall()
+            active_job_runs = {
+                row["run_id"]
+                for row in connection.execute(
+                    "SELECT run_id FROM generation_jobs WHERE status IN ('queued', 'running')"
+                )
+            }
             expired = {
                 row["id"]
                 for row in runs
-                if row["status"] in TERMINAL_STATUSES and row["created_at"] < cutoff
+                if row["status"] in TERMINAL_STATUSES
+                and row["created_at"] < cutoff
+                and row["id"] not in active_job_runs
             }
             referenced = {row["snapshot"] for row in runs if row["id"] not in expired}
             old_snapshots = [
@@ -277,6 +313,7 @@ class RunStore:
                     "capacity_settings",
                     "target_evaluations",
                     "neutral_assessments",
+                    "generation_jobs",
                 ):
                     connection.execute(f"DELETE FROM {table} WHERE run_id=?", (run_id,))
                 connection.execute("DELETE FROM runs WHERE id=?", (run_id,))

@@ -152,6 +152,35 @@ def assessment_cache_key(registry: SourceAdapterRegistry, item: WorkflowCandidat
     )
 
 
+def candidate_cache_key(
+    *,
+    source_sha256: str,
+    display_path: str,
+    platform: str,
+    target: str,
+    asset_id: str,
+) -> str:
+    """Key one generated candidate.
+
+    The caller prefixes nothing; this key starts with ``candidate:``.
+    """
+    return "candidate:" + _digest(
+        [
+            source_sha256,
+            display_path,
+            platform,
+            target,
+            asset_id,
+            COMPILER_VERSION,
+            ETL_COMPILER_VERSION,
+            IR_VERSION,
+            GRAPH_VERSION,
+            RULES_VERSION,
+            ASSESSMENT_RULES_VERSION,
+        ]
+    )
+
+
 def neutral_cache_key(item: WorkflowCandidateResponse) -> str:
     """Key for the target-neutral assessment of one confirmed file."""
     return "neutral:" + _digest(

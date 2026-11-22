@@ -10,6 +10,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from etl_migration_core.contracts.ir import is_ir_compatible
+from etl_migration_core.contracts.spi import IR_SPI_VERSION
+
 logger = logging.getLogger(__name__)
 
 PLUGIN_ALLOWLIST_ENV = "ACCELERATOR_PLUGIN_ALLOWLIST"
@@ -47,6 +50,20 @@ def effective_plugin_allowlist(explicit: Collection[str] | None = None) -> Colle
     that builds a registry, including library facades and stateless CLIs.
     """
     return explicit if explicit is not None else plugin_allowlist_from_environment()
+
+
+def require_compatible_spi(component: object, label: str) -> None:
+    """Reject a plugin whose SPI version is not the host's.
+
+    A missing ``spi_version`` means ``1.0.0``, so built-ins and placeholders keep
+    loading. An incompatible declaration, including ``2.0.0``, fails registration.
+    """
+    declared = getattr(component, "spi_version", None)
+    version = IR_SPI_VERSION if declared is None else declared
+    if not isinstance(version, str) or not is_ir_compatible(version, (IR_SPI_VERSION,)):
+        raise ValueError(
+            f"{label} SPI version {version!r} is incompatible with {IR_SPI_VERSION}"
+        )
 
 
 def fault_detail(error: BaseException) -> str:
