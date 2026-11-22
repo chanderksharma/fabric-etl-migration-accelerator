@@ -8,7 +8,7 @@ from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from etl_migration_core.contracts.ir import EtlAsset, EtlPackage, SourcePlatform
+from etl_migration_core.contracts.ir import EtlAsset, EtlPackage, SourcePlatformId
 
 IR_SPI_VERSION = "1.0.0"
 
@@ -67,8 +67,8 @@ class NeutralWorkloadProfile(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    source_platform: SourcePlatform
-    profile_kind: Literal["alteryx", "informatica"]
+    source_platform: SourcePlatformId
+    profile_kind: Literal["alteryx", "informatica", "generic"]
     counts: dict[str, int]
     total_steps: int = 0
     heavy_steps: int = 0
@@ -79,7 +79,20 @@ class NeutralWorkloadProfile(BaseModel):
 
 @runtime_checkable
 class TargetEvaluator(Protocol):
-    """Evaluate canonical or staged workflows against a target platform."""
+    """Evaluate a canonical asset against a target platform."""
+
+    def evaluate_asset(
+        self,
+        package: EtlPackage,
+        asset: EtlAsset,
+        *,
+        base_reason: str,
+    ) -> TargetEvaluation: ...
+
+
+@runtime_checkable
+class AlteryxPathTargetEvaluator(Protocol):
+    """Optional legacy evaluation for providers that accept staged Alteryx paths."""
 
     def evaluate_alteryx_path(
         self,
@@ -89,14 +102,6 @@ class TargetEvaluator(Protocol):
         default_target: str,
         default_components: Sequence[str],
         default_reason: str,
-    ) -> TargetEvaluation: ...
-
-    def evaluate_asset(
-        self,
-        package: EtlPackage,
-        asset: EtlAsset,
-        *,
-        base_reason: str,
     ) -> TargetEvaluation: ...
 
 

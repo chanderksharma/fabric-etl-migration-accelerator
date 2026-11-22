@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from etl_migration_core.contracts.ir import SourcePlatform
+from etl_migration_core.contracts.ir import SourcePlatform, SourcePlatformId
 
 SUPPORTED_EXTENSIONS = frozenset({".xml", ".yxmd", ".yxmc", ".yxwz", ".yxzp"})
 
@@ -57,11 +57,14 @@ class WorkflowCandidate:
     sha256: str
     archive_path: str | None = None
     archive_chain: tuple[str, ...] = ()
-    source_platform: SourcePlatform = SourcePlatform.ALTERYX
+    source_platform: SourcePlatformId = SourcePlatform.ALTERYX
     source_product: str = "Alteryx Designer"
     asset_type: str = "workflow"
     adapter_id: str = "alteryx"
     adapter_version: str = "1.0.0"
+    parser_version: str | None = None
+    registry_version: str | None = None
+    rules_version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

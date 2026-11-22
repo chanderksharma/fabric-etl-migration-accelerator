@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from etl_migration_core.contracts.ir import EtlPackage
 from etl_migration_core.intake.discovery import DiscoveryService
 from etl_migration_core.sources.alteryx.graph import WorkflowParseError
 from etl_migration_core.sources.defaults import create_default_registry
@@ -29,8 +30,8 @@ class PortfolioAssessmentApplication:
         discovery: DiscoveryService | None = None,
         source_registry: SourceAdapterRegistry | None = None,
     ) -> None:
-        self._discovery = discovery or DiscoveryService()
         self._source_registry = source_registry or create_default_registry()
+        self._discovery = discovery or DiscoveryService(source_registry=self._source_registry)
 
     def preview(self, path: Path) -> DiscoverySummaryResponse:
         """Build a pre-run discovery summary for an untrusted local path."""
@@ -64,47 +65,9 @@ class PortfolioAssessmentApplication:
                         workflow_path,
                         detected.match,
                     )
-                    for asset, item in zip(
-                        package.assets,
-                        assess_package_neutral(package),
-                        strict=True,
-                    ):
-                        asset_path = "/".join(
-                            part for part in (item.folder, item.name) if part
-                        )
-                        display = (
-                            f"{candidate.display_path}!{asset_path}"
-                            if asset_path
-                            else candidate.display_path
-                        )
-                        assessments.append(
-                            NeutralAssessmentResponse(
-                                path=display,
-                                native_id=item.native_id,
-                                name=item.name,
-                                folder=item.folder,
-                                source_platform=item.source_platform,
-                                source_product=item.source_product,
-                                asset_type=item.asset_type,
-                                component_count=item.component_count,
-                                connection_count=item.connection_count,
-                                inventory=[
-                                    NeutralComponentResponse.model_validate(entry)
-                                    for entry in item.inventory
-                                ],
-                                complexity_score=item.complexity_score,
-                                complexity_band=item.complexity_band,
-                                intrinsic_effort_days=item.intrinsic_effort_days,
-                                wave_tier=item.wave_tier,
-                                unknown_components=list(item.unknown_components),
-                                dependencies=list(item.dependencies),
-                                data_sources=list(item.data_sources),
-                                rules_version=item.rules_version,
-                                workload_profile=extract_workload_profile(
-                                    package, asset
-                                ),
-                            )
-                        )
+                    assessments.extend(
+                        neutral_assessment_responses(package, candidate.display_path)
+                    )
             except WorkflowParseError as error:
                 failures.append(str(error))
             except ValueError as error:
@@ -140,3 +103,39 @@ class PortfolioAssessmentApplication:
                     for asset in package.assets
                 )
         return items
+
+
+def neutral_assessment_responses(
+    package: EtlPackage, display_path: str
+) -> list[NeutralAssessmentResponse]:
+    """Build target-neutral responses for every asset in a parsed package."""
+    assessments: list[NeutralAssessmentResponse] = []
+    for asset, item in zip(package.assets, assess_package_neutral(package), strict=True):
+        asset_path = "/".join(part for part in (item.folder, item.name) if part)
+        display = f"{display_path}!{asset_path}" if asset_path else display_path
+        assessments.append(
+            NeutralAssessmentResponse(
+                path=display,
+                native_id=item.native_id,
+                name=item.name,
+                folder=item.folder,
+                source_platform=item.source_platform,
+                source_product=item.source_product,
+                asset_type=item.asset_type,
+                component_count=item.component_count,
+                connection_count=item.connection_count,
+                inventory=[
+                    NeutralComponentResponse.model_validate(entry) for entry in item.inventory
+                ],
+                complexity_score=item.complexity_score,
+                complexity_band=item.complexity_band,
+                intrinsic_effort_days=item.intrinsic_effort_days,
+                wave_tier=item.wave_tier,
+                unknown_components=list(item.unknown_components),
+                dependencies=list(item.dependencies),
+                data_sources=list(item.data_sources),
+                rules_version=item.rules_version,
+                workload_profile=extract_workload_profile(package, asset),
+            )
+        )
+    return assessments

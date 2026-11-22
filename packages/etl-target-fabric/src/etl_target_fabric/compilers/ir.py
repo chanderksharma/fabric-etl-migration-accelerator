@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 from etl_migration_core.contracts.ir import (
+    EXTENSIBLE_SOURCE_IR_VERSION,
+    IR_VERSION,
     AssetType,
     EtlAsset,
     EtlEdge,
@@ -16,10 +18,12 @@ from etl_migration_core.contracts.ir import (
     EtlPackage,
     GraphKind,
     NodeKind,
+    SourcePlatform,
 )
 
 CompilationTarget = Literal["dataflow", "notebook", "pipeline"]
 ETL_COMPILER_VERSION = "1.4.0"
+SUPPORTED_IR_VERSIONS = (IR_VERSION, EXTENSIBLE_SOURCE_IR_VERSION)
 SUPPORTED_MAPPING_OPERATIONS = frozenset(
     {
         "source",
@@ -70,6 +74,10 @@ def compile_asset(
     target: CompilationTarget,
 ) -> EtlCompiledCandidate:
     """Compile one normalized asset to a bounded Fabric target."""
+    if package.ir_version not in SUPPORTED_IR_VERSIONS:
+        raise ValueError(f"Fabric compiler does not support IR version {package.ir_version!r}")
+    if not isinstance(package.source_platform, SourcePlatform):
+        raise ValueError(f"Fabric compiler does not support source {package.source_platform!r}")
     if target == "pipeline":
         dataflow = compile_asset(package, asset, "dataflow")
         notebook = (

@@ -60,6 +60,7 @@ Use the [documentation landing page](index.md) for role-based reading paths.
 * [System Architecture](docs/Architecture/system-architecture.md)
 * [ADR-001: Source Adapters and Canonical ETL IR](docs/Architecture/ADR-001-etl-source-adapters.md)
 * [Pluggable Architecture Analysis](docs/Planning/pluggable-architecture-analysis-and-approach.md)
+* [ETL Modernization Foundation Implementation Plan](docs/Planning/modernization-foundation-implementation-plan.md)
 * [Pluggable Architecture Implementation Plan](docs/Planning/pluggable-architecture-implementation-plan.md)
 * [Accelerator Implementation Plan](docs/Planning/accelerator-implementation-plan.md)
 * [Local Architecture Decisions](docs/Planning/local-architecture-decisions.md)

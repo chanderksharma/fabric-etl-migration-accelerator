@@ -61,6 +61,9 @@ export function Deployment({item, candidates, runId, request}: DeploymentProps) 
   const [workflowFile, setWorkflowFile] = useState(initialPrefs.workflowFile ?? ".github/workflows/deploy-fabric-artifacts.yml");
   const [gitlabProjectUrl, setGitlabProjectUrl] = useState(initialPrefs.gitlabProjectUrl ?? "");
   const [gitRef, setGitRef] = useState(initialPrefs.gitRef ?? "");
+  const [expectedCommit, setExpectedCommit] = useState("");
+  const [isolateLocalArtifacts, setIsolateLocalArtifacts] = useState(false);
+  const [publicationDigest, setPublicationDigest] = useState("");
   const [conflictBehavior, setConflictBehavior] = useState(initialPrefs.conflictBehavior ?? "Update");
   const [feedback, setFeedback] = useState("");
   const [runUrl, setRunUrl] = useState<string | null>(null);
@@ -123,6 +126,18 @@ export function Deployment({item, candidates, runId, request}: DeploymentProps) 
       setFeedback("Git ref contains unsupported characters.");
       return false;
     }
+    if (expectedCommit && !/^[0-9a-f]{40}$/.test(expectedCommit)) {
+      setFeedback("Expected commit must be a full lowercase 40-character Git SHA.");
+      return false;
+    }
+    if (publicationDigest && !/^[0-9a-f]{64}$/.test(publicationDigest)) {
+      setFeedback("Publication digest must be a full lowercase 64-character SHA-256.");
+      return false;
+    }
+    if (publicationDigest && !expectedCommit) {
+      setFeedback("A publication digest requires an expected commit SHA.");
+      return false;
+    }
     setRunUrl(null);
     setFeedback(
       `${providerName} request is ready for ${provider === "github" ? repository : project}. `
@@ -144,6 +159,9 @@ export function Deployment({item, candidates, runId, request}: DeploymentProps) 
             target,
             workflow_file: workflowFile,
             ref: gitRef || null,
+            expected_commit: expectedCommit || null,
+            isolate_local_artifacts: isolateLocalArtifacts,
+            publication_digest: publicationDigest || null,
             conflict_behavior: conflictBehavior,
           }
         : {
@@ -152,6 +170,9 @@ export function Deployment({item, candidates, runId, request}: DeploymentProps) 
             target,
             ci_file: ".gitlab-ci.yml",
             ref: gitRef || null,
+            expected_commit: expectedCommit || null,
+            isolate_local_artifacts: isolateLocalArtifacts,
+            publication_digest: publicationDigest || null,
             conflict_behavior: conflictBehavior,
           };
       const response = await request(`/api/runs/${runId}/deploy/${endpoint}`, {
@@ -218,6 +239,15 @@ export function Deployment({item, candidates, runId, request}: DeploymentProps) 
             </div>}
         <div className="deploy-field"><label htmlFor="itemName">Generated item name</label><input id="itemName" value={nameOf(item.path)} readOnly/></div>
         <div className="deploy-field"><label htmlFor="gitRef">Git ref</label><input id="gitRef" placeholder="Repository default branch" value={gitRef} onChange={e => setGitRef(e.target.value)} maxLength={120}/></div>
+        <div className="deploy-field full"><label htmlFor="expectedCommit">Expected commit SHA (optional)</label><input id="expectedCommit" value={expectedCommit} onChange={e => setExpectedCommit(e.target.value)} maxLength={40} aria-describedby="expectedCommitHelp"/><p id="expectedCommitHelp">Requires the updated trusted CI definition at the selected ref; older GitLab definitions can ignore this request. It does not verify generated artifacts.</p></div>
+        <div className="deploy-field full"><label htmlFor="publicationDigest">Publication digest (optional)</label><input id="publicationDigest" value={publicationDigest} onChange={e => setPublicationDigest(e.target.value)} maxLength={64} aria-describedby="publicationDigestHelp"/><p id="publicationDigestHelp">Requires an expected commit and trusted updated CI. Before dispatch, copy the exact publication into <code>published-fabric-workflows/{runId ?? "<run-id>"}/{"<digest>"}</code> in the remote repository. Local planning uses temporary files; dispatch alone does not establish trusted provenance.</p></div>
+        <div className="deploy-field full">
+          <div className="deploy-confirm">
+            <input id="isolateLocalArtifacts" type="checkbox" checked={isolateLocalArtifacts} onChange={e => setIsolateLocalArtifacts(e.target.checked)} aria-describedby="isolateLocalArtifactsHelp"/>
+            <label htmlFor="isolateLocalArtifacts">Isolate local deployment planning</label>
+          </div>
+          <p id="isolateLocalArtifactsHelp">Generate temporary local files instead of updating the shared artifacts directory. The remote CI repository must still contain the artifacts to deploy.</p>
+        </div>
         {provider === "github"
           ? <div className="deploy-field full"><label htmlFor="workflowFile">Existing workflow file</label><input id="workflowFile" value={workflowFile} onChange={e => setWorkflowFile(e.target.value)} maxLength={180}/></div>
           : <div className="deploy-field full"><label htmlFor="gitlabCiFile">Existing CI file</label><input id="gitlabCiFile" value=".gitlab-ci.yml" readOnly/></div>}

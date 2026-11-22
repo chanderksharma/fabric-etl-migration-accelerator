@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from etl_migration_core.contracts.ir import AssetType, SourcePlatform
+from etl_migration_core.contracts.ir import AssetType, SourcePlatform, SourcePlatformId
 from etl_migration_core.intake.domain import InputKind, SkipReason
 from etl_target_fabric.capacity.model import CapacityStaticProfile
 
@@ -19,11 +19,14 @@ class WorkflowCandidateResponse(BaseModel):
     sha256: str
     archive_path: str | None
     archive_chain: list[str] = []
-    source_platform: SourcePlatform = SourcePlatform.ALTERYX
+    source_platform: SourcePlatformId = SourcePlatform.ALTERYX
     source_product: str = "Alteryx Designer"
     asset_type: str = "workflow"
     adapter_id: str = "alteryx"
     adapter_version: str = "1.0.0"
+    parser_version: str | None = None
+    registry_version: str | None = None
+    rules_version: str | None = None
 
 
 class SkippedItemResponse(BaseModel):

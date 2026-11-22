@@ -12,6 +12,7 @@ from accelerator.delivery.gitlab import (
     GitLabDeploymentService,
     parse_gitlab_project,
 )
+from accelerator.delivery.provenance import PublicationDispatch
 
 
 def test_gitlab_project_url_validation() -> None:
@@ -31,10 +32,13 @@ def test_gitlab_project_url_validation() -> None:
     ("target", "pipeline_target"),
     [("dataflow", "Dataflow"), ("pipeline", "DataPipeline")],
 )
+@pytest.mark.parametrize(("pinned", "published"), [(False, False), (True, False), (True, True)])
 def test_dispatches_existing_gitlab_pipeline(
     monkeypatch: pytest.MonkeyPatch,
     target: DeploymentTarget,
     pipeline_target: str,
+    pinned: bool,
+    published: bool,
 ) -> None:
     service = GitLabDeploymentService(
         token="project-token",
@@ -73,12 +77,18 @@ def test_dispatches_existing_gitlab_pipeline(
         source_workflow="orders.yxmd",
         target=target,
         conflict_behavior="Update",
+        expected_commit="a" * 40 if pinned else None,
+        publication_digest="c" * 64 if published else None,
     )
 
     result = service.deploy(
         selection=selection,
         workspace_id="workspace-id",
         artifact_path="alteryx-workflows/orders",
+        publication=PublicationDispatch(
+            artifact_root=f"published-fabric-workflows/{'b' * 32}/{'c' * 64}",
+            manifest_sha256="d" * 64,
+        ) if published else None,
     )
 
     assert result.status == "dispatched"
@@ -97,6 +107,23 @@ def test_dispatches_existing_gitlab_pipeline(
     assert variables["TARGET"] == pipeline_target
     assert variables["CONFLICT_BEHAVIOR"] == "Update"
     assert variables["DRY_RUN"] == "false"
+    assert variables.get("FABRIC_EXPECTED_COMMIT") == ("a" * 40 if pinned else None)
+    if published:
+        assert variables["ARTIFACT_ROOT"] == (
+            f"published-fabric-workflows/{'b' * 32}/{'c' * 64}"
+        )
+        assert variables["FABRIC_PUBLICATION_MANIFEST_SHA256"] == "d" * 64
+    else:
+        assert "FABRIC_PUBLICATION_MANIFEST_SHA256" not in variables
+
+
+def test_gitlab_rejects_malformed_expected_commit() -> None:
+    with pytest.raises(ValueError, match="expected_commit"):
+        GitLabDeploymentSelection(
+            project_url="https://gitlab.com/group/project",
+            source_workflow="orders.yxmd",
+            expected_commit="main",
+        )
 
 
 def test_gitlab_accepts_pipeline_deployment_target() -> None:

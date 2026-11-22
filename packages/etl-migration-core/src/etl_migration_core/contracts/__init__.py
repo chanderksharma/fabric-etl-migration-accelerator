@@ -1,6 +1,7 @@
 """Canonical IR and Service Provider Interface (SPI) contracts."""
 
 from etl_migration_core.contracts.ir import (
+    EXTENSIBLE_SOURCE_IR_VERSION,
     IR_VERSION,
     AssetType,
     EtlAsset,
@@ -19,6 +20,7 @@ from etl_migration_core.contracts.ir import (
     NodeKind,
     SourceLocation,
     SourcePlatform,
+    SourcePlatformId,
 )
 from etl_migration_core.contracts.spi import (
     IR_SPI_VERSION,
@@ -33,6 +35,7 @@ from etl_migration_core.contracts.spi import (
 )
 
 __all__ = [
+    "EXTENSIBLE_SOURCE_IR_VERSION",
     "IR_SPI_VERSION",
     "IR_VERSION",
     "AssetType",
@@ -54,6 +57,7 @@ __all__ = [
     "NodeKind",
     "SourceLocation",
     "SourcePlatform",
+    "SourcePlatformId",
     "TargetCapability",
     "TargetEvaluation",
     "TargetEvaluator",

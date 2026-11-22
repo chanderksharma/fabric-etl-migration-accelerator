@@ -6,12 +6,14 @@ import json
 import os
 import re
 import uuid
-from typing import Any, Literal
+from typing import Any, Literal, Self
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from accelerator.delivery.provenance import PublicationDispatch
 
 APPROVED_CI_FILE = ".gitlab-ci.yml"
 PROJECT_PART_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -35,7 +37,20 @@ class GitLabDeploymentSelection(BaseModel):
     target: DeploymentTarget = "notebook"
     ci_file: str = APPROVED_CI_FILE
     ref: str | None = Field(default=None, min_length=1, max_length=120)
+    expected_commit: str | None = Field(
+        default=None, min_length=40, max_length=40, pattern=r"^[0-9a-f]{40}$"
+    )
+    isolate_local_artifacts: bool = False
+    publication_digest: str | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$"
+    )
     conflict_behavior: Literal["Fail", "Skip", "Update"] = "Fail"
+
+    @model_validator(mode="after")
+    def validate_publication_revision(self) -> Self:
+        if self.publication_digest is not None and self.expected_commit is None:
+            raise ValueError("A publication digest requires an expected commit")
+        return self
 
     @field_validator("project_url")
     @classmethod
@@ -148,6 +163,7 @@ class GitLabDeploymentService:
         selection: GitLabDeploymentSelection,
         workspace_id: str,
         artifact_path: str,
+        publication: PublicationDispatch | None = None,
     ) -> GitLabDeploymentResult:
         """Dispatch one existing GitLab CI pipeline."""
         origin, project = parse_gitlab_project(selection.project_url)
@@ -184,31 +200,46 @@ class GitLabDeploymentService:
         )
 
         correlation_id = uuid.uuid4().hex
+        variables = [
+            {"key": "FABRIC_OPERATION", "value": "Deploy"},
+            {"key": "DEPLOYMENT_ID", "value": correlation_id},
+            {"key": "FABRIC_WORKSPACE_ID", "value": workspace_id},
+            {
+                "key": "ARTIFACT_ROOT",
+                "value": (
+                    publication.artifact_root if publication else "generated-fabric-workflows"
+                ),
+            },
+            {
+                "key": "TARGET",
+                "value": (
+                    "DataPipeline"
+                    if selection.target == "pipeline"
+                    else selection.target.title()
+                ),
+            },
+            {"key": "WORKFLOW_FILTER", "value": artifact_path},
+            {"key": "CONFLICT_BEHAVIOR", "value": selection.conflict_behavior},
+            {"key": "DRY_RUN", "value": "false"},
+        ]
+        if selection.expected_commit is not None:
+            variables.append({"key": "FABRIC_EXPECTED_COMMIT", "value": selection.expected_commit})
+        if publication is not None:
+            if selection.publication_digest is None or selection.expected_commit is None:
+                raise GitLabDeploymentError("Publication dispatch requires a digest and commit")
+            if not publication.artifact_root.endswith(f"/{selection.publication_digest}"):
+                raise GitLabDeploymentError("Publication path does not match the selected digest")
+            variables.append(
+                {"key": "FABRIC_PUBLICATION_MANIFEST_SHA256", "value": publication.manifest_sha256}
+            )
+        elif selection.publication_digest is not None:
+            raise GitLabDeploymentError("Publication dispatch is missing verified provenance")
         response = self._request(
             "POST",
             f"/projects/{project_id}/pipeline",
             body={
                 "ref": dispatch_ref,
-                "variables": [
-                    {"key": "FABRIC_OPERATION", "value": "Deploy"},
-                    {"key": "DEPLOYMENT_ID", "value": correlation_id},
-                    {"key": "FABRIC_WORKSPACE_ID", "value": workspace_id},
-                    {"key": "ARTIFACT_ROOT", "value": "generated-fabric-workflows"},
-                    {
-                        "key": "TARGET",
-                        "value": (
-                            "DataPipeline"
-                            if selection.target == "pipeline"
-                            else selection.target.title()
-                        ),
-                    },
-                    {"key": "WORKFLOW_FILTER", "value": artifact_path},
-                    {
-                        "key": "CONFLICT_BEHAVIOR",
-                        "value": selection.conflict_behavior,
-                    },
-                    {"key": "DRY_RUN", "value": "false"},
-                ],
+                "variables": variables,
             },
         )
         pipeline_id = response.get("id")

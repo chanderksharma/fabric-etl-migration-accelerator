@@ -107,6 +107,166 @@ test("accepts Informatica input after selecting Informatica", async () => {
     .toBeInTheDocument();
 });
 
+test("directs external sources to the installed plugins intake", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        snapshot_id: "snapshot",
+        workflow_count: 1,
+        skipped_count: 0,
+        total_size_bytes: 12,
+        workflows: [{
+          display_path: "plugin.zip!package.dtsx",
+          sha256: "abc",
+          source_platform: "informatica_example",
+        }],
+        skipped: [],
+      }),
+    }),
+  );
+  render(<App />);
+  fireEvent.click(within(
+    screen.getByRole("radiogroup", {name: "Workflow type"}),
+  ).getByRole("radio", {name: /Informatica/}));
+  fireEvent.click(screen.getByRole("radio", {name: /Select ZIP/}));
+  fireEvent.change(screen.getByLabelText("Choose zip"), {
+    target: {files: [new File(["zip"], "plugin.zip")]},
+  });
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Select Installed plugins to assess external sources",
+  );
+  expect(screen.queryByRole("heading", {name: "Ready for assessment"}))
+    .not.toBeInTheDocument();
+});
+
+test("assesses a plugin archive neutrally and evaluates an installed target", async () => {
+  const workflow = {
+    display_path: "package.dtsx",
+    sha256: "abc",
+    source_platform: "ssis",
+  };
+  const responses: Record<string, unknown> = {
+    "/api/snapshots/upload": {
+      snapshot_id: "snapshot", workflow_count: 1, skipped_count: 0,
+      total_size_bytes: 12, workflows: [workflow], skipped: [],
+    },
+    "/api/runs": {id: "plugin-run", status: "queued", result: null},
+    "/api/runs/plugin-run": {
+      id: "plugin-run", status: "completed", processed: 1, total: 1,
+      error: null, result: {workflow_count: 0, failed_count: 1, assessments: [],
+        failures: ["Fabric assessment does not support source"], workflows: [workflow]},
+    },
+    "/api/runs/plugin-run/neutral-assessment": {
+      workflow_count: 1, failed_count: 0, failures: [],
+      assessments: [{
+        path: "package.dtsx!Package", name: "Package", source_platform: "ssis",
+        source_product: "Synthetic SSIS", component_count: 2, connection_count: 0,
+        complexity_score: 2, complexity_band: "Low", intrinsic_effort_days: 1,
+        unknown_components: ["ssis_unverified_task"], inventory: [],
+      }],
+    },
+    "/api/targets": {targets: [
+      {platform_id: "databricks", display_name: "Synthetic Databricks",
+        provider_version: "0.1.0", supported_ir_versions: ["1.1.0"], implemented: true,
+        status: "ready", capabilities: ["evaluate"], description: "Manual review"},
+      {platform_id: "snowflake", display_name: "Snowflake", provider_version: "1.0.0",
+        supported_ir_versions: ["1.0.0"], implemented: false, status: "placeholder",
+        capabilities: [], description: ""},
+    ]},
+    "/api/runs/plugin-run/targets/databricks/evaluate": [{
+      source_path: "package.dtsx", asset_id: "1", asset_name: "Package",
+      provider_version: "0.1.0",
+      evaluation: {platform_id: "databricks", recommended_target: "Manual review",
+        recommendation_reason: "Needs validation", diagnostics: ["Synthetic only"]},
+    }],
+  };
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/targets/databricks/evaluate") && !init?.method) return {
+      ok: false, status: 404, headers: new Headers({"content-type": "application/json"}),
+      json: async () => ({detail: "No saved evaluation exists"}),
+    };
+    if (!(url in responses)) throw new Error(`Unexpected request: ${url}`);
+    return {ok: true, json: async () => responses[url]};
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<App />);
+  fireEvent.click(screen.getByRole("radio", {name: /Installed plugins/}));
+  fireEvent.click(screen.getByRole("radio", {name: /Select ZIP/}));
+  fireEvent.change(screen.getByLabelText("Choose zip"), {
+    target: {files: [new File(["zip"], "plugin.zip")]},
+  });
+  fireEvent.click(await screen.findByRole("button", {name: "Confirm and assess"}));
+
+  expect(await screen.findByRole("heading", {name: "Target-neutral assessment"}))
+    .toBeInTheDocument();
+  expect(await screen.findByText("ssis_unverified_task")).toBeInTheDocument();
+  expect(screen.queryByRole("link", {name: "Fabric Deployment"})).not.toBeInTheDocument();
+  expect(await screen.findByRole("option", {name: "Synthetic Databricks"})).toBeInTheDocument();
+  expect(screen.queryByRole("option", {name: "Snowflake"})).not.toBeInTheDocument();
+  fireEvent.click(await screen.findByRole("button", {name: "Evaluate target"}));
+  expect(await screen.findByRole("heading", {name: "Package: Manual review"})).toBeInTheDocument();
+  expect(screen.getByText("Synthetic only")).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/runs/plugin-run/targets/databricks/evaluate",
+    expect.objectContaining({method: "POST"}),
+  );
+  expect(fetchMock).not.toHaveBeenCalledWith(
+    expect.stringContaining("/previews"), expect.anything(),
+  );
+});
+
+test("restores external runs into the neutral workspace and reports target failures", async () => {
+  sessionStorage.setItem("accelerator-run-v6", "saved-plugin");
+  window.location.hash = "#fabric-deployment";
+  const workflow = {
+    display_path: "source.dtsx", sha256: "abc", source_platform: "ssis",
+  };
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "/api/runs/saved-plugin") return {ok: true, json: async () => ({
+      id: "saved-plugin", status: "completed", processed: 1, total: 1,
+      result: {workflow_count: 0, failed_count: 1, assessments: [], failures: [],
+        workflows: [workflow]},
+    })};
+    if (url.endsWith("/neutral-assessment")) return {ok: true, json: async () => ({
+      workflow_count: 1, failed_count: 0, failures: [], assessments: [{
+        path: "source.dtsx!Package", name: "Package", source_platform: "ssis",
+        source_product: "Synthetic SSIS", component_count: 1, connection_count: 0,
+        complexity_score: 1, complexity_band: "Low", intrinsic_effort_days: 1,
+        unknown_components: ["unknown"],
+      }],
+    })};
+    if (url === "/api/targets") return {ok: true, json: async () => ({targets: [{
+      platform_id: "fabric", display_name: "Microsoft Fabric", provider_version: "1.0.0",
+      supported_ir_versions: ["1.0.0"], implemented: true, status: "ready",
+      capabilities: ["evaluate"], description: "",
+    }]})};
+    if (url.endsWith("/targets/fabric/evaluate") && !init?.method) return {
+      ok: false, status: 404, headers: new Headers({"content-type": "application/json"}),
+      json: async () => ({detail: "No saved evaluation exists"}),
+    };
+    if (url.endsWith("/targets/fabric/evaluate") && init?.method === "POST") return {
+      ok: false, status: 409, headers: new Headers({"content-type": "application/json"}),
+      json: async () => ({detail: "Target platform does not support IR version 1.1.0"}),
+    };
+    throw new Error(`Unexpected request: ${url}`);
+  }));
+  render(<App />);
+  expect(await screen.findByText("unknown")).toBeInTheDocument();
+  expect(screen.queryByRole("link", {name: "Fabric Deployment"})).not.toBeInTheDocument();
+  expect(await screen.findByRole("option", {name: "Microsoft Fabric"})).toBeInTheDocument();
+  fireEvent.click(await screen.findByRole("button", {name: "Evaluate target"}));
+  expect(await screen.findByRole("alert")).toHaveTextContent("does not support IR version");
+  fireEvent.click(screen.getByRole("button", {name: "New assessment"}));
+  expect(screen.getByRole("heading", {name: "Choose your ETL workflow type and source"}))
+    .toBeInTheDocument();
+  expect(sessionStorage.getItem("accelerator-run-v6")).toBeNull();
+});
+
 test("supports keyboard selection of input modes", () => {
   render(<App />);
   fireEvent.keyDown(screen.getByRole("radio", { name: /Select file/ }), { key: "ArrowRight" });
@@ -368,6 +528,14 @@ function completedRun() {
   };
 }
 
+function targetCatalog() {
+  return {targets: [{
+    platform_id: "fabric", display_name: "Microsoft Fabric", provider_version: "1.0.0",
+    supported_ir_versions: ["1.0.0"], implemented: true, status: "ready",
+    capabilities: ["evaluate", "capacity", "codegen", "dry_run"], description: "Fabric",
+  }]};
+}
+
 test("does not restore a run saved in persistent browser storage", () => {
   localStorage.setItem("accelerator-run-v6", "persistent-run");
   localStorage.setItem("accelerator-run-v5", "stale-run");
@@ -385,9 +553,9 @@ test("does not restore a run saved in persistent browser storage", () => {
 
 test("restores a run within the same browser session and offers real exports", async () => {
   sessionStorage.setItem("accelerator-run-v6", "saved-run");
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: true, json: async () => completedRun(),
-  }));
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => ({
+    ok: true, json: async () => String(input).includes("/api/targets") ? targetCatalog() : completedRun(),
+  })));
   render(<App />);
   await screen.findByRole("heading", { name: "Portfolio Migration Summary" });
   await screen.findByText(
@@ -407,7 +575,10 @@ test("restores a run within the same browser session and offers real exports", a
   })).toBeInTheDocument();
   const deploySection = document.getElementById("fabric-deployment");
   if (!deploySection) throw new Error("Missing fabric deployment section");
-  expect(within(deploySection).getByRole("link", {
+  fireEvent.click(within(screen.getByRole("navigation", {name: "Primary"})).getByRole(
+    "link", {name: "Fabric Deployment"},
+  ));
+  expect(await within(deploySection).findByRole("link", {
     name: "Download Notebook package",
     hidden: true,
   })).toHaveAttribute(
@@ -458,12 +629,12 @@ test("generates and displays explicit unvalidated review candidates on Fabric De
           {
             platform_id: "databricks",
             display_name: "Azure Databricks",
-            provider_version: "0.0.0-placeholder",
+            provider_version: "1.0.0",
             supported_ir_versions: ["1.0.0"],
-            implemented: false,
-            status: "placeholder",
-            capabilities: [],
-            description: "Roadmap placeholder",
+            implemented: true,
+            status: "ready",
+            capabilities: ["evaluate"],
+            description: "Evaluate-only provider",
           },
         ],
       }),
@@ -484,6 +655,7 @@ test("generates and displays explicit unvalidated review candidates on Fabric De
   fireEvent.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Fabric Deployment" }));
   expect(await screen.findByRole("heading", { name: "Fabric Code Generation & Deployment" })).toBeInTheDocument();
   expect(screen.getByRole("radio", { name: /Azure Databricks/ })).toBeDisabled();
+  expect(screen.getByText("Not integrated for generation")).toBeInTheDocument();
 
   fireEvent.click(await screen.findByRole("button", { name: "Generate Notebook previews" }));
   expect(await screen.findByRole("heading", {
@@ -506,11 +678,11 @@ test("discards a late generation response after the analyst changes selection", 
   sessionStorage.setItem("accelerator-run-v6", "saved-run");
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("/api/runs/saved-run/generate")) {
+    if (url.includes("/api/runs/saved-run/previews")) {
       return pending as unknown as Response;
     }
     if (url.includes("/api/targets")) {
-      return { ok: true, json: async () => ({ targets: [] }) } as unknown as Response;
+      return { ok: true, json: async () => targetCatalog() } as unknown as Response;
     }
     if (url.includes("/capacity")) {
       return { ok: true, json: async () => ({ scenarios: [], workflows: [], assumptions: [] }) } as unknown as Response;

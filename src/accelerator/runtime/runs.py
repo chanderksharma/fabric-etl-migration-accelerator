@@ -9,25 +9,40 @@ import sqlite3
 import tempfile
 import time
 import uuid
+import zipfile
 from collections.abc import Iterable, Iterator
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from threading import RLock
-from typing import Literal, Self
+from typing import Literal, Self, TypedDict
 
 from pydantic import BaseModel, TypeAdapter
 
 from etl_migration_core.contracts.ir import IR_VERSION, EtlAsset, EtlPackage, SourcePlatform
-from etl_migration_core.intake.discovery import DiscoveryService
+from etl_migration_core.contracts.spi import TargetEvaluation
+from etl_migration_core.intake.discovery import DiscoveryService, hash_idmc_directory
 from etl_migration_core.intake.domain import WorkflowCandidate
 from etl_migration_core.sources.alteryx.graph import GRAPH_VERSION, WorkflowParseError, redact
 from etl_migration_core.sources.defaults import create_default_registry
+from etl_migration_core.sources.registry import SourceAdapterRegistry
+from etl_migration_core.targets.registry import TargetPlatformRegistry
 from etl_portfolio_assessment.evidence.extractor import (
     EvidenceResponse,
     etl_asset_evidence,
     workflow_evidence,
+)
+from etl_portfolio_assessment.service.application import neutral_assessment_responses
+from etl_portfolio_assessment.service.schemas import (
+    NeutralAssessmentResponse,
+    NeutralEstateAssessmentResponse,
+)
+from etl_portfolio_assessment.service.schemas import (
+    SkippedItemResponse as NeutralSkippedItemResponse,
+)
+from etl_portfolio_assessment.service.schemas import (
+    WorkflowCandidateResponse as NeutralWorkflowCandidateResponse,
 )
 from etl_target_fabric.assessment.evaluator import apply_alteryx_native_route, apply_native_route
 from etl_target_fabric.assessment.ir_assessment import (
@@ -83,6 +98,14 @@ LEASE_RENEWAL_INTERVAL_SECONDS = 60
 WORKER_POLL_SECONDS = 5
 COPY_BUFFER_BYTES = 1024 * 1024
 
+AssessmentOutcome = tuple[
+    list[WorkflowAssessmentResponse],
+    str | None,
+    int,
+    list[NeutralAssessmentResponse],
+    str | None,
+]
+
 
 def _snapshot_id(
     workflows: Iterable[WorkflowCandidate | WorkflowCandidateResponse],
@@ -95,6 +118,17 @@ def _snapshot_id(
                     item.sha256,
                     item.source_platform,
                     item.adapter_version,
+                    *(
+                        (item.adapter_id,)
+                        if not isinstance(item.source_platform, SourcePlatform)
+                        else ()
+                    ),
+                    *(
+                        (item.parser_version, item.registry_version, item.rules_version)
+                        if not isinstance(item.source_platform, SourcePlatform)
+                        and any((item.parser_version, item.registry_version, item.rules_version))
+                        else ()
+                    ),
                 )
                 for item in workflows
             ],
@@ -111,6 +145,8 @@ def _snapshot_id(
 
 
 def _sha256_file(path: Path) -> str:
+    if path.is_dir():
+        return hash_idmc_directory(path)[0]
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
@@ -142,14 +178,104 @@ class Run(BaseModel):
     result: EstateAssessmentResponse | None = None
 
 
+class RunTargetEvaluation(BaseModel):
+    """Target evaluation linked to a source asset in a confirmed run."""
+
+    source_path: str
+    asset_id: str
+    asset_name: str
+    ir_version: str
+    provider_version: str
+    evaluation: TargetEvaluation
+
+
+class ArtifactPublication(BaseModel):
+    """Content-addressed, run-scoped local artifact publication."""
+
+    run_id: str
+    digest: str
+    root: Path
+
+
+class PublicationFile(TypedDict):
+    path: str
+    size_bytes: int
+    sha256: str
+
+
+class PublicationManifest(TypedDict):
+    version: Literal[1]
+    run_id: str
+    files: list[PublicationFile]
+
+
+TARGET_EVALUATION_LIST = TypeAdapter(list[RunTargetEvaluation])
+
+
+def _publication_manifest(root: Path, identity: str) -> PublicationManifest:
+    files: list[PublicationFile] = []
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        if path.is_symlink() or path.is_junction():
+            raise ValueError("Artifact publication contains a linked path")
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise ValueError("Artifact publication contains a non-file entry")
+        relative = path.relative_to(root).as_posix()
+        if relative == "publication-manifest.json":
+            continue
+        files.append(
+            {
+                "path": relative,
+                "size_bytes": path.stat().st_size,
+                "sha256": _sha256_file(path),
+            }
+        )
+    return {"version": 1, "run_id": identity, "files": files}
+
+
+def _read_publication_manifest(root: Path) -> dict[str, object]:
+    if root.is_symlink() or root.is_junction():
+        raise ValueError("Artifact publication contains a linked path")
+    manifest_path = root / "publication-manifest.json"
+    if manifest_path.is_symlink() or manifest_path.is_junction():
+        raise ValueError("Artifact publication contains a linked path")
+    try:
+        recorded = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError("Artifact publication manifest is unavailable or invalid") from error
+    if not isinstance(recorded, dict) or recorded.get("version") != 1:
+        raise ValueError("Artifact publication manifest is invalid")
+    return recorded
+
+
+def _manifest_bytes(manifest: PublicationManifest | dict[str, object]) -> bytes:
+    return json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _verify_publication(root: Path, expected: PublicationManifest | dict[str, object]) -> None:
+    recorded = _read_publication_manifest(root)
+    if (
+        _manifest_bytes(recorded) != _manifest_bytes(expected)
+        or _manifest_bytes(_publication_manifest(root, str(expected["run_id"])))
+        != _manifest_bytes(expected)
+    ):
+        raise ValueError("Artifact publication has changed; refusing to overwrite it")
+
+
 class RunService:
     """Single-host WAL store with atomic work claims and commit fencing."""
 
-    def __init__(self, root: Path, artifact_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        artifact_root: Path | None = None,
+        source_registry: SourceAdapterRegistry | None = None,
+    ) -> None:
         self.root = root
         self.artifact_root = artifact_root or root.parent / "generated-fabric-workflows"
-        self._discovery = DiscoveryService()
-        self._source_registry = create_default_registry()
+        self._source_registry = source_registry or create_default_registry()
+        self._discovery = DiscoveryService(source_registry=self._source_registry)
         root.mkdir(parents=True, exist_ok=True)
         self.database = root / "runs.db"
         self._lock = RLock()
@@ -157,7 +283,7 @@ class RunService:
         with self._connection() as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in {0, 1, 2}:
+            if version not in {0, 1, 2, 3, 4}:
                 raise ValueError("Unsupported run database schema version")
             connection.executescript(
                 """
@@ -179,7 +305,18 @@ class RunService:
                     run_id TEXT PRIMARY KEY,
                     settings_json TEXT NOT NULL
                 );
-                PRAGMA user_version=2;
+                CREATE TABLE IF NOT EXISTS target_evaluations (
+                    run_id TEXT NOT NULL,
+                    platform_id TEXT NOT NULL,
+                    provider_version TEXT NOT NULL,
+                    evaluations_json TEXT NOT NULL,
+                    PRIMARY KEY (run_id, platform_id)
+                );
+                CREATE TABLE IF NOT EXISTS neutral_assessments (
+                    run_id TEXT PRIMARY KEY,
+                    assessment_json TEXT NOT NULL
+                );
+                PRAGMA user_version=4;
                 """
             )
 
@@ -217,18 +354,26 @@ class RunService:
         for index, candidate in enumerate(summary.workflows):
             destination = folder / f"{index}{candidate.extension}"
             if not destination.exists():
-                with tempfile.NamedTemporaryFile(dir=folder, delete=False) as temporary:
-                    staging = Path(temporary.name)
-                try:
+                with tempfile.TemporaryDirectory(dir=folder) as temporary:
+                    staging = Path(temporary) / "snapshot"
                     with self._discovery.staged_workflow(candidate) as original:
-                        staged_sha256 = _copy_with_sha256(original, staging)
+                        staged_sha256 = (
+                            hash_idmc_directory(original, destination=staging)[0]
+                            if original.is_dir()
+                            else _copy_with_sha256(original, staging)
+                        )
                     if staged_sha256 != candidate.sha256:
                         raise ValueError(
                             "Source changed during preview; review the selection again"
                         )
-                    staging.replace(destination)
-                finally:
-                    staging.unlink(missing_ok=True)
+                    try:
+                        staging.replace(destination)
+                    except OSError:
+                        if (
+                            not destination.exists()
+                            or _sha256_file(destination) != candidate.sha256
+                        ):
+                            raise
             elif _sha256_file(destination) != candidate.sha256:
                 raise ValueError("Source changed during preview; review the selection again")
             files.append(
@@ -266,8 +411,21 @@ class RunService:
         if _snapshot_id(preview.workflows) != snapshot_id:
             raise ValueError("Snapshot engine versions changed; review the selection again")
         for item in preview.workflows:
-            if _sha256_file(Path(item.source_path)) != item.sha256:
+            path = Path(item.source_path)
+            if _sha256_file(path) != item.sha256:
                 raise ValueError("Confirmed snapshot changed; review the selection again")
+            if not isinstance(item.source_platform, SourcePlatform):
+                detected = self._source_registry.detect(path, item.display_path)
+                if (
+                    detected.adapter.adapter_id != item.adapter_id
+                    or detected.match.platform != item.source_platform
+                    or detected.adapter.adapter_version != item.adapter_version
+                    or not all((item.parser_version, item.registry_version, item.rules_version))
+                    or detected.adapter.parser_version != item.parser_version
+                    or detected.adapter.registry_version != item.registry_version
+                    or detected.adapter.rules_version != item.rules_version
+                ):
+                    raise ValueError("Confirmed source adapter changed; review the selection again")
         return preview
 
     def create_run(self, snapshot_id: str) -> Run:
@@ -333,57 +491,86 @@ class RunService:
         run = self.get_run(identity)
         assessments: list[WorkflowAssessmentResponse] = []
         failures: list[str] = []
+        neutral_assessments: list[NeutralAssessmentResponse] = []
+        neutral_failures: list[str] = []
         hits = 0
         try:
             snapshot = self._snapshot(run.snapshot_id)
+            with self._connection() as connection:
+                active = connection.execute(
+                    "SELECT 1 FROM runs WHERE id=? AND epoch=? AND status='running'",
+                    (identity, epoch),
+                ).fetchone()
+                if active is None:
+                    return
             with ThreadPoolExecutor(max_workers=4) as executor:
-                for offset in range(0, len(snapshot.workflows), 4):
-                    if self.get_run(identity).status != "running":
-                        return
-                    batch = snapshot.workflows[offset : offset + 4]
-                    futures = [executor.submit(self._assess_item, item) for item in batch]
-                    remaining = set(futures)
-                    while remaining:
-                        _, remaining = wait(remaining, timeout=WORKER_POLL_SECONDS)
-                        if remaining:
-                            with self._connection() as connection:
-                                lease_row = connection.execute(
-                                    """SELECT lease FROM runs
-                                    WHERE id=? AND epoch=? AND status='running'""",
-                                    (identity, epoch),
-                                ).fetchone()
-                                if lease_row is None:
-                                    return
-                                if lease_row["lease"] <= (
-                                    time.time() + LEASE_RENEWAL_INTERVAL_SECONDS
-                                ):
-                                    renewed = connection.execute(
-                                        """UPDATE runs SET lease=?
-                                        WHERE id=? AND epoch=? AND status='running'""",
-                                        (time.time() + LEASE_SECONDS, identity, epoch),
-                                    ).rowcount
-                                    if not renewed:
-                                        return
-                    for future in futures:
-                        item_assessments, failure, hit = future.result()
-                        hits += hit
-                        assessments.extend(item_assessments)
-                        if failure is not None:
-                            failures.append(failure)
+                work = iter(enumerate(snapshot.workflows))
+                pending: dict[Future[AssessmentOutcome], int] = {}
+                outcomes: dict[int, AssessmentOutcome] = {}
+
+                def fill_slots() -> None:
+                    while len(pending) < 4:
+                        try:
+                            index, item = next(work)
+                        except StopIteration:
+                            break
+                        pending[executor.submit(self._assess_item_with_neutral, item)] = index
+
+                fill_slots()
+                while pending:
+                    completed, _ = wait(
+                        pending, timeout=WORKER_POLL_SECONDS, return_when=FIRST_COMPLETED
+                    )
                     with self._connection() as connection:
-                        updated = connection.execute(
-                            """UPDATE runs SET processed=?, cache_hits=?, lease=?
+                        lease_row = connection.execute(
+                            """SELECT lease FROM runs
                             WHERE id=? AND epoch=? AND status='running'""",
-                            (
-                                offset + len(batch),
-                                hits,
-                                time.time() + LEASE_SECONDS,
-                                identity,
-                                epoch,
-                            ),
-                        )
-                        if not updated.rowcount:
+                            (identity, epoch),
+                        ).fetchone()
+                        if lease_row is None:
                             return
+                        if completed:
+                            for future in completed:
+                                index = pending.pop(future)
+                                outcome = future.result()
+                                outcomes[index] = outcome
+                                hits += outcome[2]
+                            lease_updated = connection.execute(
+                                """UPDATE runs SET processed=?, cache_hits=?, lease=?
+                                WHERE id=? AND epoch=? AND status='running'""",
+                                (
+                                    len(outcomes),
+                                    hits,
+                                    time.time() + LEASE_SECONDS,
+                                    identity,
+                                    epoch,
+                                ),
+                            ).rowcount
+                        elif lease_row["lease"] <= time.time() + LEASE_RENEWAL_INTERVAL_SECONDS:
+                            lease_updated = connection.execute(
+                                """UPDATE runs SET lease=?
+                                WHERE id=? AND epoch=? AND status='running'""",
+                                (time.time() + LEASE_SECONDS, identity, epoch),
+                            ).rowcount
+                        else:
+                            lease_updated = 1
+                        if not lease_updated:
+                            return
+                    fill_slots()
+                for index in sorted(outcomes):
+                    (
+                        item_assessments,
+                        failure,
+                        _hit,
+                        item_neutral,
+                        neutral_failure,
+                    ) = outcomes[index]
+                    assessments.extend(item_assessments)
+                    if failure is not None:
+                        failures.append(failure)
+                    neutral_assessments.extend(item_neutral)
+                    if neutral_failure is not None:
+                        neutral_failures.append(neutral_failure)
             result = EstateAssessmentResponse(
                 workflow_count=len(assessments),
                 failed_count=len(failures),
@@ -392,12 +579,20 @@ class RunService:
                 workflows=snapshot.workflows,
                 skipped=snapshot.skipped,
             )
+            neutral_result = _neutral_estate(snapshot, neutral_assessments, neutral_failures)
             with self._connection() as connection:
-                connection.execute(
+                updated = connection.execute(
                     """UPDATE runs SET status='completed', result=?, lease=0
                     WHERE id=? AND epoch=? AND status='running'""",
                     (result.model_dump_json(), identity, epoch),
                 )
+                if updated.rowcount:
+                    connection.execute(
+                        """INSERT INTO neutral_assessments (run_id, assessment_json) VALUES (?, ?)
+                        ON CONFLICT(run_id) DO UPDATE SET
+                        assessment_json=excluded.assessment_json""",
+                        (identity, neutral_result.model_dump_json()),
+                    )
         except (OSError, ValueError, KeyError, sqlite3.Error) as error:
             with self._connection() as connection:
                 connection.execute(
@@ -523,6 +718,28 @@ class RunService:
                     item.display_path,
                     item.source_platform,
                     item.adapter_version,
+                    *(
+                        (
+                            tuple(
+                                (
+                                    adapter.adapter_id,
+                                    adapter.adapter_version,
+                                    adapter.parser_version,
+                                    adapter.registry_version,
+                                    adapter.rules_version,
+                                )
+                                for adapter in self._source_registry.adapters
+                                if adapter.platform == item.source_platform
+                            ),
+                        )
+                        if isinstance(item.source_platform, SourcePlatform)
+                        else (
+                            item.adapter_id,
+                            item.parser_version,
+                            item.registry_version,
+                            item.rules_version,
+                        )
+                    ),
                     GRAPH_VERSION,
                     REGISTRY_VERSION,
                     RULES_VERSION,
@@ -589,6 +806,30 @@ class RunService:
         except (WorkflowParseError, ValueError, json.JSONDecodeError) as error:
             return [], f"{item.display_path}: {redact(str(error))}", 0
 
+    def _assess_neutral_item(
+        self, item: WorkflowCandidateResponse
+    ) -> tuple[list[NeutralAssessmentResponse], str | None]:
+        try:
+            path = Path(item.source_path)
+            detected = self._source_registry.detect(path, item.display_path)
+            package = self._source_registry.parse(path, detected.match)
+            return neutral_assessment_responses(package, item.display_path), None
+        except (WorkflowParseError, ValueError) as error:
+            return [], f"{item.display_path}: {redact(str(error))}"
+
+    def _assess_item_with_neutral(
+        self, item: WorkflowCandidateResponse
+    ) -> tuple[
+        list[WorkflowAssessmentResponse],
+        str | None,
+        int,
+        list[NeutralAssessmentResponse],
+        str | None,
+    ]:
+        assessments, failure, hit = self._assess_item(item)
+        neutral, neutral_failure = self._assess_neutral_item(item)
+        return assessments, failure, hit, neutral, neutral_failure
+
     def generate(self, identity: str, target: Target) -> list[Candidate]:
         run = self.get_run(identity)
         if run.status != "completed":
@@ -610,6 +851,100 @@ class RunService:
                 for asset in package.assets
             )
         return candidates
+
+    def evaluate_target(
+        self, identity: str, platform_id: str, registry: TargetPlatformRegistry
+    ) -> list[RunTargetEvaluation]:
+        """Evaluate confirmed source assets with a registered target provider."""
+        run = self.get_run(identity)
+        if run.status != "completed":
+            raise ValueError("Complete an assessment before evaluating a target")
+        provider = registry.require_implemented(platform_id, capability="evaluate")
+        evaluations: list[RunTargetEvaluation] = []
+        for item in self._snapshot(run.snapshot_id).workflows:
+            path = Path(item.source_path)
+            detected = self._source_registry.detect(path, item.display_path)
+            package = self._source_registry.parse(path, detected.match)
+            for asset in package.assets:
+                evaluation = registry.evaluate_asset(
+                    provider.platform_id,
+                    package,
+                    asset,
+                    base_reason=f"Evaluated {asset.name}",
+                )
+                evaluations.append(
+                    RunTargetEvaluation(
+                        source_path=item.display_path,
+                        asset_id=asset.native_id,
+                        asset_name=asset.name,
+                        ir_version=package.ir_version,
+                        provider_version=provider.provider_version,
+                        evaluation=evaluation,
+                    )
+                )
+        with self._connection() as connection:
+            connection.execute(
+                """INSERT INTO target_evaluations
+                (run_id, platform_id, provider_version, evaluations_json)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(run_id, platform_id) DO UPDATE SET
+                    provider_version=excluded.provider_version,
+                    evaluations_json=excluded.evaluations_json""",
+                (
+                    identity,
+                    provider.platform_id.strip().casefold(),
+                    provider.provider_version,
+                    TARGET_EVALUATION_LIST.dump_json(evaluations).decode("utf-8"),
+                ),
+            )
+        return evaluations
+
+    def assess_neutral(self, identity: str) -> NeutralEstateAssessmentResponse:
+        """Assess the confirmed run snapshot without target-specific routing."""
+        run = self.get_run(identity)
+        if run.status != "completed":
+            raise ValueError("Complete an assessment before building a neutral baseline")
+        snapshot = self._snapshot(run.snapshot_id)
+        assessments: list[NeutralAssessmentResponse] = []
+        failures: list[str] = []
+        for item in snapshot.workflows:
+            item_assessments, failure = self._assess_neutral_item(item)
+            assessments.extend(item_assessments)
+            if failure is not None:
+                failures.append(failure)
+        result = _neutral_estate(snapshot, assessments, failures)
+        with self._connection() as connection:
+            connection.execute(
+                """INSERT INTO neutral_assessments (run_id, assessment_json) VALUES (?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET assessment_json=excluded.assessment_json""",
+                (identity, result.model_dump_json()),
+            )
+        return result
+
+    def get_neutral_assessment(self, identity: str) -> NeutralEstateAssessmentResponse:
+        """Return the saved neutral baseline for a run."""
+        self.get_run(identity)
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT assessment_json FROM neutral_assessments WHERE run_id=?", (identity,)
+            ).fetchone()
+        if row is None:
+            raise KeyError("No neutral baseline exists for this run")
+        return NeutralEstateAssessmentResponse.model_validate_json(row["assessment_json"])
+
+    def get_target_evaluations(
+        self, identity: str, platform_id: str
+    ) -> list[RunTargetEvaluation]:
+        """Return the last completed evaluation for one run and target."""
+        self.get_run(identity)
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT evaluations_json FROM target_evaluations WHERE run_id=? AND platform_id=?",
+                (identity, platform_id.strip().casefold()),
+            ).fetchone()
+        if row is None:
+            raise KeyError("No saved evaluation exists for this run and target")
+        return TARGET_EVALUATION_LIST.validate_json(row["evaluations_json"])
 
     def export_csv(self, identity: str) -> str:
         run = self.get_run(identity)
@@ -634,34 +969,181 @@ class RunService:
         return output.getvalue()
 
     def candidate_package(self, identity: str, target: Target) -> bytes:
-        """Build a byte-stable archive from the persisted Fabric definitions."""
-        persisted = self.write_artifacts(identity, target)
-        return build_candidate_package(persisted, target)
+        """Build a byte-stable archive from an isolated set of Fabric definitions."""
+        with tempfile.TemporaryDirectory(prefix="candidate-package-", dir=self.root) as directory:
+            persisted = self._write_artifacts(
+                identity, (target,), artifact_root=Path(directory)
+            )[target]
+            return build_candidate_package(persisted, target)
+
+    def preview_candidates(self, identity: str, target: Target) -> list[Candidate]:
+        """Generate candidate previews without changing the shared artifact directory."""
+        with tempfile.TemporaryDirectory(prefix="candidate-preview-", dir=self.root) as directory:
+            return self._write_artifacts(
+                identity, (target,), artifact_root=Path(directory)
+            )[target].candidates
 
     def workflow_package(self, identity: str, workflow: str) -> tuple[bytes, str]:
         """Build a byte-stable archive for one workflow and all generated items."""
-        dataflows = self.write_artifacts(identity, "dataflow")
-        notebooks = self.write_artifacts(identity, "notebook")
-        pipelines = self.write_artifacts(identity, "pipeline")
-        candidates = [*dataflows.candidates, *notebooks.candidates, *pipelines.candidates]
-        return build_workflow_package(
-            artifact_root=self.artifact_root,
-            candidates=candidates,
-            workflow=workflow,
-        )
+        with tempfile.TemporaryDirectory(prefix="workflow-package-", dir=self.root) as directory:
+            root = Path(directory)
+            results = self._write_artifacts(
+                identity, ("dataflow", "notebook", "pipeline"), artifact_root=root
+            )
+            candidates = [
+                candidate for result in results.values() for candidate in result.candidates
+            ]
+            return build_workflow_package(
+                artifact_root=root,
+                candidates=candidates,
+                workflow=workflow,
+            )
 
     def write_artifacts(self, identity: str, target: Target) -> ArtifactWriteResult:
         """Persist both targets together below generated-fabric-workflows/<workflow>."""
+        return self._write_artifacts(identity, (target,))[target]
+
+    def write_all_artifacts(self, identity: str) -> dict[Target, ArtifactWriteResult]:
+        """Persist each target while sharing generated candidates across plans."""
+        return self._write_artifacts(identity, ("dataflow", "notebook", "pipeline"))
+
+    @contextmanager
+    def stage_all_artifacts(
+        self, identity: str
+    ) -> Iterator[dict[Target, ArtifactWriteResult]]:
+        """Stage all targets for the lifetime of an isolated deployment plan."""
+        with tempfile.TemporaryDirectory(prefix="deployment-plan-", dir=self.root) as directory:
+            yield self._write_artifacts(
+                identity,
+                ("dataflow", "notebook", "pipeline"),
+                artifact_root=Path(directory),
+            )
+
+    def publish_artifacts(self, identity: str) -> ArtifactPublication:
+        """Publish all targets atomically to a run-scoped content-addressed directory."""
         if not re.fullmatch(r"[a-f0-9]{32}", identity):
             raise ValueError("Run ID must be a 32-character lowercase hexadecimal value")
         run = self.get_run(identity)
-        return write_candidates(
-            run_id=identity,
-            target=target,
-            artifact_root=self.artifact_root,
-            generate_fn=lambda item_target: self.generate(identity, item_target),
-            assessments=run.result.assessments if run.result else [],
-        )
+        if run.status != "completed":
+            raise ValueError("Complete an assessment before publishing artifacts")
+        publications = self.root / "publications"
+        parent = publications / identity
+        for directory in (publications, parent):
+            if directory.is_symlink() or directory.is_junction():
+                raise ValueError("Artifact publication contains a linked path")
+            directory.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".staging-", dir=parent) as temporary:
+            staging = Path(temporary) / "contents"
+            self._write_artifacts(
+                identity, ("dataflow", "notebook", "pipeline"), artifact_root=staging
+            )
+            manifest = _publication_manifest(staging, identity)
+            digest = hashlib.sha256(_manifest_bytes(manifest)).hexdigest()
+            (staging / "publication-manifest.json").write_bytes(_manifest_bytes(manifest))
+            destination = parent / digest
+            try:
+                staging.rename(destination)
+            except OSError:
+                if not destination.is_dir():
+                    raise
+                _verify_publication(destination, manifest)
+            return ArtifactPublication(run_id=identity, digest=digest, root=destination.resolve())
+
+    def verify_publication(self, identity: str, digest: str) -> ArtifactPublication:
+        """Verify a local publication's manifest and every listed artifact."""
+        if not re.fullmatch(r"[a-f0-9]{32}", identity):
+            raise ValueError("Run ID must be a 32-character lowercase hexadecimal value")
+        if not re.fullmatch(r"[a-f0-9]{64}", digest):
+            raise ValueError(
+                "Publication digest must be a 64-character lowercase hexadecimal value"
+            )
+        self.get_run(identity)
+        publications = self.root / "publications"
+        parent = publications / identity
+        root = parent / digest
+        if any(path.is_symlink() or path.is_junction() for path in (publications, parent, root)):
+            raise ValueError("Artifact publication contains a linked path")
+        manifest = _read_publication_manifest(root)
+        if (
+            manifest.get("run_id") != identity
+            or hashlib.sha256(_manifest_bytes(manifest)).hexdigest() != digest
+        ):
+            raise ValueError("Artifact publication manifest does not match its identity")
+        _verify_publication(root, manifest)
+        return ArtifactPublication(run_id=identity, digest=digest, root=root.resolve())
+
+    def verify_staged_publication(
+        self, identity: str, digest: str, staged_root: Path
+    ) -> str:
+        """Check regenerated artifacts against a publication and return its manifest byte hash."""
+        publication = self.verify_publication(identity, digest)
+        staged = _publication_manifest(staged_root, identity)
+        if hashlib.sha256(_manifest_bytes(staged)).hexdigest() != digest:
+            raise ValueError("Current artifacts do not match the selected publication")
+        try:
+            content = (publication.root / "publication-manifest.json").read_bytes()
+            recorded = json.loads(content)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("Artifact publication manifest is unavailable or invalid") from error
+        if not isinstance(recorded, dict) or (
+            hashlib.sha256(_manifest_bytes(recorded)).hexdigest() != digest
+        ):
+            raise ValueError("Artifact publication manifest does not match its identity")
+        _verify_publication(publication.root, recorded)
+        return hashlib.sha256(content).hexdigest()
+
+    def publication_package(self, identity: str, digest: str) -> bytes:
+        """Package only verified publication manifest entries in a deterministic ZIP."""
+        publication = self.verify_publication(identity, digest)
+        manifest = _publication_manifest(publication.root, identity)
+        _verify_publication(publication.root, manifest)
+        if hashlib.sha256(_manifest_bytes(manifest)).hexdigest() != digest:
+            raise ValueError("Artifact publication has changed while packaging")
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w") as archive:
+            for entry in manifest["files"]:
+                path = publication.root / entry["path"]
+                content = path.read_bytes()
+                if len(content) != entry["size_bytes"] or (
+                    hashlib.sha256(content).hexdigest() != entry["sha256"]
+                ):
+                    raise ValueError("Artifact publication has changed while packaging")
+                info = zipfile.ZipInfo(entry["path"], date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                archive.writestr(info, content)
+            manifest_content = (publication.root / "publication-manifest.json").read_bytes()
+            if json.loads(manifest_content) != manifest:
+                raise ValueError("Artifact publication has changed while packaging")
+            info = zipfile.ZipInfo(
+                "publication-manifest.json", date_time=(1980, 1, 1, 0, 0, 0)
+            )
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, manifest_content)
+        return output.getvalue()
+
+    def _write_artifacts(
+        self, identity: str, targets: tuple[Target, ...], *, artifact_root: Path | None = None
+    ) -> dict[Target, ArtifactWriteResult]:
+        if not re.fullmatch(r"[a-f0-9]{32}", identity):
+            raise ValueError("Run ID must be a 32-character lowercase hexadecimal value")
+        run = self.get_run(identity)
+        generated: dict[Target, list[Candidate]] = {}
+
+        def generate(item_target: Target) -> list[Candidate]:
+            if item_target not in generated:
+                generated[item_target] = self.generate(identity, item_target)
+            return generated[item_target]
+
+        return {
+            target: write_candidates(
+                run_id=identity,
+                target=target,
+                artifact_root=artifact_root if artifact_root is not None else self.artifact_root,
+                generate_fn=generate,
+                assessments=run.result.assessments if run.result else [],
+            )
+            for target in targets
+        }
 
     def evidence(self, identity: str, workflow_index: int | None = None) -> EvidenceResponse:
         run = self.get_run(identity)
@@ -728,12 +1210,35 @@ class RunService:
         return response
 
 
+def _neutral_estate(
+    snapshot: SnapshotPreview,
+    assessments: list[NeutralAssessmentResponse],
+    failures: list[str],
+) -> NeutralEstateAssessmentResponse:
+    return NeutralEstateAssessmentResponse(
+        workflow_count=len(assessments),
+        failed_count=len(failures),
+        assessments=assessments,
+        failures=failures,
+        workflows=[
+            NeutralWorkflowCandidateResponse.model_validate(item.model_dump())
+            for item in snapshot.workflows
+        ],
+        skipped=[
+            NeutralSkippedItemResponse.model_validate(item.model_dump())
+            for item in snapshot.skipped
+        ],
+    )
+
+
 def _informatica_candidate(
     display_path: str,
     package: EtlPackage,
     asset: EtlAsset,
     target: Target,
 ) -> Candidate:
+    if not isinstance(package.source_platform, SourcePlatform):
+        raise ValueError(f"Fabric generation does not support source {package.source_platform!r}")
     compiled = compile_asset(package, asset, target)
     asset_path = "/".join(part for part in (asset.folder, asset.name) if part)
     workflow = f"{display_path}!{asset_path}" if asset_path else display_path

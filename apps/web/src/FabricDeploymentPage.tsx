@@ -2,64 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import type { AssessmentResult, Candidate } from "./App";
 import { Deployment } from "./workspace-deployment";
 import { nameOf, waveLabel } from "./workspace-model";
+import { parseTargetCatalog, type TargetPlatformInfo } from "./target-platform";
 
 type Item = AssessmentResult["assessments"][number];
 type Target = "notebook" | "dataflow" | "pipeline";
 
-export type TargetPlatformInfo = {
-  platform_id: string;
-  display_name: string;
-  provider_version: string;
-  supported_ir_versions: string[];
-  implemented: boolean;
-  status: "ready" | "placeholder";
-  capabilities: string[];
-  description: string;
-};
-
-const FALLBACK_TARGETS: TargetPlatformInfo[] = [
-  {
-    platform_id: "fabric",
-    display_name: "Microsoft Fabric",
-    provider_version: "1.0.0",
-    supported_ir_versions: ["1.0.0"],
-    implemented: true,
-    status: "ready",
-    capabilities: ["evaluate", "capacity", "codegen", "dry_run"],
-    description:
-      "Compiler-grounded evaluation, F-SKU capacity sizing, Dataflow Gen2 / PySpark Notebook / Data Pipeline generation, and dry-run planning.",
-  },
-  {
-    platform_id: "databricks",
-    display_name: "Azure Databricks",
-    provider_version: "0.0.0-placeholder",
-    supported_ir_versions: ["1.0.0"],
-    implemented: false,
-    status: "placeholder",
-    capabilities: [],
-    description: "Roadmap placeholder for Databricks target-fit evaluation and Asset Bundles.",
-  },
-  {
-    platform_id: "synapse",
-    display_name: "Azure Synapse Analytics",
-    provider_version: "0.0.0-placeholder",
-    supported_ir_versions: ["1.0.0"],
-    implemented: false,
-    status: "placeholder",
-    capabilities: [],
-    description: "Roadmap placeholder for optional Synapse DWU and Spark pipeline targets.",
-  },
-  {
-    platform_id: "snowflake",
-    display_name: "Snowflake",
-    provider_version: "0.0.0-placeholder",
-    supported_ir_versions: ["1.0.0"],
-    implemented: false,
-    status: "placeholder",
-    capabilities: [],
-    description: "Roadmap placeholder for Snowflake Snowpark and SQL compilation.",
-  },
-];
+function canGenerateFabric(platform: TargetPlatformInfo): boolean {
+  return platform.platform_id === "fabric" && platform.implemented &&
+    platform.status === "ready" && platform.capabilities.includes("codegen");
+}
 
 type FabricDeploymentPageProps = {
   active: boolean;
@@ -85,8 +36,18 @@ export function FabricDeploymentPage({
   onStartIntake,
 }: FabricDeploymentPageProps) {
   const items = useMemo(() => assessment?.assessments ?? [], [assessment]);
-  const [targetPlatforms, setTargetPlatforms] = useState<TargetPlatformInfo[]>(FALLBACK_TARGETS);
+  const [targetPlatforms, setTargetPlatforms] = useState<TargetPlatformInfo[]>([]);
+  const [catalogStatus, setCatalogStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [previousActive, setPreviousActive] = useState(active);
+  if (previousActive !== active) {
+    setPreviousActive(active);
+    if (active) {
+      setTargetPlatforms([]);
+      setCatalogStatus("loading");
+    }
+  }
   const [selectedTargetPlatform, setSelectedTargetPlatform] = useState("fabric");
+  const fabricCodegenAvailable = targetPlatforms.some(canGenerateFabric);
   const [previewFilter, setPreviewFilter] = useState<"all" | "deployable" | "scaffold">("all");
   const [selectedWorkflowPath, setSelectedWorkflowPath] = useState<string>(
     () => preselectedWorkflowPath ?? "",
@@ -97,14 +58,18 @@ export function FabricDeploymentPage({
     let cancelled = false;
     void Promise.resolve(request("/api/targets"))
       .then(async (response) => {
-        if (!response?.ok) return;
-        const payload = (await response.json()) as { targets?: TargetPlatformInfo[] };
-        if (!cancelled && Array.isArray(payload.targets) && payload.targets.length > 0) {
-          setTargetPlatforms(payload.targets);
+        if (!response?.ok) throw new Error("Target catalog request failed");
+        const platforms = parseTargetCatalog(await response.json());
+        if (!cancelled) {
+          setTargetPlatforms(platforms);
+          setCatalogStatus("ready");
         }
       })
       .catch(() => {
-        // Keep fallback target platform metadata when endpoint is mocked or unavailable.
+        if (!cancelled) {
+          setTargetPlatforms([]);
+          setCatalogStatus("error");
+        }
       });
     return () => {
       cancelled = true;
@@ -176,32 +141,37 @@ export function FabricDeploymentPage({
           <div>
             <h2>1. Target platform</h2>
             <p>
-              Select an implemented destination platform. Roadmap targets fail closed until their
-              provider plugin is installed.
+              This page supports Fabric generation and deployment. Other providers require
+              integration with the application before they can be selected here.
             </p>
           </div>
         </div>
         <div className="target-platform-grid" role="radiogroup" aria-label="Target migration platform">
           {targetPlatforms.map((platform) => {
-            const isSelected = selectedTargetPlatform === platform.platform_id;
+            const selectable = canGenerateFabric(platform);
+            const isSelected = selectable && selectedTargetPlatform === platform.platform_id;
             return (
               <button
                 key={platform.platform_id}
                 type="button"
                 role="radio"
                 aria-checked={isSelected}
-                disabled={!platform.implemented}
+                disabled={!selectable}
                 className={`target-platform-card ${isSelected ? "selected" : ""} ${
-                  platform.implemented ? "" : "placeholder"
+                  selectable ? "" : "placeholder"
                 }`}
                 onClick={() => {
-                  if (platform.implemented) setSelectedTargetPlatform(platform.platform_id);
+                  if (selectable) setSelectedTargetPlatform(platform.platform_id);
                 }}
               >
                 <div className="target-platform-head">
                   <strong>{platform.display_name}</strong>
-                  <span className={`chip ${platform.implemented ? "ready" : ""}`}>
-                    {platform.implemented ? "Ready" : "Roadmap placeholder"}
+                  <span className={`chip ${selectable ? "ready" : ""}`}>
+                    {selectable
+                      ? "Ready"
+                      : platform.implemented
+                        ? "Not integrated for generation"
+                        : "Roadmap placeholder"}
                   </span>
                 </div>
                 <p>{platform.description}</p>
@@ -211,7 +181,19 @@ export function FabricDeploymentPage({
         </div>
       </div>
 
-      {assessment && runId && (
+      {catalogStatus === "loading" && (
+        <div className="notice" role="status">Loading target capabilities.</div>
+      )}
+      {catalogStatus === "error" && (
+        <div className="notice" role="alert">
+          Target capabilities could not be loaded. Fabric generation and deployment are unavailable.
+        </div>
+      )}
+      {catalogStatus === "ready" && !fabricCodegenAvailable && (
+        <div className="notice" role="status">Fabric code generation is unavailable.</div>
+      )}
+
+      {fabricCodegenAvailable && assessment && runId && (
         <div className="panel section-gap">
           <div className="panel-header">
             <div>
@@ -339,7 +321,7 @@ export function FabricDeploymentPage({
                     </p>
                     {candidate.artifact_path && (
                       <p>
-                        Saved in <code>generated-fabric-workflows/{candidate.artifact_path}</code>
+                        Download folder: <code>{candidate.artifact_path}</code>
                       </p>
                     )}
                     {candidate.diagnostics.map((value) => (
@@ -359,7 +341,7 @@ export function FabricDeploymentPage({
         </div>
       )}
 
-      {assessment && items.length > 0 && (
+      {fabricCodegenAvailable && assessment && items.length > 0 && (
         <div className="panel section-gap">
           <div className="panel-header">
             <div>

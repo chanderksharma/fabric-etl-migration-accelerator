@@ -45,7 +45,8 @@ class PowerCenterSourceAdapter:
         """Recognize PowerCenter `POWERMART` XML exports."""
         if path.suffix.casefold() != ".xml" or not path.is_file():
             return None
-        head = path.read_bytes()[:64_000]
+        with path.open("rb") as stream:
+            head = stream.read(64_000)
         if b"<POWERMART" not in head:
             return None
         return SourceMatch(

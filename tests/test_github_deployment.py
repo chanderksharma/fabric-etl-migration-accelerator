@@ -13,6 +13,7 @@ from accelerator.delivery.github import (
     GitHubDeploymentService,
     parse_github_repository,
 )
+from accelerator.delivery.provenance import PublicationDispatch
 
 
 def test_repository_url_validation() -> None:
@@ -39,10 +40,13 @@ def test_pipeline_target_uses_fabric_data_pipeline_name() -> None:
     ("target", "workflow_target"),
     [("dataflow", "Dataflow"), ("pipeline", "DataPipeline")],
 )
+@pytest.mark.parametrize(("pinned", "published"), [(False, False), (True, False), (True, True)])
 def test_dispatches_existing_workflow(
     monkeypatch: pytest.MonkeyPatch,
     target: DeploymentTarget,
     workflow_target: str,
+    pinned: bool,
+    published: bool,
 ) -> None:
     service = GitHubDeploymentService(
         app_id="123",
@@ -77,11 +81,17 @@ def test_dispatches_existing_workflow(
         source_workflow="orders.yxmd",
         target=target,
         conflict_behavior="Fail",
+        expected_commit="a" * 40 if pinned else None,
+        publication_digest="c" * 64 if published else None,
     )
     result = service.deploy(
         selection=selection,
         workspace_id="workspace-id",
         artifact_path="alteryx-workflows/orders",
+        publication=PublicationDispatch(
+            artifact_root=f"published-fabric-workflows/{'b' * 32}/{'c' * 64}",
+            manifest_sha256="d" * 64,
+        ) if published else None,
     )
     assert result.status == "dispatched"
     assert result.ref == "main"
@@ -93,6 +103,23 @@ def test_dispatches_existing_workflow(
     assert dispatch_call[2]["inputs"]["FABRIC_WORKSPACE_ID"] == "workspace-id"
     assert dispatch_call[2]["inputs"]["workflow_filter"] == "alteryx-workflows/orders"
     assert dispatch_call[2]["inputs"]["target"] == workflow_target
+    assert dispatch_call[2]["inputs"].get("expected_commit") == ("a" * 40 if pinned else None)
+    if published:
+        assert dispatch_call[2]["inputs"]["artifact_root"] == (
+            f"published-fabric-workflows/{'b' * 32}/{'c' * 64}"
+        )
+        assert dispatch_call[2]["inputs"]["publication_manifest_sha256"] == "d" * 64
+    else:
+        assert "publication_manifest_sha256" not in dispatch_call[2]["inputs"]
+
+
+def test_github_rejects_malformed_expected_commit() -> None:
+    with pytest.raises(ValueError, match="expected_commit"):
+        GitHubDeploymentSelection(
+            repository_url="https://github.com/owner/repository",
+            source_workflow="orders.yxmd",
+            expected_commit="main",
+        )
 
 
 def test_rejects_repository_outside_allowlist() -> None:

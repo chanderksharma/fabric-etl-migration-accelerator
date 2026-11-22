@@ -18,7 +18,11 @@ Supported source formats:
 Registered destination targets:
 
 * Microsoft Fabric (implemented: target-fit evaluation, F-SKU capacity sizing, Dataflow Gen2, PySpark Notebook, Data Pipeline, and dry-run planning)
-* Azure Databricks, Azure Synapse Analytics, and Snowflake (registered as fail-closed roadmap placeholders until dedicated provider wheels are installed)
+* Azure Databricks, Azure Synapse Analytics, and Snowflake (roadmap placeholders; installing a provider alone does not integrate generation and deployment into the local portal)
+
+For local path-based intake, an extracted IDMC export is copied into a durable snapshot.
+Directory entry and size limits apply, and linked entries are rejected. A changed snapshot
+must be reviewed again.
 
 > [!IMPORTANT]
 > The accelerator never executes imported source workflows, scripts, or SQL statements. Every generated artifact carries `generated_unvalidated` status until required source/destination bindings are wired and independent semantic parity is verified.
@@ -67,10 +71,22 @@ Open `<http://127.0.0.1:8050>` in your browser, or pass `-Desktop` (`pwsh -NoPro
 
 ### Step 1: Preview and confirm intake
 
-1. Open **New assessment** and pick the source family (**Alteryx** or **Informatica**).
+1. Open **New assessment** and pick **Alteryx**, **Informatica**, or **Installed plugins**.
 2. Choose **Files**, **ZIP / Package**, or **Folder** (use the repository's synthetic `alteryx-workflows` or `tests/fixtures` folders for a safe walkthrough).
 3. Review the pre-run discovery summary showing accepted candidates, SHA-256 deduplicated skips, and any rejected paths (UNC paths, symlinks, and ZIP-bomb violations are blocked).
-4. Click **Confirm and assess** to start a durable SQLite WAL run. Long-running batches support cancellation and lease recovery across restarts.
+4. Click **Confirm and assess** to start a durable SQLite WAL run. The scheduler
+   processes up to four workflows concurrently and supports lease recovery across
+   restarts. Cancellation stops additional scheduling when observed; it does not
+   interrupt a parser already running.
+
+For **Installed plugins**, install and register the source adapter first. Select its
+files, an archive, or a folder separately from built-in sources. The resulting
+target-neutral workspace shows source facts and manual-review findings, and can
+evaluate registered targets that advertise evaluation support. It does not generate
+or deploy artifacts. The synthetic plugin examples demonstrate the integration,
+not production SSIS or Databricks support.
+
+The remaining steps apply to the existing Alteryx and Informatica Fabric workspace.
 
 ### Step 2: Inspect the portfolio and 6-tab workflow drawer
 
@@ -96,10 +112,51 @@ Open **Capacity Sizing** (see [Fabric Capacity Planning](capacity-planning.md)) 
    uv run tool generate <completed-run-id> --target all --output generated-fabric-workflows
    ```
 
+   Portal previews, dry runs, and ZIP downloads use isolated temporary directories
+   and do not update the shared `generated-fabric-workflows` directory. Use the CLI
+   `tool generate` command or the legacy generation API when you need persisted local
+   artifacts. CI dispatch writes to the shared directory by default. To leave it
+   untouched, select **Isolate local deployment planning** or set
+   `isolate_local_artifacts` to `true` in the deployment request. This uses
+   temporary local files only; the remote CI repository must already contain the
+   intended artifacts. It does not establish remote artifact provenance.
+   Generation fails if two candidates for
+   the same target would receive the same Fabric logical ID; this prevents publishing
+   colliding definitions until a compatible identity migration is available. Current
+   logical IDs also change when source content changes, so do not assume regenerated
+   artifacts will update an existing Fabric item.
+
+   To create and verify a separate run-scoped local publication, use:
+
+   ```powershell
+   uv run tool publish <completed-run-id>
+   uv run tool verify-publication <completed-run-id> <publication-digest>
+   ```
+
+   The publication is stored under the local `.accelerator/publications` directory.
+   Its manifest records file hashes; verification rejects modified or extra files.
+   Treat it as read-only. To use it for dispatch, copy the exact publication into
+   `published-fabric-workflows/<completed-run-id>/<publication-digest>` in the
+   remote repository, and select that digest and the full expected commit SHA in
+   the deployment form. The publication is not uploaded automatically. Follow
+   your data-handling policies when placing artifacts in a repository.
+   The local API also supports `POST /api/runs/{run_id}/publications`,
+   `GET /api/runs/{run_id}/publications/{digest}`, and
+   `GET /api/runs/{run_id}/publications/{digest}/download`. The download contains
+   only manifest-listed files and is rejected if the publication has changed.
+
 2. Inspect `generated-fabric-workflows/<platform>/<workflow>/`:
    * Deployable items include `*-create-item.json` envelopes, decoded definitions (`dataflow-mashup.pq`, `notebook-content.ipynb`, `pipeline-content.json`), `.platform` metadata, and `deployment-bundle.json`.
    * Unsupported or macro-dependent items emit `*-diagnostics.json` scaffolds only and are never given runnable create-item envelopes.
 3. Run a pre-deployment dry run, then dispatch your allowlisted GitHub Actions or GitLab CI workflow (configured with Microsoft Entra OIDC federation per [Fabric CI/CD Setup](fabric-ci-cd-setup.md)) to publish to your Fabric `dev` workspace.
+   You can optionally request a check against a full lowercase commit SHA. This
+   check only runs when the selected ref contains the updated trusted CI
+   definition and verification script; older GitLab definitions can ignore the
+   request. With a publication digest, the local service compares regenerated
+   artifacts to the publication and the updated CI definition checks the exact
+   manifest and files. These checks depend on a trusted CI definition, checkout,
+   and runner; dispatch alone is not proof of remote provenance. See
+   [Fabric CI/CD Setup](fabric-ci-cd-setup.md#optional-publication-backed-dispatch).
 
 ## Workflow 3: Modular Python packages and stateless CLIs
 
@@ -117,6 +174,11 @@ etl-assess evidence .\alteryx-workflows
 etl-fabric evaluate .\alteryx-workflows\sample_alteryx_workflow.yxmd
 etl-fabric compile .\alteryx-workflows\sample_alteryx_workflow.yxmd --target dataflow
 ```
+
+The main CLI also offers `uv run tool assess-neutral <path>` for a target-neutral
+assessment using registered source plugins. It returns a nonzero exit code when no
+supported workflows are found or parsing fails. The existing `tool assess` command
+continues to return the Fabric-specific assessment.
 
 To inspect registered target platforms and roadmap placeholder status from the main CLI or API:
 

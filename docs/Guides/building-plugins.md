@@ -30,12 +30,13 @@ provider alone does not connect its generation or deployment to the local
 application. See the [developer contribution guide](developer-contribution-guide.md)
 for integration steps.
 
+For an independently packaged, manual-review-only example, see the
+[synthetic Databricks provider](../../examples/plugins/synthetic-databricks/README.md).
+It is a contract demonstration, not Databricks product support.
+
 ### Implement the provider protocol
 
 ```python
-from collections.abc import Sequence
-from pathlib import Path
-
 from etl_migration_core.contracts.ir import IR_VERSION, EtlAsset, EtlPackage
 from etl_migration_core.contracts.spi import (
     TargetCapability,
@@ -46,23 +47,6 @@ from etl_migration_core.contracts.spi import (
 
 
 class DatabricksEvaluator:
-    def evaluate_alteryx_path(
-        self,
-        path: Path,
-        *,
-        unsupported_tools: Sequence[str],
-        default_target: str,
-        default_components: Sequence[str],
-        default_reason: str,
-    ) -> TargetEvaluation:
-        return TargetEvaluation(
-            platform_id="databricks",
-            implemented=True,
-            recommended_target="Databricks Workflow",
-            target_components=("PySpark Notebook", "Databricks Job"),
-            recommendation_reason=default_reason,
-        )
-
     def evaluate_asset(
         self,
         package: EtlPackage,
@@ -113,14 +97,54 @@ databricks = "etl_target_databricks.provider:DatabricksTargetProvider"
 
 When installed alongside `etl-migration-core`, `create_target_registry()` automatically supersedes the built-in `"databricks"` placeholder with `DatabricksTargetProvider`, and `GET /api/targets` or `uv run tool targets` reports `"status": "ready"`.
 
+Use `TargetPlatformRegistry.evaluate_asset` to check the advertised evaluation
+capability and exact IR version before calling the evaluator. For completed local runs,
+`POST /api/runs/{run_id}/targets/{platform_id}/evaluate` evaluates each confirmed
+canonical asset and returns separate results without changing the existing assessment.
+Results are saved per run and platform, with the most recent evaluation replacing the
+previous one. The endpoint does not enable target-specific generation or deployment
+in the portal. Provider metadata must match its declared version, IR versions,
+implementation status, and capabilities. These fields are checked both when listing
+providers and before invoking a capability. Duplicate provider entry points are rejected.
+The optional `AlteryxPathTargetEvaluator`
+protocol preserves the legacy path-based Fabric method for existing integrations.
+Completed runs save a neutral baseline alongside the existing Fabric-focused assessment.
+Retrieve it with `GET /api/runs/{run_id}/neutral-assessment`. To generate or refresh
+the baseline for an older completed run, use `POST` on the same path. The portal
+shows external-source runs in a separate neutral workspace, with evaluation for
+registered target providers that advertise the `evaluate` capability.
+
 ## Adding a source adapter plugin
 
 Source adapters normalize native ETL exports (such as SSIS `.dtsx`, Talend, or DataStage) into `EtlPackage` and register under the `etl_migration.sources` entry-point group.
 
-These formats are extension examples, not current built-in support. A new
-adapter also needs compatible source-platform contracts, secure discovery,
-assessment, and runtime integration. See the
+These formats are extension examples, not current built-in support. Canonical
+packages accept new lowercase source identifiers; third-party sources use a
+generic neutral workload profile. Identifiers start with a lowercase letter and
+contain up to 64 lowercase letters, digits, dots, underscores, or hyphens.
+External source packages must declare `EXTENSIBLE_SOURCE_IR_VERSION` (`1.1.0`)
+or a later compatible version; existing built-in packages remain on IR `1.0.0`.
+Target providers must explicitly advertise support for each IR version they accept.
+Duplicate source adapter entry points are rejected. Existing Fabric evaluation and compilation
+reject sources they have not certified. Adapters can declare
+`supported_extensions` as lowercase extensions such as `(".dtsx",)` to enable
+local-file and ZIP member discovery and target-neutral run assessment for extensions
+not reserved by built-in intake. New plugin file formats must use an external source identifier;
+they cannot claim a built-in source identity through extension discovery.
+External snapshots record the selected adapter identity and its adapter, parser,
+registry, and rules versions. Changing any of these requires a new preview. Older
+external snapshots without component versions also require a new preview. Plugin
+authors must increment the appropriate version when its behavior changes; version
+strings do not verify the installed code. Select **Installed plugins** in the
+portal to assess external sources separately from built-in sources. The neutral
+workspace does not generate or deploy target artifacts. An unsupported Fabric
+assessment is reported separately from the neutral baseline and registered-target
+evaluations. See the
 [developer contribution guide](developer-contribution-guide.md#extend-a-source-system).
+
+A [synthetic SSIS source adapter](../../examples/plugins/synthetic-ssis/README.md)
+demonstrates local-file and archive discovery and manual-review-only metadata extraction.
+It does not add production SSIS support.
 
 ```toml
 [project.entry-points."etl_migration.sources"]

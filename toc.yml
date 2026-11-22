@@ -24,6 +24,8 @@
       href: docs/Planning/accelerator-implementation-plan.md
     - name: Pluggable Architecture Analysis
       href: docs/Planning/pluggable-architecture-analysis-and-approach.md
+    - name: ETL Modernization Foundation Implementation Plan
+      href: docs/Planning/modernization-foundation-implementation-plan.md
     - name: Pluggable Architecture Implementation Plan
       href: docs/Planning/pluggable-architecture-implementation-plan.md
 - name: Architecture and Extensions

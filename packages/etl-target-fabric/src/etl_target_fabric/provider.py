@@ -5,17 +5,17 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from etl_migration_core.contracts.ir import IR_VERSION, EtlAsset, EtlPackage
+from etl_migration_core.contracts.ir import EtlAsset, EtlPackage
 from etl_migration_core.contracts.spi import (
     TargetCapability,
     TargetEvaluation,
-    TargetEvaluator,
     TargetPlatformInfo,
 )
 from etl_target_fabric.assessment.evaluator import (
     evaluate_alteryx_native_route,
     evaluate_etl_native_route,
 )
+from etl_target_fabric.compilers.ir import SUPPORTED_IR_VERSIONS
 
 
 class FabricTargetEvaluator:
@@ -58,7 +58,7 @@ class FabricTargetProvider:
     platform_id = "fabric"
     display_name = "Microsoft Fabric"
     provider_version = "1.0.0"
-    supported_ir_versions: tuple[str, ...] = (IR_VERSION,)
+    supported_ir_versions: tuple[str, ...] = SUPPORTED_IR_VERSIONS
     implemented = True
     capabilities: tuple[TargetCapability, ...] = (
         "evaluate",
@@ -86,5 +86,5 @@ class FabricTargetProvider:
             description=self.description,
         )
 
-    def evaluator(self) -> TargetEvaluator:
+    def evaluator(self) -> FabricTargetEvaluator:
         return self._evaluator

@@ -13,6 +13,14 @@ on:
         required: false
         default: manual
         type: string
+      expected_commit:
+        description: Optional full lowercase commit SHA to check before deployment
+        required: false
+        type: string
+      publication_manifest_sha256:
+        description: Optional expected publication manifest SHA-256
+        required: false
+        type: string
       artifact_root:
         description: Repository-relative generated artifact root
         required: true
@@ -56,6 +64,12 @@ on:
       deployment_id:
         required: false
         default: reusable
+        type: string
+      expected_commit:
+        required: false
+        type: string
+      publication_manifest_sha256:
+        required: false
         type: string
       artifact_root:
         required: false
@@ -110,9 +124,25 @@ jobs:
       INPUT_WORKFLOW_FILTER: ${{ inputs.workflow_filter }}
       INPUT_CONFLICT_BEHAVIOR: ${{ inputs.conflict_behavior }}
       INPUT_DRY_RUN: ${{ inputs.dry_run }}
+      INPUT_EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+      INPUT_PUBLICATION_MANIFEST_SHA256: ${{ inputs.publication_manifest_sha256 }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verify requested deployment revision
+        if: ${{ inputs.expected_commit != '' }}
+        shell: pwsh
+        run: ./scripts/Assert-DeploymentRevision.ps1 -ExpectedCommit $env:INPUT_EXPECTED_COMMIT -SourceCommit $env:GITHUB_SHA
+
+      - name: Verify requested deployment publication
+        if: ${{ inputs.publication_manifest_sha256 != '' }}
+        shell: pwsh
+        run: |
+          if (-not $env:INPUT_EXPECTED_COMMIT) {
+            throw "Publication verification requires an expected commit"
+          }
+          ./scripts/Assert-DeploymentPublication.ps1 -ArtifactRoot $env:INPUT_ARTIFACT_ROOT -ExpectedManifestSha256 $env:INPUT_PUBLICATION_MANIFEST_SHA256
 
       - name: Deploy Fabric definitions
         shell: pwsh

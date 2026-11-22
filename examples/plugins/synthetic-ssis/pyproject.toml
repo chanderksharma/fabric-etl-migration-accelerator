@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "etl-source-ssis-example"
+version = "0.1.0"
+description = "Synthetic metadata-only SSIS source adapter example"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = ["etl-migration-core>=1.0.0,<2", "defusedxml>=0.7.1,<1"]
+
+[project.entry-points."etl_migration.sources"]
+synthetic-ssis = "etl_source_ssis_example:SyntheticSsisAdapter"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/etl_source_ssis_example"]

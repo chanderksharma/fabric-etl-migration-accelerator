@@ -1,5 +1,6 @@
 """Acceptance checks for generated components and deployment contracts."""
 
+import hashlib
 import json
 import os
 import shutil
@@ -12,6 +13,89 @@ import pytest
 
 ROOT = Path(__file__).parents[1]
 ARTIFACT_ROOT = ROOT / "generated-fabric-workflows"
+
+
+def test_ci_revision_check_precedes_fabric_deployment() -> None:
+    github = (ROOT / ".github" / "workflows" / "deploy-fabric-artifacts.yml").read_text(
+        encoding="utf-8"
+    )
+    gitlab = (ROOT / ".gitlab" / "ci" / "deploy-fabric-artifacts.yml").read_text(
+        encoding="utf-8"
+    )
+    assert github.index("scripts/Assert-DeploymentRevision.ps1") < github.index(
+        "scripts/Deploy-FabricArtifacts.ps1"
+    )
+    assert gitlab.index("scripts/Assert-DeploymentRevision.ps1") < gitlab.index(
+        "scripts/Deploy-FabricArtifacts.ps1"
+    )
+    assert github.index("scripts/Assert-DeploymentPublication.ps1") < github.index(
+        "scripts/Deploy-FabricArtifacts.ps1"
+    )
+    assert gitlab.index("scripts/Assert-DeploymentPublication.ps1") < gitlab.index(
+        "scripts/Deploy-FabricArtifacts.ps1"
+    )
+    assert "if ($LASTEXITCODE -ne 0)" in gitlab
+
+
+def test_publication_verifier_rejects_modified_and_extra_files(tmp_path: Path) -> None:
+    executable = shutil.which("pwsh")
+    if executable is None:
+        pytest.skip("PowerShell 7 is required to exercise publication verification")
+    run_id = "1" * 32
+    digest = "2" * 64
+    relative_root = f"published-fabric-workflows/{run_id}/{digest}"
+    root = tmp_path / "published-fabric-workflows" / run_id / digest
+    artifact = root / "orders" / "dataflow-create-item.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_bytes(b"synthetic-definition")
+    entry = {
+        "path": "orders/dataflow-create-item.json",
+        "size_bytes": len(artifact.read_bytes()),
+        "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+    }
+    manifest = {
+        "version": 1,
+        "run_id": run_id,
+        "files": [entry],
+    }
+    manifest_path = root / "publication-manifest.json"
+    manifest_path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode())
+    manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+
+    def verify(expected_hash: str = manifest_hash) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-File",
+                str(ROOT / "scripts" / "Assert-DeploymentPublication.ps1"),
+                "-ArtifactRoot", relative_root, "-ExpectedManifestSha256", expected_hash,
+            ],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+
+    accepted = verify()
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    assert verify("0" * 64).returncode != 0
+    artifact.write_bytes(b"synthetic-definitioN")
+    assert verify().returncode != 0
+    artifact.write_bytes(b"synthetic-definition")
+    extra = root / "unexpected.json"
+    extra.write_text("extra", encoding="utf-8")
+    assert verify().returncode != 0
+    extra.unlink()
+    artifact.unlink()
+    assert verify().returncode != 0
+    artifact.write_bytes(b"synthetic-definition")
+    entry["path"] = "../outside.json"
+    manifest_path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode())
+    assert verify(hashlib.sha256(manifest_path.read_bytes()).hexdigest()).returncode != 0
+    entry["path"] = "orders/dataflow-create-item.json"
+    manifest["files"] = [entry, entry.copy() | {"path": "ORDERS/dataflow-create-item.json"}]
+    manifest_path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode())
+    assert verify(hashlib.sha256(manifest_path.read_bytes()).hexdigest()).returncode != 0
 
 
 @pytest.mark.parametrize(

@@ -8,6 +8,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from etl_migration_core.contracts.ir import SourcePlatform
 from etl_migration_core.sources.defaults import create_default_registry
 from etl_target_fabric.assessment.evaluator import evaluate_etl_native_route
 from etl_target_fabric.compilers.alteryx import Target, generate_candidate
@@ -38,7 +39,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     detected = registry.detect(path, path.name)
     if args.command == "compile":
         target: Target = args.target
-        if detected.match.platform.value == "alteryx" and target in {
+        if detected.match.platform == SourcePlatform.ALTERYX and target in {
             "dataflow",
             "notebook",
         }:

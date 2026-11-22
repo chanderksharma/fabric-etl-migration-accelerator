@@ -10,6 +10,7 @@ import uvicorn
 from accelerator.runtime.runs import RunService
 from accelerator.targets import create_default_target_registry
 from etl_migration_core.intake.discovery import InputRejectedError
+from etl_portfolio_assessment.service.application import PortfolioAssessmentApplication
 from etl_target_fabric.assessment.portfolio import (
     FabricAssessmentApplication as AssessmentApplication,
 )
@@ -40,6 +41,30 @@ def assess(
         )
         raise typer.Exit(code=2) from error
     typer.echo(summary.model_dump_json(indent=2))
+    if summary.failed_count:
+        raise typer.Exit(code=1)
+
+
+@app.command("assess-neutral")
+def assess_neutral(
+    path: Annotated[Path, typer.Argument(exists=True, readable=True, resolve_path=True)],
+) -> None:
+    """Assess source assets without selecting a target platform."""
+    try:
+        summary = PortfolioAssessmentApplication().assess_neutral(path)
+    except InputRejectedError as error:
+        typer.echo(
+            json.dumps(
+                {"path": error.path, "reason": error.reason, "message": error.detail},
+                sort_keys=True,
+            ),
+            err=True,
+        )
+        raise typer.Exit(code=2) from error
+    typer.echo(summary.model_dump_json(indent=2))
+    if not summary.workflows:
+        typer.echo("No supported workflows were found.", err=True)
+        raise typer.Exit(code=1)
     if summary.failed_count:
         raise typer.Exit(code=1)
 
@@ -116,6 +141,35 @@ def generate_artifacts(
                     }
                 )
             typer.echo(json.dumps({"run_id": run_id, "results": results}, indent=2))
+    except (KeyError, OSError, ValueError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=2) from error
+
+
+@app.command("publish")
+def publish_artifacts(
+    run_id: Annotated[str, typer.Argument(help="Completed local run ID")],
+) -> None:
+    """Publish a content-addressed local artifact set without dispatching deployment."""
+    try:
+        with RunService(Path(".accelerator")) as service:
+            publication = service.publish_artifacts(run_id)
+        typer.echo(publication.model_dump_json(indent=2))
+    except (KeyError, OSError, ValueError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=2) from error
+
+
+@app.command("verify-publication")
+def verify_publication(
+    run_id: Annotated[str, typer.Argument(help="Completed local run ID")],
+    digest: Annotated[str, typer.Argument(help="Publication SHA-256 digest")],
+) -> None:
+    """Verify a local publication manifest and its artifact files."""
+    try:
+        with RunService(Path(".accelerator")) as service:
+            publication = service.verify_publication(run_id, digest)
+        typer.echo(publication.model_dump_json(indent=2))
     except (KeyError, OSError, ValueError) as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=2) from error

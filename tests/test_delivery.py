@@ -2,27 +2,31 @@
 
 import ast
 import base64
+import hashlib
 import io
 import json
+import shutil
 import sqlite3
+import subprocess
 import time
 import zipfile
 from collections.abc import Iterator
-from concurrent.futures import Future, wait
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from contextlib import closing
 from pathlib import Path
 from threading import Event, Thread
-from typing import IO
+from typing import IO, Literal
 
 import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from accelerator.cli.app import app as cli
-from accelerator.runtime.runs import RunService
+from accelerator.runtime.runs import RunService, SnapshotPreview
 from accelerator.server.api import app
 from etl_migration_core.intake.discovery import DiscoveryService, InputRejectedError
 from etl_migration_core.intake.domain import DiscoveryLimits
+from etl_portfolio_assessment.service.schemas import NeutralAssessmentResponse
 from etl_target_fabric.assessment.portfolio import (
     FabricAssessmentApplication as AssessmentApplication,
 )
@@ -31,6 +35,8 @@ from etl_target_fabric.assessment.schemas import (
     WorkflowCandidateResponse,
 )
 from etl_target_fabric.assessment.workflow import WorkflowParseError, assess_workflow
+from etl_target_fabric.compilers.alteryx import Candidate, Target
+from etl_target_fabric.delivery.artifact_writer import write_candidates
 
 WORKFLOW = b"""<AlteryxDocument><Nodes>
 <Node ToolID="1"><GuiSettings Plugin="AlteryxBasePluginsGui.InputData.InputData"/>
@@ -437,6 +443,42 @@ def test_api_confirm_poll_generate_export_and_dry_run(local_client: TestClient) 
     assert local_client.get("/").status_code in {200, 503}
 
 
+def test_isolated_preview_and_dry_run_do_not_modify_shared_artifacts(
+    local_client: TestClient,
+) -> None:
+    preview = local_client.post(
+        "/api/snapshots/upload",
+        data={"mode": "zip"},
+        files=[
+            ("files", ("estate.zip", archive_bytes({"orders.yxmd": WORKFLOW}), "application/zip"))
+        ],
+    )
+    run = local_client.post("/api/runs", json={"snapshot_id": preview.json()["snapshot_id"]})
+    identity = run.json()["id"]
+    assert wait_for_run(local_client, identity)["status"] == "completed"
+    root = app.state.run_service.artifact_root
+    root.mkdir(parents=True, exist_ok=True)
+    marker = root / "sentinel.txt"
+    marker.write_text("unchanged", encoding="utf-8")
+
+    result = local_client.post(f"/api/runs/{identity}/previews?target=notebook")
+    assert result.status_code == 200
+    candidate = result.json()[0]
+    assert candidate["validation_state"] == "generated_unvalidated"
+    assert candidate["artifact_path"] == "orders"
+    assert "notebook-content.ipynb" in candidate["definition_files"]
+    dry_run = local_client.post(
+        f"/api/runs/{identity}/dry-run", json={"workspace": "dev", "target": "dataflow"}
+    )
+    assert dry_run.status_code == 200
+    assert marker.read_text(encoding="utf-8") == "unchanged"
+    assert list(root.iterdir()) == [marker]
+
+    legacy = local_client.post(f"/api/runs/{identity}/generate?target=notebook")
+    assert legacy.status_code == 200
+    assert (root / "orders" / "notebook-content.ipynb").is_file()
+
+
 def test_api_dispatches_github_deployment(
     local_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -487,6 +529,7 @@ def test_api_dispatches_github_deployment(
             "target": "dataflow",
             "workflow_file": ".github/workflows/deploy-fabric-artifacts.yml",
             "ref": None,
+            "expected_commit": "a" * 40,
             "conflict_behavior": "Fail",
         },
     )
@@ -494,6 +537,10 @@ def test_api_dispatches_github_deployment(
     assert deployed.json()["deployment_id"] == "dispatch-1"
     assert captured["workspace_id"] == "workspace-id"
     assert captured["artifact_path"] == "orders"
+    assert (app.state.run_service.artifact_root / "orders" / "dataflow-mashup.pq").is_file()
+    selection = captured["selection"]
+    assert isinstance(selection, GitHubDeploymentSelection)
+    assert selection.expected_commit == "a" * 40
 
     workflow_name = "11_multi_container_reconciliation.yxmd"
     workflow = Path(__file__).parents[1] / "alteryx-workflows" / workflow_name
@@ -636,6 +683,7 @@ def test_api_dispatches_gitlab_deployment(
             "target": "dataflow",
             "ci_file": ".gitlab-ci.yml",
             "ref": None,
+            "expected_commit": "b" * 40,
             "conflict_behavior": "Update",
         },
     )
@@ -644,6 +692,237 @@ def test_api_dispatches_gitlab_deployment(
     assert deployed.json()["deployment_id"] == "901"
     assert captured["workspace_id"] == "workspace-id"
     assert captured["artifact_path"] == "orders"
+    selection = captured["selection"]
+    assert isinstance(selection, GitLabDeploymentSelection)
+    assert selection.expected_commit == "b" * 40
+
+
+@pytest.mark.parametrize("provider", ["github", "gitlab"])
+@pytest.mark.parametrize("target", ["dataflow", "bundle"])
+def test_isolated_dispatch_planning_preserves_shared_artifacts(
+    local_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    target: Literal["dataflow", "bundle"],
+) -> None:
+    from accelerator.delivery.github import GitHubDeploymentResult, GitHubDeploymentService
+    from accelerator.delivery.gitlab import GitLabDeploymentResult, GitLabDeploymentService
+
+    workflow_name = "07_high_target_variance.yxmd" if target == "bundle" else "orders.yxmd"
+    content = (
+        (Path(__file__).parents[1] / "alteryx-workflows" / workflow_name).read_bytes()
+        if target == "bundle"
+        else WORKFLOW
+    )
+    preview = local_client.post(
+        "/api/snapshots/upload",
+        data={"mode": "zip"},
+        files=[
+            ("files", ("estate.zip", archive_bytes({workflow_name: content}), "application/zip"))
+        ],
+    )
+    identity = local_client.post(
+        "/api/runs", json={"snapshot_id": preview.json()["snapshot_id"]}
+    ).json()["id"]
+    assert wait_for_run(local_client, identity)["status"] == "completed"
+    root = app.state.run_service.artifact_root
+    root.mkdir(parents=True, exist_ok=True)
+    sentinel = root / "sentinel.txt"
+    sentinel.write_text("unchanged", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class FakeGitHubService:
+        def deploy(self, **kwargs: object) -> GitHubDeploymentResult:
+            captured.update(kwargs)
+            return GitHubDeploymentResult(
+                deployment_id="synthetic",
+                repository="owner/repository",
+                workflow_file=".github/workflows/deploy-fabric-artifacts.yml",
+                ref="main",
+                target=target,
+            )
+
+    class FakeGitLabService:
+        def deploy(self, **kwargs: object) -> GitLabDeploymentResult:
+            captured.update(kwargs)
+            return GitLabDeploymentResult(
+                deployment_id="synthetic",
+                project="group/project",
+                ci_file=".gitlab-ci.yml",
+                ref="main",
+                target=target,
+                pipeline_url="https://gitlab.com/group/project/-/pipelines/1",
+            )
+
+    service_cls = GitHubDeploymentService if provider == "github" else GitLabDeploymentService
+    fake_service = FakeGitHubService() if provider == "github" else FakeGitLabService()
+    monkeypatch.setattr(service_cls, "from_environment", classmethod(lambda cls: fake_service))
+    monkeypatch.setenv("FABRIC_WORKSPACE_ID", "synthetic-workspace")
+    provider_details = (
+        {"repository_url": "https://github.com/owner/repository"}
+        if provider == "github"
+        else {"project_url": "https://gitlab.com/group/project"}
+    )
+    response = local_client.post(
+        f"/api/runs/{identity}/deploy/{provider}",
+        json={
+            **provider_details,
+            "source_workflow": workflow_name,
+            "target": target,
+            "isolate_local_artifacts": True,
+        },
+    )
+    assert response.status_code == 202, response.text
+    assert captured["artifact_path"] == Path(workflow_name).stem
+    assert sentinel.read_text(encoding="utf-8") == "unchanged"
+    assert list(root.iterdir()) == [sentinel]
+    assert not list(app.state.run_service.root.glob("deployment-plan-*"))
+    captured.clear()
+    rejected = local_client.post(
+        f"/api/runs/{identity}/deploy/{provider}",
+        json={
+            **provider_details,
+            "source_workflow": "missing.yxmd",
+            "target": target,
+            "isolate_local_artifacts": True,
+        },
+    )
+    assert rejected.status_code == 409
+    assert not captured
+    assert list(root.iterdir()) == [sentinel]
+    assert not list(app.state.run_service.root.glob("deployment-plan-*"))
+
+
+@pytest.mark.parametrize("provider", ["github", "gitlab"])
+def test_publication_dispatch_binds_verified_run_and_commit(
+    local_client: TestClient, monkeypatch: pytest.MonkeyPatch, provider: str
+) -> None:
+    from accelerator.delivery.github import GitHubDeploymentResult, GitHubDeploymentService
+    from accelerator.delivery.gitlab import GitLabDeploymentResult, GitLabDeploymentService
+    from accelerator.delivery.provenance import PublicationDispatch
+
+    preview = local_client.post(
+        "/api/snapshots/upload",
+        data={"mode": "zip"},
+        files=[
+            ("files", ("estate.zip", archive_bytes({"orders.yxmd": WORKFLOW}), "application/zip"))
+        ],
+    )
+    identity = local_client.post(
+        "/api/runs", json={"snapshot_id": preview.json()["snapshot_id"]}
+    ).json()["id"]
+    assert wait_for_run(local_client, identity)["status"] == "completed"
+    published = local_client.post(f"/api/runs/{identity}/publications")
+    assert published.status_code == 200, published.text
+    digest = published.json()["digest"]
+    service = app.state.run_service
+    publication = service.verify_publication(identity, digest)
+    manifest_hash = hashlib.sha256(
+        (publication.root / "publication-manifest.json").read_bytes()
+    ).hexdigest()
+    captured: dict[str, object] = {}
+
+    class FakeGitHubService:
+        def deploy(self, **kwargs: object) -> GitHubDeploymentResult:
+            captured.update(kwargs)
+            return GitHubDeploymentResult(
+                deployment_id="synthetic", repository="owner/repository",
+                workflow_file=".github/workflows/deploy-fabric-artifacts.yml",
+                ref="main", target="dataflow",
+            )
+
+    class FakeGitLabService:
+        def deploy(self, **kwargs: object) -> GitLabDeploymentResult:
+            captured.update(kwargs)
+            return GitLabDeploymentResult(
+                deployment_id="synthetic", project="group/project", ci_file=".gitlab-ci.yml",
+                ref="main", target="dataflow",
+                pipeline_url="https://gitlab.com/group/project/-/pipelines/1",
+            )
+
+    service_cls = GitHubDeploymentService if provider == "github" else GitLabDeploymentService
+    fake_service = FakeGitHubService() if provider == "github" else FakeGitLabService()
+    monkeypatch.setattr(service_cls, "from_environment", classmethod(lambda cls: fake_service))
+    monkeypatch.setenv("FABRIC_WORKSPACE_ID", "synthetic-workspace")
+    details = (
+        {"repository_url": "https://github.com/owner/repository"}
+        if provider == "github"
+        else {"project_url": "https://gitlab.com/group/project"}
+    )
+    body = {
+        **details,
+        "source_workflow": "orders.yxmd",
+        "target": "dataflow",
+        "publication_digest": digest,
+        "expected_commit": "a" * 40,
+    }
+    without_commit = dict(body)
+    del without_commit["expected_commit"]
+    missing_commit = local_client.post(
+        f"/api/runs/{identity}/deploy/{provider}", json=without_commit
+    )
+    assert missing_commit.status_code == 422
+    response = local_client.post(f"/api/runs/{identity}/deploy/{provider}", json=body)
+    assert response.status_code == 202, response.text
+    assert captured["artifact_path"] == "orders"
+    assert captured["publication"] == PublicationDispatch(
+        artifact_root=f"published-fabric-workflows/{identity}/{digest}",
+        manifest_sha256=manifest_hash,
+    )
+    assert not service.artifact_root.exists()
+    assert not list(service.root.glob("deployment-plan-*"))
+
+    captured.clear()
+    (publication.root / "orders" / "dataflow-mashup.pq").write_text("tampered", encoding="utf-8")
+    rejected = local_client.post(f"/api/runs/{identity}/deploy/{provider}", json=body)
+    assert rejected.status_code == 409
+    assert not captured
+    assert not service.artifact_root.exists()
+
+
+def test_real_publication_passes_ci_verification_and_rejects_changed_generation(
+    local_client: TestClient, tmp_path: Path
+) -> None:
+    executable = shutil.which("pwsh")
+    if executable is None:
+        pytest.skip("PowerShell 7 is required to exercise publication verification")
+    preview = local_client.post(
+        "/api/snapshots/upload",
+        data={"mode": "zip"},
+        files=[
+            ("files", ("estate.zip", archive_bytes({"orders.yxmd": WORKFLOW}), "application/zip"))
+        ],
+    )
+    identity = local_client.post(
+        "/api/runs", json={"snapshot_id": preview.json()["snapshot_id"]}
+    ).json()["id"]
+    assert wait_for_run(local_client, identity)["status"] == "completed"
+    response = local_client.post(f"/api/runs/{identity}/publications")
+    assert response.status_code == 200, response.text
+    digest = response.json()["digest"]
+    service = app.state.run_service
+    publication = service.verify_publication(identity, digest)
+    relative_root = f"published-fabric-workflows/{identity}/{digest}"
+    remote_root = tmp_path / "published-fabric-workflows" / identity / digest
+    shutil.copytree(publication.root, remote_root)
+    manifest_hash = hashlib.sha256(
+        (remote_root / "publication-manifest.json").read_bytes()
+    ).hexdigest()
+    result = subprocess.run(
+        [
+            executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-File",
+            str(Path(__file__).parents[1] / "scripts" / "Assert-DeploymentPublication.ps1"),
+            "-ArtifactRoot", relative_root, "-ExpectedManifestSha256", manifest_hash,
+        ],
+        cwd=tmp_path, capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    with service.stage_all_artifacts(identity) as staged:
+        root = staged["dataflow"].root
+        assert service.verify_staged_publication(identity, digest, root) == manifest_hash
+        (root / "orders" / "dataflow-mashup.pq").write_text("changed", encoding="utf-8")
+        with pytest.raises(ValueError, match="Current artifacts do not match"):
+            service.verify_staged_publication(identity, digest, root)
 
 
 def test_api_local_selection_and_errors(local_client: TestClient, tmp_path: Path) -> None:
@@ -743,6 +1022,32 @@ def test_jobs_recover_expired_leases_and_cache_results(tmp_path: Path) -> None:
     assert reopened.get_run(third.id).cache_hits == 0
 
 
+@pytest.mark.parametrize(
+    "version_field", ["adapter_version", "parser_version", "registry_version", "rules_version"]
+)
+def test_builtin_assessment_cache_invalidates_for_source_component_versions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version_field: str
+) -> None:
+    source = tmp_path / "orders.yxmd"
+    source.write_bytes(WORKFLOW)
+    service = RunService(tmp_path / "state")
+    snapshot = service.preview(source).snapshot_id
+    first = service.create_run(snapshot)
+    service.execute(first.id)
+    second = service.create_run(snapshot)
+    service.execute(second.id)
+    assert service.get_run(second.id).cache_hits == 1
+
+    adapter = next(
+        adapter for adapter in service._source_registry.adapters if adapter.adapter_id == "alteryx"
+    )
+    monkeypatch.setattr(adapter, version_field, "changed-version")
+    third = service.create_run(snapshot)
+    service.execute(third.id)
+    assert service.get_run(third.id).status == "completed"
+    assert service.get_run(third.id).cache_hits == 0
+
+
 def test_snapshot_tampering_and_newer_schema_are_rejected(tmp_path: Path) -> None:
     source = tmp_path / "orders.yxmd"
     source.write_bytes(WORKFLOW)
@@ -752,9 +1057,28 @@ def test_snapshot_tampering_and_newer_schema_are_rejected(tmp_path: Path) -> Non
     with pytest.raises(ValueError, match="changed"):
         service.create_run(preview.snapshot_id)
     with closing(sqlite3.connect(service.database)) as connection, connection:
-        connection.execute("PRAGMA user_version=3")
+        connection.execute("PRAGMA user_version=5")
     with pytest.raises(ValueError, match="schema"):
         RunService(tmp_path / "state")
+
+
+def test_existing_run_database_migrates_for_neutral_and_target_results(tmp_path: Path) -> None:
+    source = tmp_path / "orders.yxmd"
+    source.write_bytes(WORKFLOW)
+    with RunService(tmp_path / "state") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        service.execute(run.id)
+        database = service.database
+
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute("DROP TABLE neutral_assessments")
+        connection.execute("DROP TABLE target_evaluations")
+        connection.execute("PRAGMA user_version=2")
+
+    with RunService(tmp_path / "state") as migrated:
+        assert migrated.get_run(run.id).status == "completed"
+        assert migrated.assess_neutral(run.id).workflow_count == 1
+        assert migrated.get_neutral_assessment(run.id).workflow_count == 1
 
 
 def test_core_has_no_ai_network_or_legacy_imports() -> None:
@@ -879,6 +1203,93 @@ def test_packages_are_byte_stable_and_contain_fabric_definition_files(tmp_path: 
             assert any(name.endswith(f"/{target}-create-item.json") for name in archive.namelist())
 
 
+def test_candidate_package_excludes_artifacts_from_previous_run(tmp_path: Path) -> None:
+    first = tmp_path / "first.yxmd"
+    second = tmp_path / "second.yxmd"
+    first.write_bytes(WORKFLOW)
+    second.write_bytes(WORKFLOW)
+    with RunService(tmp_path / "state", artifact_root=tmp_path / "artifacts") as service:
+        first_run = service.create_run(service.preview(first).snapshot_id)
+        service.execute(first_run.id)
+        service.candidate_package(first_run.id, "notebook")
+
+        second_run = service.create_run(service.preview(second).snapshot_id)
+        service.execute(second_run.id)
+        content = service.candidate_package(second_run.id, "notebook")
+
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        names = archive.namelist()
+        assert any(name.startswith("second/") for name in names)
+        assert not any(name.startswith("first/") for name in names)
+        index = json.loads(archive.read("artifact-index-notebook.json"))
+        assert index["run_id"] == second_run.id
+        assert len(index["artifacts"]) == 1
+
+
+def test_candidate_package_preserves_scaffold_diagnostics(tmp_path: Path) -> None:
+    source = tmp_path / "custom.yxmd"
+    source.write_bytes(
+        WORKFLOW.replace(b"AlteryxBasePluginsGui.Filter.Filter", b"Company.Filter.Filter")
+    )
+    with RunService(tmp_path / "state", artifact_root=tmp_path / "artifacts") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        service.execute(run.id)
+        content = service.candidate_package(run.id, "notebook")
+
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        names = set(archive.namelist())
+        assert "custom/notebook-diagnostics.json" in names
+        assert "custom/notebook-manifest.json" in names
+        assert "custom/notebook-create-item.json" not in names
+
+
+def test_concurrent_candidate_packages_isolate_same_workflow_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import accelerator.runtime.runs as runs_module
+    from etl_target_fabric.delivery.artifact_writer import build_candidate_package
+
+    source = tmp_path / "orders.yxmd"
+    source.write_bytes(WORKFLOW)
+    with RunService(tmp_path / "state", artifact_root=tmp_path / "artifacts") as service:
+        first_preview = service.preview(source)
+        first_run = service.create_run(first_preview.snapshot_id)
+        service.execute(first_run.id)
+        source.write_bytes(WORKFLOW.replace(b"[Amount] &gt; 0", b"[Amount] &gt; 10"))
+        second_preview = service.preview(source)
+        second_run = service.create_run(second_preview.snapshot_id)
+        service.execute(second_run.id)
+        first_hash = first_preview.workflows[0].sha256
+        entered = Event()
+        second_finished = Event()
+        original_build = build_candidate_package
+
+        def delayed_build(persisted: runs_module.ArtifactWriteResult, target: Target) -> bytes:
+            if persisted.candidates[0].source_sha256 == first_hash:
+                entered.set()
+                if not second_finished.wait(timeout=15):
+                    raise TimeoutError("Second package did not finish")
+                return original_build(persisted, target)
+            content = original_build(persisted, target)
+            second_finished.set()
+            return content
+
+        monkeypatch.setattr(runs_module, "build_candidate_package", delayed_build)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(service.candidate_package, first_run.id, "notebook")
+            assert entered.wait(timeout=15)
+            second = pool.submit(service.candidate_package, second_run.id, "notebook")
+            first_zip, second_zip = first.result(timeout=30), second.result(timeout=30)
+
+    for content, expected in (
+        (first_zip, first_preview.workflows[0].sha256),
+        (second_zip, second_preview.workflows[0].sha256),
+    ):
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            manifest = json.loads(archive.read("orders/notebook-manifest.json"))
+            assert manifest["source_sha256"] == expected
+
+
 def test_workflow_bundle_is_byte_stable_and_contains_manual_install_guide(
     tmp_path: Path,
 ) -> None:
@@ -903,6 +1314,27 @@ def test_workflow_bundle_is_byte_stable_and_contains_manual_install_guide(
         assert "Independent semantic validation remains required" in guide
     with pytest.raises(ValueError, match="Workflow was not found"):
         service.workflow_package(run.id, "missing.yxmd")
+
+
+def test_workflow_bundle_generates_each_target_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "orders.yxmd"
+    source.write_bytes(WORKFLOW)
+    with RunService(tmp_path / "state", artifact_root=tmp_path / "artifacts") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        service.execute(run.id)
+        original_generate = service.generate
+        calls: list[str] = []
+
+        def count_generate(identity: str, target: Target) -> list[Candidate]:
+            calls.append(target)
+            return original_generate(identity, target)
+
+        monkeypatch.setattr(service, "generate", count_generate)
+        service.workflow_package(run.id, "orders.yxmd")
+
+    assert sorted(calls) == ["dataflow", "notebook", "pipeline"]
 
 
 def test_api_downloads_one_workflow_bundle(
@@ -936,6 +1368,38 @@ def test_api_downloads_one_workflow_bundle(
         assert "README.md" in archive.namelist()
 
 
+def test_api_publication_download_is_manifest_verified(
+    local_client: TestClient, tmp_path: Path
+) -> None:
+    source = tmp_path / "orders.yxmd"
+    source.write_bytes(WORKFLOW)
+    snapshot = local_client.post("/api/snapshots/local", json={"path": str(source)}).json()
+    run = local_client.post("/api/runs", json={"snapshot_id": snapshot["snapshot_id"]}).json()
+    assert wait_for_run(local_client, run["id"])["status"] == "completed"
+    base = f"/api/runs/{run['id']}/publications"
+    created = local_client.post(base)
+    assert created.status_code == 200
+    digest = created.json()["digest"]
+    assert local_client.get(f"{base}/{digest}").status_code == 200
+    download = local_client.get(f"{base}/{digest}/download")
+    assert download.status_code == 200
+    assert download.content == local_client.get(f"{base}/{digest}/download").content
+    with zipfile.ZipFile(io.BytesIO(download.content)) as archive:
+        manifest = json.loads(archive.read("publication-manifest.json"))
+        assert set(archive.namelist()) == {
+            entry["path"] for entry in manifest["files"]
+        } | {"publication-manifest.json"}
+        for entry in manifest["files"]:
+            content = archive.read(entry["path"])
+            assert len(content) == entry["size_bytes"]
+            assert hashlib.sha256(content).hexdigest() == entry["sha256"]
+
+    publication = app.state.run_service.verify_publication(run["id"], digest)
+    (publication.root / "unexpected.json").write_text("extra", encoding="utf-8")
+    assert local_client.get(f"{base}/{digest}").status_code == 409
+    assert local_client.get(f"{base}/{digest}/download").status_code == 409
+
+
 def test_stale_worker_cannot_commit_results(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -957,6 +1421,44 @@ def test_stale_worker_cannot_commit_results(
     current = service.get_run(run.id)
     assert current.processed == 0
     assert current.result is None
+    with pytest.raises(KeyError, match="No neutral baseline"):
+        service.get_neutral_assessment(run.id)
+
+
+def test_baseline_write_failure_rolls_back_completed_run(tmp_path: Path) -> None:
+    source = tmp_path / "orders.yxmd"
+    source.write_bytes(WORKFLOW)
+    with RunService(tmp_path / "state") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        with closing(sqlite3.connect(service.database)) as connection, connection:
+            connection.execute(
+                """CREATE TRIGGER reject_baseline BEFORE INSERT ON neutral_assessments
+                BEGIN SELECT RAISE(ABORT, 'Synthetic baseline write failure'); END"""
+            )
+        service.execute(run.id)
+        current = service.get_run(run.id)
+        assert current.status == "failed"
+        assert current.result is None
+        assert current.error is not None and "Synthetic baseline write failure" in current.error
+        with pytest.raises(KeyError, match="No neutral baseline"):
+            service.get_neutral_assessment(run.id)
+
+
+def test_neutral_failure_is_reported_independently(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "orders.yxmd"
+    source.write_bytes(WORKFLOW)
+    with RunService(tmp_path / "state") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        monkeypatch.setattr(
+            service, "_assess_neutral_item", lambda _item: ([], "Synthetic neutral failure")
+        )
+        service.execute(run.id)
+        assert service.get_run(run.id).status == "completed"
+        baseline = service.get_neutral_assessment(run.id)
+        assert baseline.failed_count == 1
+        assert baseline.failures == ["Synthetic neutral failure"]
 
 
 @pytest.mark.parametrize("target", ["notebook", "dataflow"])
@@ -1081,14 +1583,15 @@ def test_waiting_batch_renews_its_fenced_lease(
         return original(item)
 
     def fast_wait(
-        pending: set[Future[tuple[list[WorkflowAssessmentResponse], str | None, int]]],
+        pending: set[Future[object]],
         timeout: float,
+        return_when: str,
     ) -> tuple[
-        set[Future[tuple[list[WorkflowAssessmentResponse], str | None, int]]],
-        set[Future[tuple[list[WorkflowAssessmentResponse], str | None, int]]],
+        set[Future[object]],
+        set[Future[object]],
     ]:
         assert timeout == 5
-        return wait(pending, timeout=0.01)
+        return wait(pending, timeout=0.01, return_when=return_when)
 
     monkeypatch.setattr(service, "_assess_item", blocked)
     monkeypatch.setattr(runs, "wait", fast_wait)
@@ -1115,6 +1618,138 @@ def test_waiting_batch_renews_its_fenced_lease(
         worker.join(10)
     assert not worker.is_alive()
     assert service.get_run(run.id).status == "completed"
+
+
+def test_scheduler_starts_next_workflow_before_slow_first_finishes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    for index in range(5):
+        (source / f"workflow-{index}.yxmd").write_bytes(
+            WORKFLOW.replace(b"orders.csv", f"orders-{index}.csv".encode())
+        )
+    with RunService(tmp_path / "state") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        first_entered, release_first, fifth_entered = Event(), Event(), Event()
+        original = service._assess_item_with_neutral
+
+        def delayed(
+            item: WorkflowCandidateResponse,
+        ) -> tuple[
+            list[WorkflowAssessmentResponse],
+            str | None,
+            int,
+            list[NeutralAssessmentResponse],
+            str | None,
+        ]:
+            if item.display_path == "workflow-0.yxmd":
+                first_entered.set()
+                if not release_first.wait(15):
+                    raise TimeoutError("First workflow was not released")
+            elif item.display_path == "workflow-4.yxmd":
+                fifth_entered.set()
+            return original(item)
+
+        monkeypatch.setattr(service, "_assess_item_with_neutral", delayed)
+        worker = Thread(target=service.execute, args=(run.id,))
+        worker.start()
+        try:
+            assert first_entered.wait(5)
+            assert fifth_entered.wait(8), "A free worker did not start the next workflow"
+        finally:
+            release_first.set()
+            worker.join(20)
+        assert not worker.is_alive()
+        result = service.get_run(run.id)
+        assert result.status == "completed" and result.result is not None
+        assert [item.path for item in result.result.assessments] == [
+            f"workflow-{index}.yxmd" for index in range(5)
+        ]
+        neutral = service.get_neutral_assessment(run.id)
+        assert [item.path.split("!", 1)[0] for item in neutral.assessments] == [
+            f"workflow-{index}.yxmd" for index in range(5)
+        ]
+
+
+def test_scheduler_stops_submitting_after_cancellation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    for index in range(5):
+        (source / f"workflow-{index}.yxmd").write_bytes(
+            WORKFLOW.replace(b"orders.csv", f"orders-{index}.csv".encode())
+        )
+    with RunService(tmp_path / "state") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        entered = [Event() for _ in range(5)]
+        release = Event()
+        original = service._assess_item_with_neutral
+
+        def delayed(
+            item: WorkflowCandidateResponse,
+        ) -> tuple[
+            list[WorkflowAssessmentResponse],
+            str | None,
+            int,
+            list[NeutralAssessmentResponse],
+            str | None,
+        ]:
+            index = int(item.display_path.removeprefix("workflow-").removesuffix(".yxmd"))
+            entered[index].set()
+            if not release.wait(15):
+                raise TimeoutError("Workflow was not released")
+            return original(item)
+
+        monkeypatch.setattr(service, "_assess_item_with_neutral", delayed)
+        worker = Thread(target=service.execute, args=(run.id,))
+        worker.start()
+        try:
+            assert all(event.wait(5) for event in entered[:4])
+            assert service.cancel(run.id).status == "cancelled"
+        finally:
+            release.set()
+            worker.join(20)
+        assert not worker.is_alive()
+        assert not entered[4].is_set()
+        assert service.get_run(run.id).status == "cancelled"
+        with pytest.raises(KeyError, match="No neutral baseline"):
+            service.get_neutral_assessment(run.id)
+
+
+def test_scheduler_does_not_submit_after_cancellation_during_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.yxmd"
+    source.write_bytes(WORKFLOW)
+    with RunService(tmp_path / "state") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        original_snapshot = service._snapshot
+        entered = Event()
+
+        def cancel_during_snapshot(snapshot_id: str) -> SnapshotPreview:
+            snapshot = original_snapshot(snapshot_id)
+            service.cancel(run.id)
+            return snapshot
+
+        def record_entry(
+            item: WorkflowCandidateResponse,
+        ) -> tuple[
+            list[WorkflowAssessmentResponse],
+            str | None,
+            int,
+            list[NeutralAssessmentResponse],
+            str | None,
+        ]:
+            entered.set()
+            return [], None, 0, [], None
+
+        monkeypatch.setattr(service, "_snapshot", cancel_during_snapshot)
+        monkeypatch.setattr(service, "_assess_item_with_neutral", record_entry)
+        service.execute(run.id)
+        assert service.get_run(run.id).status == "cancelled"
+        assert not entered.is_set()
 
 
 def test_canvas_annotations_do_not_change_score_or_block_preview(tmp_path: Path) -> None:
@@ -1269,6 +1904,129 @@ def test_generated_artifacts_are_persisted_under_project_folder(tmp_path: Path) 
     assert "filter = Table.SelectRows(inputdata" in mashup
     with pytest.raises(ValueError, match="Run ID"):
         service.write_artifacts("../outside", "notebook")
+
+
+def test_artifact_path_collision_is_rejected_before_publication(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "a b.yxmd").write_bytes(WORKFLOW)
+    (source / "a@b.yxmd").write_bytes(WORKFLOW.replace(b"orders.csv", b"other.csv"))
+    artifact_root = tmp_path / "artifacts"
+    folder = artifact_root / "a-b"
+    folder.mkdir(parents=True)
+    marker = folder / "notebook-manifest.json"
+    marker.write_text("existing", encoding="utf-8")
+    with RunService(tmp_path / "state", artifact_root=artifact_root) as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        service.execute(run.id)
+        with pytest.raises(ValueError, match="output path collides"):
+            service.write_artifacts(run.id, "notebook")
+
+    assert marker.read_text(encoding="utf-8") == "existing"
+    assert list(artifact_root.iterdir()) == [folder]
+    assert list(folder.iterdir()) == [marker]
+
+
+def test_artifact_path_collision_is_case_insensitive(tmp_path: Path) -> None:
+    source = tmp_path / "source.yxmd"
+    source.write_bytes(WORKFLOW)
+    with RunService(tmp_path / "state") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        service.execute(run.id)
+        candidate = service.generate(run.id, "notebook")[0]
+        candidates = [
+            candidate,
+            candidate.model_copy(update={"workflow": "SOURCE.yxmd"}),
+        ]
+        artifact_root = tmp_path / "output"
+        with pytest.raises(ValueError, match="output path collides"):
+            write_candidates(
+                run_id=run.id,
+                target="notebook",
+                artifact_root=artifact_root,
+                generate_fn=lambda _target: candidates,
+                assessments=[],
+            )
+        assert not artifact_root.exists()
+
+
+def test_target_planning_failure_does_not_publish_partial_artifacts(tmp_path: Path) -> None:
+    source = tmp_path / "source.yxmd"
+    source.write_bytes(WORKFLOW)
+    with RunService(tmp_path / "state") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        service.execute(run.id)
+        candidate = service.generate(run.id, "notebook")[0]
+        artifact_root = tmp_path / "output"
+
+        def generate(target: Target) -> list[Candidate]:
+            if target == "notebook":
+                return [candidate]
+            raise ValueError("Synthetic target planning failure")
+
+        with pytest.raises(ValueError, match="Synthetic target planning failure"):
+            write_candidates(
+                run_id=run.id,
+                target="notebook",
+                artifact_root=artifact_root,
+                generate_fn=generate,
+                assessments=[],
+            )
+        assert not artifact_root.exists()
+
+
+def test_immutable_publications_isolate_runs_and_detect_tampering(tmp_path: Path) -> None:
+    source = tmp_path / "orders.yxmd"
+    source.write_bytes(WORKFLOW)
+    with RunService(tmp_path / "state") as service:
+        first = service.create_run(service.preview(source).snapshot_id)
+        service.execute(first.id)
+        source.write_bytes(WORKFLOW.replace(b"orders.csv", b"other.csv"))
+        second = service.create_run(service.preview(source).snapshot_id)
+        service.execute(second.id)
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            first_future = executor.submit(service.publish_artifacts, first.id)
+            duplicate_future = executor.submit(service.publish_artifacts, first.id)
+            second_future = executor.submit(service.publish_artifacts, second.id)
+            first_publication = first_future.result(timeout=30)
+            duplicate = duplicate_future.result(timeout=30)
+            second_publication = second_future.result(timeout=30)
+
+        assert first_publication.root == duplicate.root
+        assert first_publication.digest == duplicate.digest
+        assert first_publication.root != second_publication.root
+        for run, publication in ((first, first_publication), (second, second_publication)):
+            manifest = json.loads(
+                (publication.root / "publication-manifest.json").read_text(encoding="utf-8")
+            )
+            assert manifest["run_id"] == run.id
+            assert manifest["files"]
+            assert (publication.root / "orders" / "notebook-create-item.json").is_file()
+        published_manifest = first_publication.root / "orders" / "notebook-manifest.json"
+        published_manifest.write_text("tampered", encoding="utf-8")
+        with pytest.raises(ValueError, match="publication has changed"):
+            service.publish_artifacts(first.id)
+        assert published_manifest.read_text(encoding="utf-8") == "tampered"
+
+
+def test_failed_publication_leaves_no_visible_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "orders.yxmd"
+    source.write_bytes(WORKFLOW)
+    with RunService(tmp_path / "state") as service:
+        run = service.create_run(service.preview(source).snapshot_id)
+        service.execute(run.id)
+
+        def fail(*args: object, **kwargs: object) -> None:
+            raise ValueError("Synthetic compilation failure")
+
+        monkeypatch.setattr(service, "_write_artifacts", fail)
+        with pytest.raises(ValueError, match="Synthetic compilation failure"):
+            service.publish_artifacts(run.id)
+        directory = service.root / "publications" / run.id
+        assert not directory.exists() or not list(directory.iterdir())
 
 
 def test_multi_query_dataflow_definition_preserves_query_load_settings(tmp_path: Path) -> None:

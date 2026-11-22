@@ -10,6 +10,21 @@ deploy_fabric_artifacts:
     - when: never
   script:
     - |
+      if ($env:FABRIC_EXPECTED_COMMIT) {
+        ./scripts/Assert-DeploymentRevision.ps1 -ExpectedCommit $env:FABRIC_EXPECTED_COMMIT -SourceCommit $env:CI_COMMIT_SHA
+        if ($LASTEXITCODE -ne 0) {
+          throw "Deployment revision verification failed"
+        }
+      }
+      if ($env:FABRIC_PUBLICATION_MANIFEST_SHA256) {
+        if (-not $env:FABRIC_EXPECTED_COMMIT) {
+          throw "Publication verification requires an expected commit"
+        }
+        ./scripts/Assert-DeploymentPublication.ps1 -ArtifactRoot $env:ARTIFACT_ROOT -ExpectedManifestSha256 $env:FABRIC_PUBLICATION_MANIFEST_SHA256
+        if ($LASTEXITCODE -ne 0) {
+          throw "Deployment publication verification failed"
+        }
+      }
       if (-not $env:FABRIC_WORKSPACE_ID) {
         throw "FABRIC_WORKSPACE_ID is required"
       }

@@ -39,6 +39,49 @@ authoritative Development workspace to Git.
 > external data sources, or refresh a Dataflow. Complete source, destination,
 > schema, row-count, and business-rule validation before promotion.
 
+### Optional deployment revision check
+
+The portal and deployment APIs accept an optional `expected_commit`: a full,
+lowercase 40-character commit SHA. The updated GitHub workflow receives it as
+`expected_commit`; the updated GitLab job receives `FABRIC_EXPECTED_COMMIT`. Before
+deployment, the trusted CI definition compares that value with the CI event
+commit and the checked-out Git commit. A mismatch fails the job.
+
+The selected branch or tag must contain the updated CI definition and
+`scripts/Assert-DeploymentRevision.ps1`. Protect the CI definition and verify
+its presence at the selected ref before relying on this check. Older GitLab
+jobs can ignore the variable and deploy without checking it. A moving ref can
+also select a different CI definition; the check is not a trusted attestation.
+The revision check alone does not compare local and remote artifacts.
+
+### Optional publication-backed dispatch
+
+1. Publish and verify the completed run locally as described in the
+   [user guide](user-guide.md#step-4-generate-artifacts-and-dispatch-cicd).
+2. Copy the publication, including `publication-manifest.json`, without changing
+   its bytes to `published-fabric-workflows/<run-id>/<digest>` in the remote
+   repository. The accelerator does not upload it. Follow your organization's
+   data-handling and repository policies, and avoid Git filters or line-ending
+   conversions that alter the files.
+3. Ensure the selected branch or tag contains the publication and the updated
+   trusted CI definitions and both verification scripts. Obtain the full commit
+   SHA for that revision.
+4. Enter the publication digest and expected commit SHA in the portal, or set
+   `publication_digest` and `expected_commit` in the deployment request.
+
+The service regenerates the run in a temporary directory, compares it with the
+verified local publication, and dispatches the publication path and exact
+manifest hash. Updated CI compares the expected SHA with the event and checkout,
+then verifies the manifest and all publication files before deployment.
+The publication directory name contains the canonical manifest digest; older
+local publications may have differently formatted manifest bytes, so their
+exact manifest hash can differ from that digest.
+
+These are opt-in checks, not a signature or independent attestation. Protect and
+verify the selected CI definition, checkout, and runner. A moving ref can select
+an older or altered definition, and older GitLab jobs can ignore the variables.
+Dispatch acceptance alone does not prove which files the remote job deployed.
+
 ## Shared prerequisites
 
 Prepare these resources before configuring either provider:
@@ -49,7 +92,8 @@ Prepare these resources before configuring either provider:
    APIs.
 4. Contributor or higher access for the service principal on the target
    workspace.
-5. Generated definitions under `generated-fabric-workflows`.
+5. Generated definitions under `generated-fabric-workflows`, or an approved
+   publication at the repository path described above.
 6. A runner with PowerShell 7 and network access to Microsoft Entra and Fabric.
 
 Record these values outside source control:

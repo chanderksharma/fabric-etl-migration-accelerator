@@ -4,19 +4,40 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    JsonValue,
+    field_validator,
+    model_validator,
+)
 
 IR_VERSION = "1.0.0"
+EXTENSIBLE_SOURCE_IR_VERSION = "1.1.0"
 
 
 class SourcePlatform(StrEnum):
-    """Supported source platforms."""
+    """Built-in source platform identifiers."""
 
     ALTERYX = "alteryx"
     INFORMATICA_POWERCENTER = "informatica_powercenter"
     INFORMATICA_IDMC = "informatica_idmc"
+
+
+def _source_platform_id(value: object) -> SourcePlatform | str:
+    if not isinstance(value, str) or not re.fullmatch(r"[a-z][a-z0-9._-]{0,63}", value):
+        raise ValueError("Source platform ID must be a lowercase identifier")
+    try:
+        return SourcePlatform(value)
+    except ValueError:
+        return value
+
+
+SourcePlatformId = Annotated[SourcePlatform | str, BeforeValidator(_source_platform_id)]
 
 
 class AssetType(StrEnum):
@@ -249,7 +270,7 @@ class EtlPackage(IrModel):
     """Canonical representation of one source export or workflow package."""
 
     ir_version: str = IR_VERSION
-    source_platform: SourcePlatform
+    source_platform: SourcePlatformId
     source_product: str = Field(min_length=1, max_length=256)
     product_version: str | None = Field(default=None, max_length=128)
     export_id: str = Field(min_length=1, max_length=512)
@@ -262,6 +283,12 @@ class EtlPackage(IrModel):
     @model_validator(mode="after")
     def validate_asset_identities(self) -> EtlPackage:
         """Reject duplicate asset identities inside one export."""
+        if not isinstance(self.source_platform, SourcePlatform):
+            version = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", self.ir_version)
+            if version is None or tuple(map(int, version.groups())) < (1, 1, 0):
+                raise ValueError(
+                    "External source platforms require IR version 1.1.0 or later"
+                )
         identities = [asset.native_id for asset in self.assets]
         if len(identities) != len(set(identities)):
             raise ValueError("duplicate asset identity in ETL package")

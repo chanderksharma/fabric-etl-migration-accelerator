@@ -25,6 +25,12 @@ from etl_migration_core.intake.domain import (
     WorkflowCandidate,
     classify_input,
 )
+from etl_migration_core.sources.base import SourceFileDiscoveryAdapter
+from etl_migration_core.sources.registry import (
+    DetectedSource,
+    SourceAdapterRegistry,
+    UnknownSourceFormatError,
+)
 
 DEFAULT_ADAPTER_VERSIONS: dict[SourcePlatform, str] = {
     SourcePlatform.ALTERYX: "1.0.0",
@@ -50,12 +56,14 @@ class DiscoveryService:
         self,
         limits: DiscoveryLimits | None = None,
         adapter_versions: Mapping[SourcePlatform, str] | None = None,
+        source_registry: SourceAdapterRegistry | None = None,
     ) -> None:
         self._limits = limits or DiscoveryLimits()
         self._adapter_versions = {
             **DEFAULT_ADAPTER_VERSIONS,
             **(adapter_versions or {}),
         }
+        self._source_registry = source_registry
 
     def discover(self, input_path: Path) -> DiscoverySummary:
         """Discover workflows and produce a deterministic pre-run summary."""
@@ -171,21 +179,17 @@ class DiscoveryService:
     ) -> None:
         display_path = str(path.relative_to(relative_to)) if relative_to else path.name
         extension = path.suffix.casefold()
-        if extension not in SUPPORTED_EXTENSIONS:
+        plugin_extension = (
+            extension not in SUPPORTED_EXTENSIONS
+            and self._source_registry is not None
+            and extension in self._source_registry.file_extensions()
+        )
+        if extension not in SUPPORTED_EXTENSIONS and not plugin_extension:
             skipped.append(
                 SkippedItem(
                     display_path,
                     SkipReason.UNSUPPORTED_EXTENSION,
                     extension or "no extension",
-                )
-            )
-            return
-        if extension == ".xml" and b"<POWERMART" not in path.read_bytes()[:64_000]:
-            skipped.append(
-                SkippedItem(
-                    display_path,
-                    SkipReason.UNSUPPORTED_INPUT,
-                    "XML input is not a PowerCenter repository export",
                 )
             )
             return
@@ -205,8 +209,29 @@ class DiscoveryService:
                 )
             )
             return
+        detected = None
         try:
+            if extension == ".xml":
+                with path.open("rb") as stream:
+                    is_powercenter = b"<POWERMART" in stream.read(64_000)
+                if not is_powercenter:
+                    skipped.append(
+                        SkippedItem(
+                            display_path,
+                            SkipReason.UNSUPPORTED_INPUT,
+                            "XML input is not a PowerCenter repository export",
+                        )
+                    )
+                    return
+            elif plugin_extension:
+                detected = self._detect_plugin_file(path, extension, display_path)
             digest = self._stream_digest(path.open("rb"))
+        except UnknownSourceFormatError as error:
+            skipped.append(SkippedItem(display_path, SkipReason.UNSUPPORTED_INPUT, str(error)))
+            return
+        except ValueError as error:
+            skipped.append(SkippedItem(display_path, SkipReason.UNSUPPORTED_INPUT, str(error)))
+            return
         except OSError as error:
             skipped.append(
                 SkippedItem(display_path, SkipReason.UNREADABLE_INPUT, type(error).__name__)
@@ -231,28 +256,65 @@ class DiscoveryService:
                 size_bytes=size,
                 sha256=digest,
                 source_platform=(
-                    SourcePlatform.INFORMATICA_POWERCENTER
+                    detected.match.platform
+                    if detected is not None
+                    else SourcePlatform.INFORMATICA_POWERCENTER
                     if extension == ".xml"
                     else SourcePlatform.ALTERYX
                 ),
                 source_product=(
-                    "Informatica PowerCenter"
+                    detected.match.product
+                    if detected is not None
+                    else "Informatica PowerCenter"
                     if extension == ".xml"
                     else "Alteryx Designer"
                 ),
                 asset_type=(
-                    "repository_export" if extension == ".xml" else "workflow"
+                    detected.match.asset_type
+                    if detected is not None
+                    else "repository_export" if extension == ".xml" else "workflow"
                 ),
                 adapter_id=(
-                    "informatica-powercenter" if extension == ".xml" else "alteryx"
+                    detected.adapter.adapter_id
+                    if detected is not None
+                    else "informatica-powercenter" if extension == ".xml" else "alteryx"
                 ),
                 adapter_version=(
-                    self._adapter_versions[SourcePlatform.INFORMATICA_POWERCENTER]
+                    detected.adapter.adapter_version
+                    if detected is not None
+                    else self._adapter_versions[SourcePlatform.INFORMATICA_POWERCENTER]
                     if extension == ".xml"
                     else self._adapter_versions[SourcePlatform.ALTERYX]
                 ),
+                parser_version=detected.adapter.parser_version if detected else None,
+                registry_version=detected.adapter.registry_version if detected else None,
+                rules_version=detected.adapter.rules_version if detected else None,
             )
         )
+
+    def _detect_plugin_file(
+        self, path: Path, extension: str, display_path: str
+    ) -> DetectedSource:
+        assert self._source_registry is not None
+        detected = self._source_registry.detect(path, display_path)
+        if (
+            not isinstance(detected.adapter, SourceFileDiscoveryAdapter)
+            or extension not in detected.adapter.supported_extensions
+        ):
+            raise ValueError("Selected source adapter does not declare this extension")
+        if isinstance(detected.match.platform, SourcePlatform):
+            raise ValueError("Plugin file extension cannot claim a built-in source identity")
+        if not all(
+            isinstance(version, str) and version.strip()
+            for version in (
+                detected.adapter.adapter_version,
+                detected.adapter.parser_version,
+                detected.adapter.registry_version,
+                detected.adapter.rules_version,
+            )
+        ):
+            raise ValueError("Source adapter version metadata must not be empty")
+        return detected
 
     def _discover_zip(
         self,
@@ -329,23 +391,7 @@ class DiscoveryService:
         skipped: list[SkippedItem],
         seen_hashes: dict[str, str],
     ) -> None:
-        files = sorted(
-            (path for path in root.rglob("*") if path.is_file()),
-            key=lambda path: str(path.relative_to(root)).casefold(),
-        )
-        size = sum(path.stat().st_size for path in files)
-        if size > self._limits.max_archive_uncompressed_bytes:
-            raise InputRejectedError(
-                str(root),
-                SkipReason.ARCHIVE_SIZE_LIMIT,
-                "IDMC export directory exceeds the archive size limit",
-            )
-        digest = hashlib.sha256()
-        for path in files:
-            relative = path.relative_to(root).as_posix()
-            digest.update(relative.encode("utf-8"))
-            digest.update(path.read_bytes())
-        value = digest.hexdigest()
+        value, size = hash_idmc_directory(root, limits=self._limits)
         duplicate = seen_hashes.get(value)
         if duplicate is not None:
             skipped.append(
@@ -423,7 +469,15 @@ class DiscoveryService:
                     )
                 continue
             extension = safe_path.suffix.casefold()
-            if extension not in SUPPORTED_EXTENSIONS or extension == ".yxzp":
+            plugin_extension = (
+                extension not in SUPPORTED_EXTENSIONS
+                and extension != ".zip"
+                and self._source_registry is not None
+                and extension in self._source_registry.file_extensions()
+            )
+            if (extension not in SUPPORTED_EXTENSIONS and not plugin_extension) or (
+                extension == ".yxzp"
+            ):
                 skipped.append(
                     SkippedItem(
                         entry.filename,
@@ -452,6 +506,24 @@ class DiscoveryService:
                     )
                 )
                 continue
+            detected = None
+            display_path = "!".join((*chain, entry.filename))
+            if plugin_extension:
+                try:
+                    with tempfile.TemporaryDirectory(prefix="source-discovery-") as directory:
+                        staged = Path(directory) / f"source{extension}"
+                        staged.write_bytes(content)
+                        detected = self._detect_plugin_file(staged, extension, display_path)
+                except ValueError as error:
+                    skipped.append(
+                        SkippedItem(display_path, SkipReason.UNSUPPORTED_INPUT, str(error))
+                    )
+                    continue
+                except OSError as error:
+                    skipped.append(
+                        SkippedItem(display_path, SkipReason.UNREADABLE_INPUT, type(error).__name__)
+                    )
+                    continue
             digest = hashlib.sha256(content).hexdigest()
             duplicate = seen_hashes.get(digest)
             if duplicate is not None:
@@ -467,33 +539,46 @@ class DiscoveryService:
             candidates.append(
                 WorkflowCandidate(
                     source_path=str(archive),
-                    display_path="!".join((*chain, entry.filename)),
+                    display_path=display_path,
                     extension=extension,
                     size_bytes=entry.file_size,
                     sha256=digest,
                     archive_path="!".join((*chain, entry.filename)),
                     archive_chain=(*chain, entry.filename),
                     source_platform=(
-                        SourcePlatform.INFORMATICA_POWERCENTER
+                        detected.match.platform
+                        if detected is not None
+                        else SourcePlatform.INFORMATICA_POWERCENTER
                         if extension == ".xml"
                         else SourcePlatform.ALTERYX
                     ),
                     source_product=(
-                        "Informatica PowerCenter"
+                        detected.match.product
+                        if detected is not None
+                        else "Informatica PowerCenter"
                         if extension == ".xml"
                         else "Alteryx Designer"
                     ),
                     asset_type=(
-                        "repository_export" if extension == ".xml" else "workflow"
+                        detected.match.asset_type
+                        if detected is not None
+                        else "repository_export" if extension == ".xml" else "workflow"
                     ),
                     adapter_id=(
-                        "informatica-powercenter" if extension == ".xml" else "alteryx"
+                        detected.adapter.adapter_id
+                        if detected is not None
+                        else "informatica-powercenter" if extension == ".xml" else "alteryx"
                     ),
                     adapter_version=(
-                        self._adapter_versions[SourcePlatform.INFORMATICA_POWERCENTER]
+                        detected.adapter.adapter_version
+                        if detected is not None
+                        else self._adapter_versions[SourcePlatform.INFORMATICA_POWERCENTER]
                         if extension == ".xml"
                         else self._adapter_versions[SourcePlatform.ALTERYX]
                     ),
+                    parser_version=detected.adapter.parser_version if detected else None,
+                    registry_version=detected.adapter.registry_version if detected else None,
+                    rules_version=detected.adapter.rules_version if detected else None,
                 )
             )
 
@@ -657,6 +742,72 @@ def _is_link(path: Path) -> bool:
     if not path.exists():
         return False
     return bool(getattr(path.stat(follow_symlinks=False), "st_file_attributes", 0) & 0x400)
+
+
+def hash_idmc_directory(
+    root: Path, *, limits: DiscoveryLimits | None = None, destination: Path | None = None
+) -> tuple[str, int]:
+    """Hash and optionally copy a bounded IDMC directory without following links."""
+    bounds = limits or DiscoveryLimits()
+    files: list[Path] = []
+    directories: list[Path] = []
+
+    def unreadable(error: OSError) -> None:
+        raise InputRejectedError(
+            str(error.filename or root), SkipReason.UNREADABLE_INPUT, type(error).__name__
+        ) from error
+
+    if _is_link(root) or not root.is_dir():
+        raise InputRejectedError(str(root), SkipReason.SYMBOLIC_LINK, "Invalid directory root")
+    for current, child_dirs, child_files in os.walk(root, followlinks=False, onerror=unreadable):
+        base = Path(current)
+        for name in (*child_dirs, *child_files):
+            path = base / name
+            if _is_link(path):
+                raise InputRejectedError(str(path), SkipReason.SYMBOLIC_LINK, "Link not accepted")
+        directories.extend(base / name for name in child_dirs)
+        files.extend(base / name for name in child_files)
+        if len(files) + len(directories) > bounds.max_archive_entries:
+            raise InputRejectedError(
+                str(root), SkipReason.ARCHIVE_ENTRY_LIMIT, "IDMC directory exceeds entry limit"
+            )
+    if destination is not None:
+        destination.mkdir(parents=True, exist_ok=False)
+        for directory in directories:
+            (destination / directory.relative_to(root)).mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256()
+    size = 0
+    for path in sorted(files, key=lambda item: str(item.relative_to(root)).casefold()):
+        if _is_link(path) or not path.is_file():
+            raise InputRejectedError(str(path), SkipReason.SYMBOLIC_LINK, "Invalid directory entry")
+        relative = path.relative_to(root)
+        digest.update(relative.as_posix().encode("utf-8"))
+        with path.open("rb") as source, ExitStack() as stack:
+            output = (
+                stack.enter_context((destination / relative).open("wb"))
+                if destination is not None
+                else None
+            )
+            file_size = 0
+            while chunk := source.read(1024 * 1024):
+                size += len(chunk)
+                file_size += len(chunk)
+                if size > bounds.max_archive_uncompressed_bytes:
+                    raise InputRejectedError(
+                        str(root),
+                        SkipReason.ARCHIVE_SIZE_LIMIT,
+                        "IDMC directory exceeds size limit",
+                    )
+                if file_size > bounds.max_file_bytes:
+                    raise InputRejectedError(
+                        str(path),
+                        SkipReason.FILE_TOO_LARGE,
+                        "IDMC directory file exceeds size limit",
+                    )
+                digest.update(chunk)
+                if output is not None:
+                    output.write(chunk)
+    return digest.hexdigest(), size
 
 
 def _hash_stream(stream: IO[bytes]) -> str:

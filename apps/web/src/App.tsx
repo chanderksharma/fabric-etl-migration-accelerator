@@ -1,12 +1,15 @@
 import { type ChangeEvent, type DragEvent, useEffect, useRef, useState } from "react";
 import { Workspace } from "./Workspace";
+import { NeutralWorkspace } from "./NeutralWorkspace";
+import { parseNeutralAssessment, type NeutralAssessment } from "./neutral-assessment";
 import "./styles.css";
 import "./prototype.css";
 import "./workspace.css";
 
 type BrowseMode = "files" | "zip" | "folder";
-type SourceType = "alteryx" | "informatica";
+type SourceType = "alteryx" | "informatica" | "plugin";
 const RUN_STORAGE_KEY = "accelerator-run-v6";
+const NEUTRAL_RUN_KEY = "accelerator-neutral-run-v1";
 
 function sessionRunId(): string | null {
   localStorage.removeItem(RUN_STORAGE_KEY);
@@ -94,6 +97,7 @@ export type AssessmentResult = {
 const sourceTypes: Array<{ id: SourceType; title: string; detail: string }> = [
   { id: "alteryx", title: "Alteryx", detail: "Designer workflows, macros, apps, and packages" },
   { id: "informatica", title: "Informatica", detail: "PowerCenter XML and IDMC export packages" },
+  { id: "plugin", title: "Installed plugins", detail: "Registered external source adapters" },
 ];
 
 const modes: Record<SourceType, Array<{ id: BrowseMode; title: string; detail: string }>> = {
@@ -106,6 +110,11 @@ const modes: Record<SourceType, Array<{ id: BrowseMode; title: string; detail: s
     { id: "files", title: "Select XML", detail: "PowerCenter repository exports" },
     { id: "zip", title: "Select ZIP", detail: "PowerCenter or IDMC export packages" },
     { id: "folder", title: "Select folder", detail: "Scan Informatica exports recursively" },
+  ],
+  plugin: [
+    { id: "files", title: "Select file(s)", detail: "Formats supported by installed adapters" },
+    { id: "zip", title: "Select ZIP", detail: "Scan registered formats in an archive" },
+    { id: "folder", title: "Select folder", detail: "Scan registered formats recursively" },
   ],
 };
 
@@ -133,6 +142,10 @@ export function App() {
   const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
   const [runId, setRunId] = useState(initialRunId);
   const [run, setRun] = useState<RunResult | null>(null);
+  const [neutralRun, setNeutralRun] = useState(
+    () => Boolean(initialRunId && sessionStorage.getItem(NEUTRAL_RUN_KEY) === initialRunId),
+  );
+  const [neutralAssessment, setNeutralAssessment] = useState<NeutralAssessment | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [generating, setGenerating] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem("accelerator-theme") ?? "light");
@@ -180,11 +193,26 @@ export function App() {
         if (disposed || epoch !== selectionEpoch.current || activeRunId.current !== runId) return;
         setRun(current);
         if (current.status === "completed" && current.result) {
-          setAssessment(current.result);
-          setAssessing(false);
-          if (pageFromHash() === "intake") {
-            setActivePage("executive-summary");
-            window.location.hash = "executive-summary";
+          const external = current.result.workflows?.some(workflow =>
+            !["alteryx", "informatica_powercenter", "informatica_idmc"].includes(
+              workflow.source_platform ?? "alteryx",
+            ),
+          );
+          if (external || sessionStorage.getItem(NEUTRAL_RUN_KEY) === runId) {
+            sessionStorage.setItem(NEUTRAL_RUN_KEY, runId!);
+            setNeutralRun(true);
+            const response = await apiRequest(`/api/runs/${runId}/neutral-assessment`);
+            const baseline = parseNeutralAssessment(await response.json());
+            if (disposed || epoch !== selectionEpoch.current || activeRunId.current !== runId) return;
+            setNeutralAssessment(baseline);
+            setAssessing(false);
+          } else {
+            setAssessment(current.result);
+            setAssessing(false);
+            if (pageFromHash() === "intake") {
+              setActivePage("executive-summary");
+              window.location.hash = "executive-summary";
+            }
           }
         } else if (current.status === "failed" || current.status === "cancelled") {
           setAssessing(false);
@@ -227,15 +255,18 @@ export function App() {
   }, [activePage]);
 
   const inputModes = modes[sourceType];
-  const accept = sourceType === "alteryx"
-    ? selectedMode === "zip" ? ".zip,.yxzp" : ".yxmd,.yxmc,.yxwz,.yxzp"
-    : selectedMode === "zip" ? ".zip" : ".xml,.zip";
+  const accept = sourceType === "plugin"
+    ? selectedMode === "zip" ? ".zip" : undefined
+    : sourceType === "alteryx"
+      ? selectedMode === "zip" ? ".zip,.yxzp" : ".yxmd,.yxmc,.yxwz,.yxzp"
+      : selectedMode === "zip" ? ".zip" : ".xml,.zip";
   const browseLabel = selectedMode === "folder" ? "folder" : selectedMode;
 
   function clearSelection() {
     selectionEpoch.current += 1;
     activeRunId.current = null;
     sessionStorage.removeItem(RUN_STORAGE_KEY);
+    sessionStorage.removeItem(NEUTRAL_RUN_KEY);
     setRunId(null);
     setRun(null);
     setCandidates([]);
@@ -246,6 +277,8 @@ export function App() {
     setPreview(null);
     setError(null);
     setAssessment(null);
+    setNeutralRun(false);
+    setNeutralAssessment(null);
     setProcessing(false);
     setAssessing(false);
     setGenerating(false);
@@ -314,6 +347,22 @@ export function App() {
   }
 
   function validateSummaryPlatform(summary: PreviewSummary) {
+    const supportedPlatforms = ["alteryx", "informatica_powercenter", "informatica_idmc"];
+    const external = summary.workflows.some((workflow) =>
+      !supportedPlatforms.includes(workflow.source_platform ?? "alteryx"));
+    const builtin = summary.workflows.some((workflow) =>
+      supportedPlatforms.includes(workflow.source_platform ?? "alteryx"));
+    if (sourceType === "plugin") {
+      if (builtin) {
+        throw new Error("Select Alteryx or Informatica separately for built-in source assets.");
+      }
+      return;
+    }
+    if (external) {
+      throw new Error(
+        "Select Installed plugins to assess external sources separately.",
+      );
+    }
     const wrongType = summary.workflows.some((workflow) => {
       const platform = workflow.source_platform ?? "alteryx";
       return sourceType === "alteryx"
@@ -455,6 +504,10 @@ export function App() {
       if (!isCurrent(epoch, identity)) return;
       setRun(current);
       sessionStorage.setItem(RUN_STORAGE_KEY, current.id);
+      if (sourceType === "plugin") {
+        sessionStorage.setItem(NEUTRAL_RUN_KEY, current.id);
+        setNeutralRun(true);
+      }
       activeRunId.current = current.id;
       setRunId(current.id);
     } catch (caught) {
@@ -472,7 +525,7 @@ export function App() {
     const epoch = selectionEpoch.current;
     const identity = activeRunId.current;
     try {
-      const response = await apiRequest(`/api/runs/${runId}/generate?target=${target}`, {
+      const response = await apiRequest(`/api/runs/${runId}/previews?target=${target}`, {
         method: "POST",
       });
       const generated: Candidate[] = await response.json();
@@ -501,6 +554,17 @@ export function App() {
         setError(caught instanceof Error ? caught.message : "Cancellation failed");
       }
     }
+  }
+
+  if (neutralRun) {
+    return <NeutralWorkspace
+      run={run} runId={runId} assessment={neutralAssessment} error={error}
+      request={apiRequest} cancel={cancelAssessment}
+      startNew={() => {
+        clearSelection();
+        setActivePage("intake");
+      }}
+    />;
   }
 
   return <Workspace
@@ -547,7 +611,7 @@ export function App() {
                   document.getElementById(`source-${next.id}`)?.focus();
                 }}
               >
-                <span className="modeIcon" aria-hidden="true">{source.id === "alteryx" ? "A" : "I"}</span>
+                <span className="modeIcon" aria-hidden="true">{source.id === "alteryx" ? "A" : source.id === "informatica" ? "I" : "+"}</span>
                 <strong>{source.title}</strong>
                 <small>{source.detail}</small>
               </button>

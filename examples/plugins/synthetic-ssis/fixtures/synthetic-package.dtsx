@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<DTS:Executable xmlns:DTS="www.microsoft.com/SqlServer/Dts"
+  DTS:ExecutableType="SSIS.Package.2" DTS:DTSID="{PACKAGE-SYNTHETIC}"
+  DTS:ObjectName="Synthetic package">
+  <DTS:Executables>
+    <DTS:Executable DTS:ExecutableType="STOCK:SEQUENCE"
+      DTS:DTSID="{TASK-SYNTHETIC}" DTS:ObjectName="Synthetic task" />
+  </DTS:Executables>
+</DTS:Executable>

@@ -43,7 +43,8 @@ class AlteryxSourceAdapter:
         """Recognize staged Alteryx XML workflow files."""
         if path.suffix.casefold() not in ALTERYX_EXTENSIONS or not path.is_file():
             return None
-        head = path.read_bytes()[:64_000]
+        with path.open("rb") as stream:
+            head = stream.read(64_000)
         if b"<AlteryxDocument" not in head:
             return None
         asset_type = {

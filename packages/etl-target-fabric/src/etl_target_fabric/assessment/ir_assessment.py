@@ -81,6 +81,8 @@ def assess_package(package: EtlPackage) -> tuple[EtlAssessment, ...]:
 
 
 def _assess_asset(package: EtlPackage, asset: EtlAsset) -> EtlAssessment:
+    if not isinstance(package.source_platform, SourcePlatform):
+        raise ValueError(f"Fabric assessment does not support source {package.source_platform!r}")
     operations = [
         node.operation
         for graph in (*asset.mapping_graphs, asset.orchestration_graph)

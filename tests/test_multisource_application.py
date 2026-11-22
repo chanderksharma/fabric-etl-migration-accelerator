@@ -107,6 +107,28 @@ def test_run_service_assesses_one_package_into_multiple_assets(tmp_path: Path) -
     }
 
 
+def test_run_service_snapshots_extracted_idmc_and_detects_changes(tmp_path: Path) -> None:
+    source = tmp_path / "export"
+    shutil.copytree(FIXTURES / "idmc" / "basic_export", source)
+    with RunService(tmp_path / "state") as service:
+        preview = service.preview(source)
+        snapshot = Path(preview.workflows[0].source_path)
+        assert snapshot.is_dir()
+        assert service.preview(source).snapshot_id == preview.snapshot_id
+
+        run = service.create_run(preview.snapshot_id)
+        service.execute(run.id)
+        completed = service.get_run(run.id)
+        assert completed.status == "completed"
+        assert completed.result is not None
+        assert completed.result.workflow_count == 3
+        assert len(service.evidence(run.id).workflows) == 3
+
+        (snapshot / "manifest.json").write_text("{}", encoding="utf-8")
+        with pytest.raises(ValueError, match="snapshot changed"):
+            service.create_run(preview.snapshot_id)
+
+
 def test_fabric_notebook_assesses_and_exports_web_app_targets(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

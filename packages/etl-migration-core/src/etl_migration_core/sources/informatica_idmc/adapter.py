@@ -23,6 +23,7 @@ from etl_migration_core.contracts.ir import (
     SourceLocation,
     SourcePlatform,
 )
+from etl_migration_core.intake.discovery import hash_idmc_directory
 from etl_migration_core.sources.base import SourceMatch
 
 MAX_ENTRIES = 10_000
@@ -303,15 +304,9 @@ def _idmc_node(
 
 
 def _source_hash(path: Path) -> str:
-    digest = hashlib.sha256()
     if path.is_file():
         return hashlib.sha256(path.read_bytes()).hexdigest()
-    for child in sorted(path.rglob("*"), key=lambda item: str(item).casefold()):
-        if not child.is_file():
-            continue
-        digest.update(child.relative_to(path).as_posix().encode("utf-8"))
-        digest.update(child.read_bytes())
-    return digest.hexdigest()
+    return hash_idmc_directory(path)[0]
 
 
 def _string(value: JsonValue) -> str:

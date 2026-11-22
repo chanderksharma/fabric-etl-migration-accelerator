@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from etl_migration_core.contracts.ir import AssetType, SourcePlatform
+from etl_migration_core.contracts.ir import AssetType, SourcePlatform, SourcePlatformId
 from etl_migration_core.contracts.spi import NeutralWorkloadProfile
 from etl_migration_core.intake.domain import InputKind, SkipReason
 
@@ -21,11 +21,14 @@ class WorkflowCandidateResponse(BaseModel):
     sha256: str
     archive_path: str | None
     archive_chain: list[str] = []
-    source_platform: SourcePlatform = SourcePlatform.ALTERYX
+    source_platform: SourcePlatformId = SourcePlatform.ALTERYX
     source_product: str = "Alteryx Designer"
     asset_type: str = "workflow"
     adapter_id: str = "alteryx"
     adapter_version: str = "1.0.0"
+    parser_version: str | None = None
+    registry_version: str | None = None
+    rules_version: str | None = None
 
 
 class SkippedItemResponse(BaseModel):
@@ -69,7 +72,7 @@ class NeutralAssessmentResponse(BaseModel):
     native_id: str
     name: str
     folder: str | None = None
-    source_platform: SourcePlatform
+    source_platform: SourcePlatformId
     source_product: str
     asset_type: AssetType
     component_count: int

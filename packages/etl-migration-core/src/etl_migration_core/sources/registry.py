@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from pathlib import Path
 
 from etl_migration_core.contracts.ir import EtlPackage
-from etl_migration_core.sources.base import SourceAdapter, SourceMatch
+from etl_migration_core.sources.base import SourceAdapter, SourceFileDiscoveryAdapter, SourceMatch
 
 SOURCE_ENTRY_POINT_GROUP = "etl_migration.sources"
 
@@ -42,6 +43,18 @@ class SourceAdapterRegistry:
         """Return adapters ordered by stable adapter identity."""
         return tuple(self._adapters[key] for key in sorted(self._adapters))
 
+    def file_extensions(self) -> frozenset[str]:
+        """Return validated plugin extensions eligible for local file discovery."""
+        extensions: set[str] = set()
+        for adapter in self.adapters:
+            if not isinstance(adapter, SourceFileDiscoveryAdapter):
+                continue
+            for extension in adapter.supported_extensions:
+                if not re.fullmatch(r"\.[a-z0-9][a-z0-9_-]{0,15}", extension):
+                    raise ValueError(f"invalid source extension: {extension!r}")
+                extensions.add(extension)
+        return frozenset(extensions)
+
     def register(self, adapter: SourceAdapter) -> None:
         """Register one unique source adapter."""
         identity = adapter.adapter_id.strip()
@@ -57,9 +70,8 @@ class SourceAdapterRegistry:
         for ep in sorted(entry_points(group=group), key=lambda item: item.name):
             factory = ep.load()
             adapter = factory() if callable(factory) else factory
-            if adapter.adapter_id not in self._adapters:
-                self.register(adapter)
-                loaded += 1
+            self.register(adapter)
+            loaded += 1
         return loaded
 
     def detect(self, path: Path, display_path: str) -> DetectedSource:
@@ -82,6 +94,10 @@ class SourceAdapterRegistry:
                 f"Ambiguous source format for {display_path}: {identities}"
             )
         adapter, match = strongest[0]
+        if match.adapter_id != adapter.adapter_id or match.platform != adapter.platform:
+            raise ValueError(
+                f"source adapter {adapter.adapter_id!r} returned inconsistent identity"
+            )
         return DetectedSource(adapter=adapter, match=match)
 
     def parse(self, path: Path, match: SourceMatch) -> EtlPackage:
@@ -91,7 +107,10 @@ class SourceAdapterRegistry:
             raise UnknownSourceFormatError(
                 f"Source adapter is not registered: {match.adapter_id}"
             )
-        if adapter.platform is not match.platform:
+        if adapter.platform != match.platform:
             raise ValueError("source adapter platform changed after detection")
-        return adapter.parse(path, match)
+        package = adapter.parse(path, match)
+        if package.source_platform != match.platform:
+            raise ValueError("source adapter returned a package with a different platform")
+        return package
 

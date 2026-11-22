@@ -9,13 +9,15 @@ import subprocess
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Self
 from urllib.error import HTTPError
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
 import jwt
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from accelerator.delivery.provenance import PublicationDispatch
 
 APPROVED_WORKFLOW_PATH = ".github/workflows/deploy-fabric-artifacts.yml"
 GITHUB_API_VERSION = "2022-11-28"
@@ -40,7 +42,20 @@ class GitHubDeploymentSelection(BaseModel):
     target: DeploymentTarget = "notebook"
     workflow_file: str = APPROVED_WORKFLOW_PATH
     ref: str | None = Field(default=None, min_length=1, max_length=120)
+    expected_commit: str | None = Field(
+        default=None, min_length=40, max_length=40, pattern=r"^[0-9a-f]{40}$"
+    )
+    isolate_local_artifacts: bool = False
+    publication_digest: str | None = Field(
+        default=None, min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$"
+    )
     conflict_behavior: Literal["Fail", "Skip", "Update"] = "Fail"
+
+    @model_validator(mode="after")
+    def validate_publication_revision(self) -> Self:
+        if self.publication_digest is not None and self.expected_commit is None:
+            raise ValueError("A publication digest requires an expected commit")
+        return self
 
     @field_validator("repository_url")
     @classmethod
@@ -184,6 +199,7 @@ class GitHubDeploymentService:
         selection: GitHubDeploymentSelection,
         workspace_id: str,
         artifact_path: str,
+        publication: PublicationDispatch | None = None,
     ) -> GitHubDeploymentResult:
         """Dispatch one existing deployment workflow."""
         repository = parse_github_repository(selection.repository_url)
@@ -225,25 +241,37 @@ class GitHubDeploymentService:
 
         workflow_name = Path(APPROVED_WORKFLOW_PATH).name
         deployment_id = uuid.uuid4().hex
+        inputs: dict[str, Any] = {
+            "deployment_id": deployment_id,
+            "FABRIC_WORKSPACE_ID": workspace_id,
+            "artifact_root": "generated-fabric-workflows",
+            "target": (
+                "DataPipeline"
+                if selection.target == "pipeline"
+                else selection.target.title()
+            ),
+            "workflow_filter": artifact_path,
+            "conflict_behavior": selection.conflict_behavior,
+            "dry_run": False,
+        }
+        if selection.expected_commit is not None:
+            inputs["expected_commit"] = selection.expected_commit
+        if publication is not None:
+            if selection.publication_digest is None or selection.expected_commit is None:
+                raise GitHubDeploymentError("Publication dispatch requires a digest and commit")
+            if not publication.artifact_root.endswith(f"/{selection.publication_digest}"):
+                raise GitHubDeploymentError("Publication path does not match the selected digest")
+            inputs["artifact_root"] = publication.artifact_root
+            inputs["publication_manifest_sha256"] = publication.manifest_sha256
+        elif selection.publication_digest is not None:
+            raise GitHubDeploymentError("Publication dispatch is missing verified provenance")
         self._request(
             "POST",
             f"/repos/{repository}/actions/workflows/{quote(workflow_name, safe='')}/dispatches",
             token=installation_token,
             body={
                 "ref": dispatch_ref,
-                "inputs": {
-                    "deployment_id": deployment_id,
-                    "FABRIC_WORKSPACE_ID": workspace_id,
-                    "artifact_root": "generated-fabric-workflows",
-                    "target": (
-                        "DataPipeline"
-                        if selection.target == "pipeline"
-                        else selection.target.title()
-                    ),
-                    "workflow_filter": artifact_path,
-                    "conflict_behavior": selection.conflict_behavior,
-                    "dry_run": False,
-                },
+                "inputs": inputs,
             },
         )
         return GitHubDeploymentResult(

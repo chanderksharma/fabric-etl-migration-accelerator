@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from etl_migration_core.contracts.ir import EtlPackage, SourcePlatform
+from etl_migration_core.contracts.ir import EtlPackage, SourcePlatformId
 
 
 class SourceMatch(BaseModel):
@@ -16,7 +16,7 @@ class SourceMatch(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     adapter_id: str = Field(min_length=1, max_length=128)
-    platform: SourcePlatform
+    platform: SourcePlatformId
     product: str = Field(min_length=1, max_length=256)
     asset_type: str = Field(min_length=1, max_length=128)
     confidence: int = Field(ge=1, le=100)
@@ -32,7 +32,7 @@ class SourceAdapter(Protocol):
         """Return the stable adapter identity."""
 
     @property
-    def platform(self) -> SourcePlatform:
+    def platform(self) -> SourcePlatformId:
         """Return the normalized source platform."""
 
     @property
@@ -60,3 +60,12 @@ class SourceAdapter(Protocol):
 
     def parse(self, path: Path, match: SourceMatch) -> EtlPackage:
         """Parse one staged source item into the canonical ETL IR."""
+
+
+@runtime_checkable
+class SourceFileDiscoveryAdapter(Protocol):
+    """Optional file-extension declaration for local plugin discovery."""
+
+    @property
+    def supported_extensions(self) -> tuple[str, ...]:
+        """Return lowercase extensions accepted by the adapter."""

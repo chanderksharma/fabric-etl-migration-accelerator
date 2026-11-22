@@ -44,19 +44,36 @@ def write_candidates(
     if not re.fullmatch(r"[a-f0-9]{32}", run_id):
         raise ValueError("Run ID must be a 32-character lowercase hexadecimal value")
     candidates = generate_fn(target)
+    identities: dict[str, str] = {}
+    paths: set[str] = set()
+    for candidate in candidates:
+        relative = _candidate_artifact_path(candidate)
+        path_key = relative.as_posix().casefold()
+        if path_key in paths:
+            raise ValueError(f"Workflow output path collides after sanitization: {relative}")
+        paths.add(path_key)
+        if candidate.validation_state in {"blocked", "scaffold"}:
+            continue
+        logical_id = _fabric_logical_id(candidate)
+        previous = identities.get(logical_id)
+        if previous is not None:
+            raise ValueError(
+                f"Fabric logical ID collision between {previous!r} and {candidate.workflow!r}; "
+                "multiple assets from the same source need an identity migration"
+            )
+        identities[logical_id] = candidate.workflow
+    plan_targets: tuple[Target, ...] = ("dataflow", "notebook", "pipeline")
+    plan_candidates = {
+        plan_target: candidates if plan_target == target else generate_fn(plan_target)
+        for plan_target in plan_targets
+    }
     resolved_root = artifact_root.resolve()
     resolved_root.mkdir(parents=True, exist_ok=True)
     _write_artifact_guide(resolved_root)
     written: list[Candidate] = []
     index: list[dict[str, object]] = []
-    paths: set[Path] = set()
     for position, candidate in enumerate(candidates):
         relative = _candidate_artifact_path(candidate)
-        if relative in paths:
-            raise ValueError(
-                f"Workflow output path collides after sanitization: {relative}"
-            )
-        paths.add(relative)
         artifact_path = relative.as_posix()
         folder = (resolved_root / relative).resolve()
         if not folder.is_relative_to(resolved_root):
@@ -124,9 +141,9 @@ def write_candidates(
     _write_deployment_plan(
         resolved_root,
         run_id,
-        generate_fn("dataflow"),
-        generate_fn("notebook"),
-        generate_fn("pipeline"),
+        plan_candidates["dataflow"],
+        plan_candidates["notebook"],
+        plan_candidates["pipeline"],
         assessments,
     )
     _write_latest_index(resolved_root, run_id, target, index_name)
@@ -135,11 +152,24 @@ def write_candidates(
 
 def build_candidate_package(persisted: ArtifactWriteResult, target: Target) -> bytes:
     """Build a byte-stable archive from persisted Fabric definitions for one target."""
+    paths = {
+        persisted.root / f"artifact-index-{target}.json",
+        persisted.root / "DEPLOYMENT.txt",
+        persisted.root / "latest.json",
+    }
+    for candidate in persisted.candidates:
+        if candidate.target != target:
+            raise ValueError("Candidate target does not match the requested package")
+        folder = (persisted.root / _candidate_artifact_path(candidate)).resolve()
+        if not folder.is_relative_to(persisted.root):
+            raise ValueError("Workflow artifact path escapes the configured output root")
+        names = {*candidate.definition_files, f"{target}-manifest.json"}
+        if not names <= _target_file_names(target):
+            raise ValueError("Candidate contains unexpected artifact filenames")
+        paths.update(folder / name for name in names)
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as archive:
-        for path in sorted(persisted.root.rglob("*"), key=lambda item: str(item).casefold()):
-            if not path.is_file() or not _belongs_to_target(path.name, target):
-                continue
+        for path in sorted(paths, key=lambda item: str(item).casefold()):
             entry = zipfile.ZipInfo(
                 str(path.relative_to(persisted.root)).replace("\\", "/"),
                 date_time=(1980, 1, 1, 0, 0, 0),
@@ -201,11 +231,13 @@ def _candidate_artifact_path(candidate: Candidate) -> Path:
     return Path(platform_root) / _artifact_path(asset_name)
 
 
+def _fabric_logical_id(candidate: Candidate) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{candidate.target}:{candidate.source_sha256}"))
+
+
 def _fabric_definition(candidate: Candidate, slug: str) -> dict[str, str]:
     display_name = Path(candidate.workflow.replace("!", "/")).stem[:120] or slug
-    logical_id = str(
-        uuid.uuid5(uuid.NAMESPACE_URL, f"{candidate.target}:{candidate.source_sha256}")
-    )
+    logical_id = _fabric_logical_id(candidate)
     source_label = (
         "Alteryx"
         if candidate.source_platform is SourcePlatform.ALTERYX
@@ -1250,13 +1282,6 @@ def _atomic_write_text(path: Path, content: str) -> None:
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     temporary.write_text(content, encoding="utf-8")
     temporary.replace(path)
-
-
-def _belongs_to_target(name: str, target: Target) -> bool:
-    return (
-        name in _target_file_names(target)
-        or name in {f"artifact-index-{target}.json", "DEPLOYMENT.txt", "latest.json"}
-    )
 
 
 def _belongs_to_workflow_bundle(name: str) -> bool:

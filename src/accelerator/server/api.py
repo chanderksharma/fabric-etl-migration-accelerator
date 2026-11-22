@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from collections.abc import AsyncIterator, Awaitable, Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager, nullcontext, suppress
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Literal
 
@@ -34,16 +34,24 @@ from accelerator.delivery.gitlab import (
     GitLabDeploymentSelection,
     GitLabDeploymentService,
 )
-from accelerator.runtime.runs import Run, RunService, SnapshotPreview
+from accelerator.delivery.provenance import PublicationDispatch
+from accelerator.runtime.runs import (
+    ArtifactWriteResult,
+    Run,
+    RunService,
+    RunTargetEvaluation,
+    SnapshotPreview,
+)
 from accelerator.targets import (
     TargetPlatformRegistry,
     UnknownTargetPlatformError,
     create_default_target_registry,
 )
-from etl_migration_core.contracts.spi import TargetPlatformInfo
+from etl_migration_core.contracts.spi import TargetPlatformInfo, UnsupportedTargetCapabilityError
 from etl_migration_core.intake.discovery import InputRejectedError, validate_member_path
 from etl_migration_core.sources.alteryx.graph import WorkflowGraph
 from etl_portfolio_assessment.evidence.extractor import EvidenceResponse
+from etl_portfolio_assessment.service.schemas import NeutralEstateAssessmentResponse
 from etl_target_fabric.assessment.portfolio import (
     FabricAssessmentApplication as AssessmentApplication,
 )
@@ -277,6 +285,11 @@ class DevSelection(BaseModel):
     target: Target = "notebook"
 
 
+class PublicationReference(BaseModel):
+    run_id: str
+    digest: str
+
+
 def run_service() -> RunService:
     if not hasattr(app.state, "run_service") or app.state.run_service.closed:
         app.state.run_service = _new_run_service()
@@ -321,20 +334,25 @@ def target_registry() -> TargetPlatformRegistry:
 
 @app.get("/api/targets")
 def list_target_platforms() -> dict[str, object]:
-    return {
-        "targets": [
-            info.model_dump(mode="json")
-            for info in target_registry().list_providers()
-        ]
-    }
+    try:
+        return {
+            "targets": [
+                info.model_dump(mode="json")
+                for info in target_registry().list_providers()
+            ]
+        }
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @app.get("/api/targets/{platform_id}", response_model=TargetPlatformInfo)
 def get_target_platform(platform_id: str) -> TargetPlatformInfo:
     try:
-        return target_registry().get(platform_id).info()
+        return target_registry().get_info(platform_id)
     except UnknownTargetPlatformError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @app.post("/api/snapshots/browse-folder", response_model=FolderSelectionResponse)
@@ -461,6 +479,99 @@ def generate_run(identity: str, target: Target = "notebook") -> list[Candidate]:
         raise HTTPException(status_code=409, detail=str(error)) from error
 
 
+@app.post("/api/runs/{identity}/previews", response_model=list[Candidate])
+def preview_run(identity: str, target: Target = "notebook") -> list[Candidate]:
+    get_run(identity)
+    try:
+        return run_service().preview_candidates(identity, target)
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.post("/api/runs/{identity}/publications", response_model=PublicationReference)
+def publish_run(identity: str) -> PublicationReference:
+    get_run(identity)
+    try:
+        publication = run_service().publish_artifacts(identity)
+        return PublicationReference(run_id=publication.run_id, digest=publication.digest)
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.get("/api/runs/{identity}/publications/{digest}", response_model=PublicationReference)
+def verify_run_publication(identity: str, digest: str) -> PublicationReference:
+    get_run(identity)
+    try:
+        publication = run_service().verify_publication(identity, digest)
+        return PublicationReference(run_id=publication.run_id, digest=publication.digest)
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.get("/api/runs/{identity}/publications/{digest}/download")
+def download_run_publication(identity: str, digest: str) -> Response:
+    get_run(identity)
+    try:
+        content = run_service().publication_package(identity, digest)
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return Response(
+        content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="publication-{digest}.zip"'},
+    )
+
+
+@app.post(
+    "/api/runs/{identity}/targets/{platform_id}/evaluate",
+    response_model=list[RunTargetEvaluation],
+)
+def evaluate_run_target(identity: str, platform_id: str) -> list[RunTargetEvaluation]:
+    get_run(identity)
+    try:
+        return run_service().evaluate_target(identity, platform_id, target_registry())
+    except UnknownTargetPlatformError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (UnsupportedTargetCapabilityError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.post(
+    "/api/runs/{identity}/neutral-assessment",
+    response_model=NeutralEstateAssessmentResponse,
+)
+def assess_run_neutral(identity: str) -> NeutralEstateAssessmentResponse:
+    get_run(identity)
+    try:
+        return run_service().assess_neutral(identity)
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.get(
+    "/api/runs/{identity}/neutral-assessment",
+    response_model=NeutralEstateAssessmentResponse,
+)
+def get_run_neutral_assessment(identity: str) -> NeutralEstateAssessmentResponse:
+    get_run(identity)
+    try:
+        return run_service().get_neutral_assessment(identity)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get(
+    "/api/runs/{identity}/targets/{platform_id}/evaluate",
+    response_model=list[RunTargetEvaluation],
+)
+def get_run_target_evaluation(identity: str, platform_id: str) -> list[RunTargetEvaluation]:
+    get_run(identity)
+    try:
+        return run_service().get_target_evaluations(identity, platform_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
 @app.get("/api/runs/{identity}/export")
 def export_run(identity: str, format: Literal["json", "csv"] = "json") -> Response:
     run = get_run(identity)
@@ -482,7 +593,7 @@ def export_run(identity: str, format: Literal["json", "csv"] = "json") -> Respon
 @app.post("/api/runs/{identity}/dry-run", response_model=DryRunResult)
 def deployment_preview(identity: str, selection: DevSelection) -> DryRunResult:
     return dry_run(
-        generate_run(identity, selection.target),
+        preview_run(identity, selection.target),
         approved_workspace=os.getenv("ACCELERATOR_DEV_WORKSPACE"),
         requested_workspace=selection.workspace,
     )
@@ -496,10 +607,12 @@ def deployment_preview(identity: str, selection: DevSelection) -> DryRunResult:
 def deploy_with_github(
     identity: str, selection: GitHubDeploymentSelection
 ) -> GitHubDeploymentResult:
-    _, selected_target, artifact_path = _resolve_deployment_artifact(
+    selected_target, artifact_path, publication = _plan_deployment_dispatch(
         identity,
         selection.source_workflow,
         selection.target,
+        isolate_local_artifacts=selection.isolate_local_artifacts,
+        publication_digest=selection.publication_digest,
     )
     effective_selection = selection.model_copy(update={"target": selected_target})
     try:
@@ -512,6 +625,7 @@ def deploy_with_github(
                 or ""
             ).strip(),
             artifact_path=artifact_path,
+            publication=publication,
         )
     except GitHubConfigurationError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
@@ -528,10 +642,12 @@ def deploy_with_gitlab(
     identity: str,
     selection: GitLabDeploymentSelection,
 ) -> GitLabDeploymentResult:
-    _, selected_target, artifact_path = _resolve_deployment_artifact(
+    selected_target, artifact_path, publication = _plan_deployment_dispatch(
         identity,
         selection.source_workflow,
         selection.target,
+        isolate_local_artifacts=selection.isolate_local_artifacts,
+        publication_digest=selection.publication_digest,
     )
     effective_selection = selection.model_copy(update={"target": selected_target})
     try:
@@ -544,6 +660,7 @@ def deploy_with_gitlab(
                 or ""
             ).strip(),
             artifact_path=artifact_path,
+            publication=publication,
         )
     except GitLabConfigurationError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
@@ -551,8 +668,75 @@ def deploy_with_gitlab(
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 
+def _plan_deployment_dispatch(
+    identity: str,
+    source_workflow: str,
+    requested_target: Literal["notebook", "dataflow", "pipeline", "bundle"],
+    *,
+    isolate_local_artifacts: bool,
+    publication_digest: str | None,
+) -> tuple[
+    Literal["notebook", "dataflow", "pipeline", "bundle"],
+    str,
+    PublicationDispatch | None,
+]:
+    if publication_digest is None:
+        _, target, path = _resolve_deployment_artifact(
+            identity,
+            source_workflow,
+            requested_target,
+            isolate_local_artifacts=isolate_local_artifacts,
+        )
+        return target, path, None
+    get_run(identity)
+    service = run_service()
+    try:
+        with service.stage_all_artifacts(identity) as results:
+            manifest_hash = service.verify_staged_publication(
+                identity, publication_digest, results["dataflow"].root
+            )
+            _, target, path = _resolve_generated_artifact(
+                results, source_workflow, requested_target
+            )
+            return (
+                target,
+                path,
+                PublicationDispatch(
+                    artifact_root=f"published-fabric-workflows/{identity}/{publication_digest}",
+                    manifest_sha256=manifest_hash,
+                ),
+            )
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
 def _resolve_deployment_artifact(
     identity: str,
+    source_workflow: str,
+    requested_target: Literal["notebook", "dataflow", "pipeline", "bundle"],
+    *,
+    isolate_local_artifacts: bool = False,
+) -> tuple[
+    Candidate,
+    Literal["notebook", "dataflow", "pipeline", "bundle"],
+    str,
+]:
+    get_run(identity)
+    service = run_service()
+    try:
+        staged = (
+            service.stage_all_artifacts(identity)
+            if isolate_local_artifacts
+            else nullcontext(service.write_all_artifacts(identity))
+        )
+        with staged as results:
+            return _resolve_generated_artifact(results, source_workflow, requested_target)
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+def _resolve_generated_artifact(
+    results: dict[Target, ArtifactWriteResult],
     source_workflow: str,
     requested_target: Literal["notebook", "dataflow", "pipeline", "bundle"],
 ) -> tuple[
@@ -560,17 +744,13 @@ def _resolve_deployment_artifact(
     Literal["notebook", "dataflow", "pipeline", "bundle"],
     str,
 ]:
-    get_run(identity)
     candidate: Candidate | None = None
     selected_target: Literal["notebook", "dataflow", "pipeline", "bundle"] | None = None
     diagnostics: list[str] = []
     targets: tuple[Target, ...] = ("dataflow", "notebook", "pipeline")
     candidates_by_target: dict[Target, Candidate] = {}
     for target in targets:
-        try:
-            written = run_service().write_artifacts(identity, target)
-        except (OSError, ValueError) as error:
-            raise HTTPException(status_code=409, detail=str(error)) from error
+        written = results[target]
         current = next(
             (
                 item
@@ -602,7 +782,7 @@ def _resolve_deployment_artifact(
         if len(artifact_paths) == 1:
             artifact_path = next(iter(artifact_paths))
             assert artifact_path is not None
-            folder = run_service().artifact_root / Path(*artifact_path.split("/"))
+            folder = results["dataflow"].root / Path(*artifact_path.split("/"))
             if (folder / "deployment-bundle.json").is_file():
                 candidate = deployable[0]
                 selected_target = "bundle"

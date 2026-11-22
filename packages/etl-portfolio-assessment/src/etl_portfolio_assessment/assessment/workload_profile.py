@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Literal
 
-from etl_migration_core.contracts.ir import EtlAsset, EtlPackage, NodeKind
+from etl_migration_core.contracts.ir import EtlAsset, EtlPackage, NodeKind, SourcePlatform
 from etl_migration_core.contracts.spi import NeutralWorkloadProfile
 from etl_portfolio_assessment.assessment.engine import classify_neutral_operation
 
@@ -56,11 +56,16 @@ def extract_workload_profile(
     counts["connections"] = len(asset.connections)
     counts["dependencies"] = len(asset.dependencies)
 
-    profile_kind: Literal["alteryx", "informatica"] = (
-        "alteryx"
-        if package.source_platform.value == "alteryx"
-        else "informatica"
-    )
+    profile_kind: Literal["alteryx", "informatica", "generic"]
+    if package.source_platform == SourcePlatform.ALTERYX:
+        profile_kind = "alteryx"
+    elif package.source_platform in {
+        SourcePlatform.INFORMATICA_POWERCENTER,
+        SourcePlatform.INFORMATICA_IDMC,
+    }:
+        profile_kind = "informatica"
+    else:
+        profile_kind = "generic"
     cap_meta = asset.metadata.get("capacity")
     covered = (
         bool(cap_meta.get("covered_by_linked_mapping", False))

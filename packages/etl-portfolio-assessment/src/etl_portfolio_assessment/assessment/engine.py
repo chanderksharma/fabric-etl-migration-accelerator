@@ -10,11 +10,11 @@ from etl_migration_core.contracts.ir import (
     EtlAsset,
     EtlPackage,
     NodeKind,
-    SourcePlatform,
+    SourcePlatformId,
 )
 from etl_portfolio_assessment.assessment.effort import assessment_effort_days
 
-NEUTRAL_ASSESSMENT_VERSION = "1.0.0"
+NEUTRAL_ASSESSMENT_VERSION = "1.0.1"
 
 NEUTRAL_OPERATIONS = frozenset({"annotation", "container", "end", "start"})
 HEAVY_OPERATIONS = frozenset(
@@ -48,6 +48,50 @@ ORCHESTRATION_OPERATIONS = frozenset(
         "worklet",
     }
 )
+TABULAR_OPERATIONS = frozenset(
+    {
+        "aggregator",
+        "alteryxselect",
+        "appendfields",
+        "autofield",
+        "browse",
+        "comment",
+        "crosstab",
+        "datetime",
+        "dbfileinput",
+        "dbfileoutput",
+        "explorerbox",
+        "expression",
+        "filter",
+        "formula",
+        "inputdata",
+        "join",
+        "joiner",
+        "lookup",
+        "merge",
+        "outputdata",
+        "recordid",
+        "regex",
+        "router",
+        "sample",
+        "select",
+        "sequence_generator",
+        "sort",
+        "sorter",
+        "source",
+        "source_qualifier",
+        "summarize",
+        "target",
+        "textinput",
+        "textbox",
+        "toolcontainer",
+        "transpose",
+        "union",
+        "unique",
+        "update_strategy",
+        "xml_source_qualifier",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +110,7 @@ class NeutralAssetAssessment:
     native_id: str
     name: str
     folder: str | None
-    source_platform: SourcePlatform
+    source_platform: SourcePlatformId
     source_product: str
     asset_type: AssetType
     component_count: int
@@ -93,9 +137,9 @@ def classify_neutral_operation(operation: str, *, has_issues: bool = False) -> s
         return "script"
     if normalized in ORCHESTRATION_OPERATIONS:
         return "orchestration"
-    if normalized in {"unknown", "manual"}:
-        return "manual"
-    return "tabular"
+    if normalized in TABULAR_OPERATIONS:
+        return "tabular"
+    return "manual"
 
 
 def assess_package_neutral(package: EtlPackage) -> tuple[NeutralAssetAssessment, ...]:
@@ -114,8 +158,11 @@ def _assess_asset_neutral(
         for node in graph.nodes
         if not node.disabled
     ]
-    operations = [node.operation for node in nodes]
-    if not operations:
+    counts = Counter(
+        (node.operation, classify_neutral_operation(node.operation, has_issues=bool(node.issues)))
+        for node in nodes
+    )
+    if not counts:
         synthetic = {
             AssetType.MAPPING_TASK: "mapping_task",
             AssetType.TASKFLOW: "taskflow",
@@ -123,19 +170,14 @@ def _assess_asset_neutral(
             AssetType.WORKLET: "worklet",
         }.get(asset.asset_type)
         if synthetic:
-            operations.append(synthetic)
-    counts = Counter(operations)
-    issue_ops = {node.operation for node in nodes if node.issues}
+            counts[(synthetic, classify_neutral_operation(synthetic))] += 1
     inventory = tuple(
         NeutralComponentItem(
             operation=operation,
             count=count,
-            classification=classify_neutral_operation(
-                operation,
-                has_issues=operation in issue_ops,
-            ),
+            classification=classification,
         )
-        for operation, count in sorted(counts.items())
+        for (operation, classification), count in sorted(counts.items())
     )
     connection_count = sum(
         len({(edge.source, edge.target) for edge in graph.edges})
@@ -143,7 +185,7 @@ def _assess_asset_neutral(
         if graph is not None
     )
     unknown = tuple(
-        item.operation for item in inventory if item.classification == "manual"
+        dict.fromkeys(item.operation for item in inventory if item.classification == "manual")
     )
     score = sum(
         item.count
