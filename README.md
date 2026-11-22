@@ -138,6 +138,8 @@ uv run tool gc --dry-run
 
 `assess` emits full assessment JSON (`exit 1` if any workflow fails parsing; `exit 2` on input/configuration rejection). `targets` lists registered destination platforms (`fabric` ready plus fail-closed `databricks`, `synapse`, and `snowflake` placeholders). `plugins` lists installed source adapters, target providers, and per-plugin load results, and exits `1` if an installed plugin failed to load. `gc` applies the local retention policy to runs, snapshots, publications, and caches. `--target` accepts `dataflow`, `notebook`, `pipeline`, `both` (`dataflow` + `notebook`), or `all`. The CLI and API share `ACCELERATOR_STATE_DIR`, `ACCELERATOR_ARTIFACT_DIR`, `ACCELERATOR_PLUGIN_ALLOWLIST`, and `ACCELERATOR_LOG_LEVEL`; see [Environment Variables](docs/Guides/installation.md#environment-variables).
 
+`POST /api/runs/{id}/jobs` queues one target (`notebook`, `dataflow`, or `pipeline`) and caches candidates without writing files. It is not exposed in the portal or as a CLI command. Synchronous `POST /api/runs/{id}/generate` and `tool generate` still write artifacts. See the [User Guide](docs/Guides/user-guide.md#step-4-generate-artifacts-and-dispatch-cicd).
+
 ### Modular PyPI Packages & Stateless CLIs
 
 The repository is structured as a `uv` workspace producing independent wheels with minimal runtime dependencies (`pydantic` and `defusedxml` only):

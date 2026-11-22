@@ -1,7 +1,7 @@
 ---
 title: Installation and Runtime Modes
 description: Install and run the accelerator locally, from the CLI, in a dev container, or in Docker
-ms.date: 2026-11-17
+ms.date: 2026-11-22
 ms.topic: how-to
 ---
 
@@ -461,17 +461,18 @@ override the variables.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `ACCELERATOR_STATE_DIR` | `.accelerator` | Run database, snapshots, and local publications. Point the CLI and the API at the same directory to see the same runs. |
-| `ACCELERATOR_ARTIFACT_DIR` | `generated-fabric-workflows` | Shared artifact output directory used by `tool generate` and the API. |
+| `ACCELERATOR_STATE_DIR` | `.accelerator` | Run database, snapshots, generation jobs, and local publications. Point the CLI and the API at the same directory to see the same runs. |
+| `ACCELERATOR_ARTIFACT_DIR` | `generated-fabric-workflows` | Shared artifact output used by `tool generate` and synchronous `POST /api/runs/{id}/generate`. Generation jobs do not write this directory. |
 | `ACCELERATOR_PLUGIN_ALLOWLIST` | unset (load every installed plugin) | Comma-separated entry-point names allowed to load, for example `ssis,databricks`. Others are never imported and are reported as `skipped` by `GET /api/plugins`. It applies to the portal, the CLI, and the library and stateless-CLI registries alike. |
 | `ACCELERATOR_LOG_LEVEL` | `INFO` | Level for the `accelerator` and `etl_*` loggers. Logs go to standard error, including run stage timings. |
 
 ### Local state and retention
 
-The run database (`runs.db`, SQLite WAL, schema version 6) is migrated in place when the
-application starts. A database written by a newer release is rejected rather than
-downgraded. Parsed IR, assessment caches, snapshots, and publications grow with every
-run, so apply the retention policy periodically with the portal stopped:
+The run database (`runs.db`, SQLite WAL, schema version 7) is migrated in place when the
+application starts. Schema 7 appends `generation_jobs`. A database written by a newer
+release is rejected rather than downgraded. Parsed IR, assessment caches, snapshots,
+publications, and generation jobs grow with every run, so apply the retention policy
+periodically with the portal stopped:
 
 ```powershell
 uv run tool gc --dry-run                       # report what would be removed
@@ -479,7 +480,9 @@ uv run tool gc --max-age-days 30 --max-cache-mib 512
 ```
 
 `tool gc` removes finished runs and unreferenced snapshots older than the age limit,
-their local publications, and the coldest cache entries until the cache fits the size
-limit. Queued and running runs, and the snapshots they use, are always kept. Each
+their local publications and generation jobs, and the coldest cache entries until the
+cache fits the size limit. Queued and running assessment runs are always kept. A
+finished run is also kept while one of its generation jobs is queued or running.
+The snapshots those runs use are kept with them. Each
 completed run records stage timings (`verify_ms`, `assess_ms`, `persist_ms`,
 `total_ms`) that `GET /api/runs/{id}/status` returns.

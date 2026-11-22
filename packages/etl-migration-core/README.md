@@ -2,6 +2,8 @@
 
 Canonical ETL intermediate representation (`EtlPackage`, `EtlAsset`, `EtlGraph`), secure file/archive discovery, built-in source adapters (Alteryx Designer, Informatica PowerCenter, Informatica IDMC), and Service Provider Interface (SPI) contracts for pluggable source and target providers.
 
+Host registration accepts a missing `spi_version` as `1.0.0` and rejects an incompatible declaration. `ArtifactSet` is the target-neutral projection of one generated workflow. It carries identity, validation state, and diagnostics, and leaves `files` empty until a platform writer owns the bytes.
+
 ## Installation
 
 ```bash

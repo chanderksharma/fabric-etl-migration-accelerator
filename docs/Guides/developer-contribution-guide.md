@@ -28,6 +28,7 @@ semantic parity validation before promotion.
 | Target-neutral complexity, effort, or evidence | [Assessment engine](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/engine.py), [workload profile](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/workload_profile.py), and [evidence extractor](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/evidence/extractor.py) | [Assessment package tests](../../packages/etl-portfolio-assessment/tests/test_assessment_package.py) and [target tests](../../tests/test_targets.py) |
 | Fabric fit, capacity, or generated definitions | [Fabric assessment](../../packages/etl-target-fabric/src/etl_target_fabric/assessment/), [capacity model](../../packages/etl-target-fabric/src/etl_target_fabric/capacity/), and [compilers](../../packages/etl-target-fabric/src/etl_target_fabric/compilers/) | [ETL assessment](../../tests/test_etl_assessment.py), [capacity](../../tests/test_capacity.py), and [generation tests](../../tests/test_etl_generation.py) |
 | Local API, durable runs, or CLI | [API](../../src/accelerator/server/api.py) (routes), [upload staging](../../src/accelerator/server/uploads.py), [deployment resolution](../../src/accelerator/server/deployment.py), [run service](../../src/accelerator/runtime/runs.py) (orchestration), [SQLite store and retention](../../src/accelerator/runtime/store.py), [cache keys and snapshot IDs](../../src/accelerator/runtime/identity.py), [publications](../../src/accelerator/runtime/publication.py), [settings and logging](../../src/accelerator/settings.py), and [CLI](../../src/accelerator/cli/app.py) | [API](../../tests/test_api.py), [CLI](../../tests/test_cli.py), [resilience and retention](../../tests/test_runtime_resilience.py), and [multi-source application tests](../../tests/test_multisource_application.py) |
+| Generation jobs, candidate cache, or the neutral artifact projection | [Run service](../../src/accelerator/runtime/runs.py), [candidate cache keys](../../src/accelerator/runtime/identity.py), [ArtifactSet projection](../../src/accelerator/runtime/artifacts.py), and the [ArtifactSet contract](../../packages/etl-migration-core/src/etl_migration_core/contracts/artifacts.py) | [Generation hardening](../../tests/test_generation_hardening.py) and the [sample-estate digest](../../tests/test_golden_digest.py) |
 | Local analyst experience | [Web app](../../apps/web/src/) | [App tests](../../apps/web/src/App.test.tsx) and [workspace tests](../../apps/web/src/Workspace.test.tsx) |
 | Fabric-native intake and reporting | [Fabric analyst app](../../apps/etl-migration-assessment-app/src/), [app functions](../../apps/etl-migration-assessment-app/rayfin/functions/src/), and [assessment notebook](../../notebooks/fabric-portfolio-assessment.ipynb) | App `*.spec.ts` and `*.spec.tsx` tests; [FEMA deployment tests](../../tests/test_fema_deployment.py) |
 | CI dispatch or Fabric deployment | [Delivery modules](../../src/accelerator/delivery/), [deployment script](../../scripts/Deploy-FabricArtifacts.ps1), and [CI/CD setup](fabric-ci-cd-setup.md) | [GitHub](../../tests/test_github_deployment.py), [GitLab](../../tests/test_gitlab_deployment.py), and [acceptance tests](../../tests/test_acceptance.py) |
@@ -38,6 +39,13 @@ plugin. See the [source adapter protocol](../../packages/etl-migration-core/src/
 and [target SPI](../../packages/etl-migration-core/src/etl_migration_core/contracts/spi.py).
 The [architecture](../Architecture/system-architecture.md) and
 [plugin guide](building-plugins.md) describe their boundaries.
+Host registration calls `require_compatible_spi`. Omit `spi_version` to mean
+`1.0.0`. A declaration such as `2.0.0` fails registration and is reported as a
+plugin load failure. Folder uploads accept at most 10,000 named files. The route
+class raises only that multipart file cap. The 100 MiB browser upload budget is
+unchanged. Power Query string literals go
+through `etl_migration_core.m_literals.m_string`. Integer half-even effort goes
+through `etl_migration_core.planning`. Do not keep a second copy of either rule.
 
 ## Fix a bug
 
@@ -85,7 +93,9 @@ particular configuration. Test generated artifacts and unsupported cases.
 ## Extend a source system
 
 For example, adding SSIS `.dtsx` intake requires more than registering an
-adapter. SSIS is not implemented in the current repository.
+adapter. Product SSIS semantics are not implemented. The
+[synthetic SSIS example](../../examples/plugins/synthetic-ssis/README.md)
+extracts bounded metadata for a local neutral run. It does not interpret SSIS.
 
 1. Agree on the initial file formats, package boundaries, transformations,
    control flow, and unsupported cases. Add synthetic fixtures first.
@@ -98,6 +108,8 @@ adapter. SSIS is not implemented in the current repository.
    or package an external adapter under the `etl_migration.sources` entry
    point. The current [source platform enum](../../packages/etl-migration-core/src/etl_migration_core/contracts/ir.py)
    is closed, so a new platform also requires a compatible core contract.
+   Omit `spi_version`, or set a version compatible with `IR_SPI_VERSION`
+   (`1.0.0`). See [Building Source and Target Plugins](building-plugins.md).
 4. Update [intake domain](../../packages/etl-migration-core/src/etl_migration_core/intake/domain.py)
    and [discovery](../../packages/etl-migration-core/src/etl_migration_core/intake/discovery.py)
    for new files and archive members. Preserve size, archive, path, staging,
@@ -136,7 +148,11 @@ working destination.
    The [target registry](../../packages/etl-migration-core/src/etl_migration_core/targets/registry.py)
    can replace a placeholder when the implementing provider is installed.
    Check IR-version compatibility and retain fail-closed behavior when the
-   provider or capability is unavailable.
+   provider or capability is unavailable. Omit `spi_version`, or set a version
+   compatible with `IR_SPI_VERSION` (`1.0.0`). A future writer should consume
+   [ArtifactSet](../../packages/etl-migration-core/src/etl_migration_core/contracts/artifacts.py)
+   rather than Fabric paths. The current projection leaves `files` empty and
+   does not connect plugin generation to the portal.
 4. Implement and test deterministic generation and artifact packaging for
    supported operations. Emit explicit diagnostics for unsupported semantics;
    never treat plugin discovery as semantic validation.
@@ -154,11 +170,37 @@ examples and [PyPI Packages and Publishing](pypi-packages.md) for packaging.
 For a new wheel, review workspace dependencies, tests, build and publishing,
 and any local or Fabric runtime bundles that must include it.
 
+## Queue generation without writing files
+
+Use this path when you need candidates for a completed run and must not touch
+the shared artifact tree.
+
+1. Confirm the assessment run is `completed`. Jobs and synchronous generate
+   both reject an incomplete run.
+2. Queue one target with `POST /api/runs/{id}/jobs?target=notebook`. Accepted
+   values are `notebook`, `dataflow`, and `pipeline`. The route returns `202`.
+   There is no CLI equivalent, and the portal does not call it.
+3. Poll `GET /api/runs/{id}/jobs`. A completed job carries candidates. The
+   worker calls the compiler path and must not call `write_candidates`.
+4. Read one workflow with
+   `GET /api/runs/{id}/workflows/{index}/candidates`. The index is zero-based
+   in the confirmed snapshot.
+5. Treat `artifact:` cache rows as the target-neutral projection. They are not
+   a Fabric package. `candidate:` rows are the Fabric `Candidate` JSON.
+
+An unexpected exception in one workflow becomes a blocked candidate prefixed
+with `unexpected generation fault` and is not cached. Re-raise `OSError`,
+`sqlite3.Error`, and `ValueError`. A blocked candidate cannot honestly name an
+external plugin platform, because `Candidate.source_platform` is the closed
+source enum. Unsupported-source generation must keep raising `ValueError`.
+
 ## Change the local run database
 
 The run database is owned by the [SQLite store](../../src/accelerator/runtime/store.py)
 and lives in users' `.accelerator` folders, so a schema change must work on state that an
-earlier release already wrote.
+earlier release already wrote. The current version is 7. Schema 7 appends
+`generation_jobs`. Candidate and ArtifactSet JSON stay in the existing `cache`
+table. Do not add those rows to the job table's writer.
 
 1. Append a step to `MIGRATIONS` with the next version number and raise
    `LATEST_SCHEMA_VERSION`. Never edit a step that has shipped, including the baseline:

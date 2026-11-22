@@ -1,7 +1,7 @@
 ---
 title: User Guide
 description: Complete end-to-end user guide for assessing ETL estates, modeling Fabric capacity, generating Fabric artifacts, and deploying via CI/CD
-ms.date: 2026-11-21
+ms.date: 2026-11-22
 ms.topic: how-to
 ---
 
@@ -112,6 +112,22 @@ Open **Capacity Sizing** (see [Fabric Capacity Planning](capacity-planning.md)) 
    uv run tool generate <completed-run-id> --target all --output generated-fabric-workflows
    ```
 
+   The local API can also queue one target without writing files. This path is
+   not in the portal and has no CLI command. `target` must be `notebook`,
+   `dataflow`, or `pipeline`. It does not accept `both` or `all`.
+
+   * `POST /api/runs/{run_id}/jobs?target=notebook` returns `202` and a queued job.
+   * `GET /api/runs/{run_id}/jobs` lists that run's jobs. Poll until the job is `completed` or `failed`, then read its `error` field if it failed.
+   * `GET /api/runs/{run_id}/workflows/{index}/candidates?target=notebook` returns one workflow. The index is zero-based in the confirmed snapshot.
+
+   A completed job includes candidates and does not update
+   `generated-fabric-workflows`. `POST /api/runs/{run_id}/generate` remains
+   synchronous: it still returns the candidate list and writes artifacts.
+   One workflow's unexpected fault becomes a `blocked` candidate so the rest of
+   the estate can continue. That fault is not cached. Disk errors, database
+   errors, and contract rejections, including an unsupported source, still fail
+   the request. See [System Architecture](../Architecture/system-architecture.md#local-generation-runtime).
+
    Portal previews, dry runs, and ZIP downloads use isolated temporary directories
    and do not update the shared `generated-fabric-workflows` directory. Use the CLI
    `tool generate` command or the legacy generation API when you need persisted local
@@ -210,7 +226,7 @@ See [Building Source and Target Plugins](building-plugins.md) to register custom
 | :--- | :--- | :--- |
 | `generated_unvalidated` | Compiler produced structurally valid Fabric definition; bindings and semantic parity still require review | Yes (`*-create-item.json`) |
 | `scaffold` | One or more operations, macros, or graph shapes fall outside verified compiler coverage | No (`*-diagnostics.json` only) |
-| `blocked` | Input validation or dependency constraint prevents safe generation | No (`*-diagnostics.json` only) |
+| `blocked` | Input validation, a dependency constraint, or an isolated unexpected generation fault prevents a deployable definition. Disk, database, and contract errors fail the request instead. | No (`*-diagnostics.json` only) |
 
 ## Security and operational guardrails
 

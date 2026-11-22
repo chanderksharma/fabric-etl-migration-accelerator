@@ -1,7 +1,7 @@
 ---
 title: Release Notes v1.0.0
-description: Initial release capabilities, modular package workspace, FEMA stack, and validation evidence
-ms.date: 2026-11-21
+description: v1.0.0 capabilities plus the unreleased modernization foundation follow-up
+ms.date: 2026-11-22
 ms.topic: reference
 ---
 
@@ -40,3 +40,17 @@ Chrysalis-ready InnerSource release of the **Microsoft Fabric ETL Migration Acce
 - Generated definitions are `generated_unvalidated`; workspace-specific data connections, destination bindings, and semantic parity sign-off remain required before promotion beyond `dev`.
 - Multi-mapping PowerCenter workflows and unsupported Alteryx macros/plugins intentionally emit non-deployable `scaffold` diagnostics for manual engineering completion.
 - Microsoft Fabric currently blocks service-principal Dataflow refresh (`SPNBasedRefreshNotAllowed`); CI validates saved queries via `executeQuery` instead.
+
+## Unreleased foundation follow-up
+
+These changes are in the working tree on `feature/etl-modernization-foundation`.
+They are not part of the v1.0.0 release above, and they are not a new version tag.
+
+- Durable generation jobs and a candidate cache. Synchronous generate and preview stay synchronous. Jobs do not write artifact files, and neither the portal nor the CLI exposes them.
+- A target-neutral `ArtifactSet` projection. Its `files` collection is empty. The Fabric disk writer is unchanged.
+- Schema 7 appends `generation_jobs`. Existing state migrates forward. The schema-4 baseline is unchanged.
+- An optional SPI handshake. A missing `spi_version` means `1.0.0`. An incompatible declaration fails registration.
+- Fail-closed generation. Missing linear Alteryx configuration scaffolds. Malformed Power Query M is not marked `generated_unvalidated`. One unexpected workflow fault becomes a blocked candidate and is not cached.
+- A sample-estate golden digest for compiler output. It does not replace `generated-fabric-workflows/`.
+
+Plugin target generation and deployment remain unwired. A compiler split, process-pool parallelism, out-of-process plugins, authenticated server mode, and a new database remain deferred. GitHub Actions and a live Fabric deployment were not run for this follow-up. A local portal check covered health, assessment, synchronous generate, one notebook generation job, publication download, and malformed-workflow isolation.

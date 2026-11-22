@@ -215,7 +215,8 @@ metadata from the adapters in one place, so built-in sources produce identical
 snapshots with or without an injected registry.
 
 **Correctness of derived data.** The SQLite store uses ordered, idempotent schema
-migrations (schema 6) and honors its 30 second busy timeout. Neutral rules carry a
+migrations and honors its 30 second busy timeout. That review reached schema 6.
+The suggested-order follow-up appends schema 7 without editing the schema-4 baseline. Neutral rules carry a
 content fingerprint in their version, Fabric support tables carry one in the Fabric
 cache key, and contract tests keep the neutral and Fabric operation tables consistent
 (annotation tools such as containers are now neutral in both). A reviewed list records
@@ -305,6 +306,12 @@ content-addressed candidate cache are additive; synchronous generate and preview
 synchronous. `ArtifactSet` is a target-neutral projection and is not added to the Fabric
 artifact tree. Schema 7 adds `generation_jobs`; the schema-4 baseline is unchanged.
 Uvicorn is imported only when serving, and a missing `spi_version` remains `1.0.0`.
+A local portal check on 2026-11-22 passed health, a 15-workflow assessment,
+synchronous generate, a notebook generation job, publication download, and
+malformed-workflow isolation. GitHub Actions and a live Fabric deployment were
+not run. The operator and developer guides now describe the job routes, the
+cache, `ArtifactSet`, and the SPI handshake. See
+[System Architecture](../Architecture/system-architecture.md#local-generation-runtime).
 
 **Still open.** Splitting `RunService` into collaborator objects is deliberately
 deferred: many tests and the portal depend on its internal hooks, so it needs

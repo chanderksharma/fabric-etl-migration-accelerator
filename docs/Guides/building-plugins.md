@@ -1,7 +1,7 @@
 ---
 title: Building Source and Target Plugins
 description: Developer guide for extending etl-migration-core with custom source adapters, target platform providers, and stateless IDE integrations
-ms.date: 2026-11-21
+ms.date: 2026-11-22
 ms.topic: how-to
 ---
 
@@ -118,9 +118,22 @@ canonical asset and returns separate results without changing the existing asses
 and `capacity` providers.
 Results are saved per run and platform, with the most recent evaluation replacing the
 previous one. The endpoint does not enable target-specific generation or deployment
-in the portal. Provider metadata must match its declared version, IR versions,
+in the portal. The local runtime can project a Fabric `Candidate` into
+`ArtifactSet` (`etl_migration_core.contracts.artifacts`). That projection
+carries identity, validation state, and diagnostics, and leaves `files`
+empty. It is not a package format, and it does not connect a plugin generator
+to the portal. `write_candidates` remains the Fabric disk writer. Generation
+jobs use the same compiler path and also do not write files. See
+[System Architecture](../Architecture/system-architecture.md#local-generation-runtime). Provider metadata must match its declared version, IR versions,
 implementation status, and capabilities. These fields are checked both when listing
 providers and before invoking a capability. Duplicate provider entry points are rejected.
+
+Registration calls `require_compatible_spi` in
+`etl_migration_core.plugins` for both source adapters and target providers.
+Omit `spi_version` to mean `1.0.0` (`IR_SPI_VERSION`). Set it only when you
+intentionally declare the host contract. An incompatible value, including
+`2.0.0`, fails registration and appears in `GET /api/plugins` as a load
+failure. Built-in adapters keep loading because they omit the attribute.
 The optional `AlteryxPathTargetEvaluator`
 protocol preserves the legacy path-based Fabric method for existing integrations.
 Completed runs save a neutral baseline alongside the existing Fabric-focused assessment.

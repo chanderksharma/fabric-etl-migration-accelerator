@@ -1,4 +1,9 @@
-# Troubleshooting
+---
+title: Troubleshooting
+description: Common issues and resolutions for intake, plugins, generation jobs, and Fabric CI/CD
+ms.date: 2026-11-22
+ms.topic: troubleshooting
+---
 
 Common issues and resolutions across local intake, code generation, and Microsoft Fabric CI/CD deployment.
 
@@ -15,7 +20,8 @@ Common issues and resolutions across local intake, code generation, and Microsof
 
 | Symptom | Cause | Resolution |
 | --- | --- | --- |
-| An installed plugin is missing from the portal | It failed to import, duplicated an existing identity, declared a non-string identity or version attribute or an invalid `supported_extensions` entry (extensions must be lowercase, such as `.dtsx`), or is not in `ACCELERATOR_PLUGIN_ALLOWLIST` | Open `GET /api/plugins` (or run `uv run tool plugins`) for the per-plugin `loaded`, `failed`, or `skipped` result and its reason. A broken plugin never blocks the built-in sources and targets. |
+| An installed plugin is missing from the portal | It failed to import, duplicated an existing identity, declared a non-string identity or version attribute or an invalid `supported_extensions` entry (extensions must be lowercase, such as `.dtsx`), declared an incompatible `spi_version`, or is not in `ACCELERATOR_PLUGIN_ALLOWLIST` | Open `GET /api/plugins` (or run `uv run tool plugins`) for the per-plugin `loaded`, `failed`, or `skipped` result and its reason. A broken plugin never blocks the built-in sources and targets. |
+| Plugin load result says the SPI version is incompatible | The plugin sets `spi_version` to a value other than `1.0.0` | Remove `spi_version` or set it to `1.0.0`. A missing value means `1.0.0`. `2.0.0` is rejected. |
 | A file is skipped with `Source adapter '<id>' faulted during probe` | The plugin raised an unexpected exception while recognizing the file | Fix the plugin; adapters should return `None` for unrecognized input and raise `ValueError` for invalid input. The file is skipped and the rest of the input is still discovered. |
 | A workflow fails with `faulted during parse` or `unexpected <ExceptionType>` | A plugin or engine raised an unexpected exception for that one workflow | The workflow is listed under failures and the run still completes. Set `ACCELERATOR_LOG_LEVEL=DEBUG` and check the standard error log for the traceback. |
 | Run ends `failed` with `abandoned after 5 interrupted attempts` | The process stopped five times while running it, so a workflow may be crashing the parser | Remove the suspect workflow from the selection and start a new run. |
@@ -27,6 +33,9 @@ Common issues and resolutions across local intake, code generation, and Microsof
 | Symptom | Cause | Resolution |
 | --- | --- | --- |
 | Workflow produces `*-diagnostics.json` instead of `*-create-item.json` | Workflow contains unsupported macros, custom plugins, or multi-mapping orchestration (`scaffold` state) | Inspect `dataflow-diagnostics.json` / `notebook-diagnostics.json`; scaffolds are design evidence only and intentionally omitted from deployment envelopes. |
+| A candidate diagnostic starts with `unexpected generation fault` | One workflow raised an unexpected exception during generation | That workflow is `blocked` and is not cached. The rest of the estate can still generate. Read the server log for the traceback, then fix the producer. Disk, database, and contract errors do not take this path. |
+| Generation job status is `failed` | The assessment is not complete, the target is unsupported, the writer hit a disk or database error, or the job was interrupted five times | Complete the assessment before `POST /api/runs/{id}/jobs`. Read the job `error` field. A job abandoned after five interrupted attempts must be submitted again. A completed job does not write `generated-fabric-workflows`. |
+| `POST /api/runs/{id}/generate` returns 409 | The writer hit a disk error, a database error, or a contract rejection such as an unsupported source | Read the response detail. Queueing a generation job does not hide these errors, and a successful job does not write files. |
 | Deployment reports `BindingsRequired` | Generated Dataflow or Notebook requires workspace-specific source connections or Lakehouse/Warehouse destination IDs | Bind source connections and target destinations in the Fabric `dev` workspace before enabling Dataflow refresh or Notebook execution. |
 | `SPNBasedRefreshNotAllowed` during Fabric deployment | Microsoft Fabric blocks service-principal-initiated Dataflow Gen2 refresh jobs | Expected platform limitation: `Deploy-FabricArtifacts.ps1` validates saved queries via `executeQuery` (`SPNQueryValidated`); trigger full refresh under an authorized user or supported orchestration identity. |
 

@@ -1,7 +1,7 @@
 ---
 title: Local Architecture Decisions
 description: Bounded implementation decisions and requirement-to-test traceability
-ms.date: 2026-11-17
+ms.date: 2026-11-22
 ---
 
 ## Scope
@@ -118,6 +118,21 @@ Variable Library definitions move with supported Fabric items. The active value
 set remains workspace item state, so promotion selects and reads back the
 target stage value set after the Deployment Pipeline operation completes.
 
+## ADR-L18 Cached generation jobs and neutral artifact projection
+
+Keep synchronous generate and preview as the file-writing paths. Add durable
+generation jobs that compute and cache candidates without calling the artifact
+writer. Project each cached candidate into `ArtifactSet` for a future target
+writer, and leave `files` empty until that writer owns the bytes.
+
+Schema 7 appends `generation_jobs`. Jobs use the same lease-epoch fencing as
+assessment runs. An unexpected fault in one workflow becomes a blocked
+candidate and is not cached. `OSError`, `sqlite3.Error`, and `ValueError`
+still fail the estate or the job. Plugin registration treats a missing
+`spi_version` as `1.0.0` and rejects an incompatible declaration. This decision
+does not split `RunService`, rewrite the compilers, or connect plugin
+generation to the portal.
+
 ## Requirement-to-test traceability
 
 | Requirement | Validation |
@@ -134,6 +149,10 @@ target stage value set after the Deployment Pipeline operation completes.
 | Fail-closed dev dry run | `test_dry_run_cannot_approve_unvalidated_candidates` |
 | Fabric-authoritative Git synchronization | `test_fabric_alm_script_fails_closed_and_uses_native_alm_apis` |
 | Manual environment-gated promotion | `test_fabric_alm_promotion_is_manual_and_environment_gated` |
+| Cached generation jobs do not write files | `test_generation_job_caches_candidates_without_writing_artifacts` |
+| One generation fault does not drop the estate | `test_mixed_estate_keeps_the_good_workflow_and_reraises_os_error` |
+| SPI handshake | `test_spi_handshake_rejects_only_an_incompatible_declaration` |
+| Sample-estate compiler digest | `test_sample_estate_digest_matches_the_golden_fixture` |
 
 This matrix is extended with implementation tests. Existing tests alone do not
 prove real-estate performance, source/target parity, or production readiness.

@@ -1,7 +1,7 @@
 ---
 title: Getting Started
 description: Run an end-to-end ETL assessment and generate Microsoft Fabric artifacts
-ms.date: 2026-11-17
+ms.date: 2026-11-22
 ms.topic: tutorial
 ---
 
@@ -66,6 +66,11 @@ uv run tool preview .\alteryx-workflows
 uv run tool assess .\alteryx-workflows
 uv run tool generate <completed-run-id> --target all --output generated-fabric-workflows
 ```
+
+The API can queue one target and return cached candidates without writing
+`generated-fabric-workflows`. That path is not a portal button. Use the CLI
+`generate` command when you need a local artifact tree. See the
+[User Guide](user-guide.md#step-4-generate-artifacts-and-dispatch-cicd).
 
 ### Validate Generated Notebooks
 
