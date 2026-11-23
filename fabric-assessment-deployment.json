@@ -1,0 +1,15 @@
+{
+  "mode": "deployed",
+  "workspaceId": "aaf5db14-9635-4454-9584-f10ec8494483",
+  "workspaceName": "fabric-dev",
+  "folderId": "51fc334c-e78e-4281-9679-8eb8a405ae82",
+  "folderName": "FEMA",
+  "lakehouseId": "3bfd8425-8862-4c05-8605-ecfd65b83a58",
+  "environmentId": "b23c4c59-8024-46eb-8f3b-1fc240466bb0",
+  "notebookId": "bb010b67-b339-45ce-acc1-fd2cc56b1570",
+  "semanticModelId": "e6de7e19-08fd-405a-9554-33c69cdc2eeb",
+  "reportId": "9103fabd-eef7-446f-8eba-8de91238141c",
+  "reportUrl": "https://app.fabric.microsoft.com/groups/aaf5db14-9635-4454-9584-f10ec8494483/reports/9103fabd-eef7-446f-8eba-8de91238141c",
+  "fabricAppId": null,
+  "fabricAppDeployed": false
+}

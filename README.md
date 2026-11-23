@@ -163,6 +163,19 @@ docker run --rm -p 127.0.0.1:8050:8050 -v fabric-etl-state:/data fabric-etl-acce
 
 Deploy the full Fabric-native analytics and intake stack into a Microsoft Fabric workspace with one idempotent pass. The installer creates or reuses a `FEMA` workspace folder (configurable with `-FolderName`) and places the Lakehouse, Fabric Runtime 2.0 Environment with the three decoupled library wheels (`etl-migration-core`, `etl-portfolio-assessment`, `etl-target-fabric`), [portfolio assessment notebook](notebooks/fabric-portfolio-assessment.ipynb), eight initialized `etl_*` Delta tables, Direct Lake semantic model, five-page Power BI report, and [Fabric analyst app](apps/etl-migration-assessment-app/) inside it.
 
+If the three wheels already exist and only the notebook analytics stack is
+required, run:
+
+```powershell
+pwsh -NoProfile -File scripts\Deploy-FabricAssessmentStack.ps1 `
+  -WorkspaceName "<workspace-name>" `
+  -WheelDirectory .\dist `
+  -UseAzCli
+```
+
+This focused entry point deploys the Lakehouse, Environment, Notebook, Delta
+tables, Semantic Model, and Power BI Report, and skips the Fabric Analyst App.
+
 Validate local payloads without changing Fabric:
 
 ```powershell

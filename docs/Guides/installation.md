@@ -252,6 +252,38 @@ initialized `etl_*` Delta tables, Direct Lake Semantic Model, Power BI Report,
 and optionally the Fabric Analyst App inside it), use the unified workspace
 installer or the in-Fabric deployment notebook.
 
+### Focused notebook and analytics installer
+
+When the three library wheels are already built and the Fabric Analyst App is
+not required, use the focused installer. It creates or updates the Lakehouse,
+Runtime 2.0 Environment, assessment Notebook, eight Delta tables, Direct Lake
+Semantic Model, and Power BI Report. It never builds wheels or deploys Rayfin.
+
+Validate local wheels and definition payloads without changing Fabric:
+
+```powershell
+pwsh -NoProfile -File scripts\Deploy-FabricAssessmentStack.ps1 `
+  -WorkspaceName "<workspace-name>" `
+  -WheelDirectory .\dist `
+  -DryRun
+```
+
+Deploy using the current Azure CLI sign-in:
+
+```powershell
+az login
+pwsh -NoProfile -File scripts\Deploy-FabricAssessmentStack.ps1 `
+  -WorkspaceName "<workspace-name>" `
+  -WheelDirectory .\dist `
+  -UseAzCli
+```
+
+The wheel directory must contain one compatible wheel for each package:
+
+* `etl_migration_core-*.whl`
+* `etl_portfolio_assessment-*.whl`
+* `etl_target_fabric-*.whl`
+
 ### Option A: PowerShell workspace installer (local workstation or CI)
 
 Validate all local payloads without mutating Fabric:

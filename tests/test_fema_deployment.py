@@ -193,6 +193,84 @@ def test_build_fema_bundle_creates_clean_manifest(tmp_path: Path) -> None:
         shutil.rmtree(bundle_dir, ignore_errors=True)
 
 
+def test_focused_assessment_stack_installer_uses_prebuilt_wheels(tmp_path: Path) -> None:
+    pwsh = shutil.which("pwsh")
+    if pwsh is None:
+        pytest.skip("PowerShell 7 is required to exercise the focused installer")
+
+    wheels = tmp_path / "wheels"
+    wheels.mkdir()
+    for name in (
+        "etl_migration_core-1.0.0-py3-none-any.whl",
+        "etl_portfolio_assessment-1.0.0-py3-none-any.whl",
+        "etl_target_fabric-1.0.0-py3-none-any.whl",
+    ):
+        (wheels / name).write_bytes(b"PK\x03\x04synthetic-wheel")
+    summary = tmp_path / "summary.json"
+
+    proc = subprocess.run(
+        [
+            pwsh,
+            "-NoProfile",
+            "-File",
+            str(ROOT / "scripts" / "Deploy-FabricAssessmentStack.ps1"),
+            "-WorkspaceName",
+            "Synthetic Workspace",
+            "-WheelDirectory",
+            str(wheels),
+            "-OutputSummaryPath",
+            str(summary),
+            "-DryRun",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert "etl_migration_core-1.0.0-py3-none-any.whl" in proc.stdout
+    result = json.loads(summary.read_text(encoding="utf-8-sig"))
+    assert result["mode"] == "dry-run"
+    assert result["deployFabricApp"] is False
+    assert result["payloadPartsValidated"] is True
+    assert Path(result["wheel"]).name == "etl_target_fabric-1.0.0-py3-none-any.whl"
+
+
+def test_focused_assessment_stack_installer_rejects_incomplete_wheels(
+    tmp_path: Path,
+) -> None:
+    pwsh = shutil.which("pwsh")
+    if pwsh is None:
+        pytest.skip("PowerShell 7 is required to exercise the focused installer")
+
+    wheels = tmp_path / "wheels"
+    wheels.mkdir()
+    (wheels / "etl_migration_core-1.0.0-py3-none-any.whl").write_bytes(
+        b"PK\x03\x04synthetic-wheel"
+    )
+
+    proc = subprocess.run(
+        [
+            pwsh,
+            "-NoProfile",
+            "-File",
+            str(ROOT / "scripts" / "Deploy-FabricAssessmentStack.ps1"),
+            "-WorkspaceName",
+            "Synthetic Workspace",
+            "-WheelDirectory",
+            str(wheels),
+            "-DryRun",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 1
+    assert "Required wheel missing" in proc.stderr
+    assert "etl_portfolio_assessment-*.whl" in proc.stderr
+
+
 def _run_workspace_installer(
     tmp_path: Path,
     *,
