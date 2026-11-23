@@ -148,7 +148,7 @@ The repository is structured as a `uv` workspace producing independent wheels wi
 * `packages/etl-portfolio-assessment` (`etl-portfolio-assessment`): Target-neutral assessment engine and stateless `etl-assess` CLI (`etl-assess preview|assess|evidence <path>`).
 * `packages/etl-target-fabric` (`etl-target-fabric`): Microsoft Fabric provider, F-SKU capacity model, M/PySpark/Pipeline compilers, artifact writer, and stateless `etl-fabric` CLI (`etl-fabric evaluate|compile <path>`).
 
-See [PyPI Packages and Publishing Guide](docs/Guides/pypi-packages.md), [Building Source and Target Plugins](docs/Guides/building-plugins.md), and [Figure ARCH-02](docs/Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png).
+See [PyPI Packages and Publishing Guide](docs/Guides/pypi-packages.md), [Building Source and Target Plugins](docs/Guides/building-plugins.md), and the [pluggable solution architecture diagram](docs/Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png).
 
 ### Local Loopback Container
 

@@ -193,6 +193,7 @@ def _run_workspace_installer(
     tmp_path: Path,
     *,
     existing_items: bool,
+    staged_libraries_missing: bool | None = None,
 ) -> subprocess.CompletedProcess[str]:
     pwsh = shutil.which("pwsh")
     if pwsh is None:
@@ -202,11 +203,17 @@ def _run_workspace_installer(
     wheel_file.write_bytes(b"PK\x03\x04synthetic-wheel")
     summary_path = tmp_path / "summary.json"
     calls_path = tmp_path / "calls.json"
+    missing_staged_libraries = (
+        not existing_items
+        if staged_libraries_missing is None
+        else staged_libraries_missing
+    )
 
     harness = f"""
 $ErrorActionPreference = 'Stop'
 $env:FABRIC_WORKSPACE_ID = '99999999-9999-4999-8999-999999999999'
 $global:ExistingItems = {'$true' if existing_items else '$false'}
+$global:MissingStagedLibraries = {'$true' if missing_staged_libraries else '$false'}
 $global:Calls = [System.Collections.Generic.List[object]]::new()
 $NbId = '55555555-5555-4555-8555-555555555555'
 $RptId = '66666666-6666-4666-8666-666666666666'
@@ -260,13 +267,19 @@ function global:Invoke-FabricRequest {{
         }}
     }}
     if ($Method -eq 'Get' -and $Uri -match '/environments/{GUID_ENV}/staging/libraries$') {{
-        $Wheels = if ($global:ExistingItems) {{
-            @('fabric_etl_migration_accelerator-1.0.0-py3-none-any.whl')
-        }} else {{
-            @()
+        if ($global:MissingStagedLibraries) {{
+            $MissingLibraries = (
+                'Fabric request failed (404): ' +
+                '{{"errorCode":"EnvironmentLibrariesNotFound",' +
+                '"message":"This environment does not have any staged libraries. ' +
+                'Please upload libraries."}}'
+            )
+            throw $MissingLibraries
         }}
         return @{{
-            customLibraries = @{{ wheelFiles = $Wheels }}
+            customLibraries = @{{
+                wheelFiles = @('fabric_etl_migration_accelerator-1.0.0-py3-none-any.whl')
+            }}
         }}
     }}
     if ($Method -eq 'Get' -and $Uri -match '/environments/{GUID_ENV}$') {{
@@ -388,6 +401,7 @@ def test_workspace_installer_fresh_and_idempotent_upgrade(tmp_path: Path) -> Non
         "/staging/libraries/" in u and c["Method"] == "UPLOAD"
         for c, u in zip(fresh_calls, uris, strict=True)
     )
+    assert "Environment has no staged libraries yet" in fresh.stdout
     assert any("/jobs/execute/instances" in u for u in uris)
     bootstrap_call = next(c for c in fresh_calls if "/jobs/execute/instances" in c["Uri"])
     params = {p["name"]: p["value"] for p in bootstrap_call["Body"]["parameters"]}
@@ -423,6 +437,122 @@ def test_workspace_installer_fresh_and_idempotent_upgrade(tmp_path: Path) -> Non
     ]
     assert len(delete_calls) == 1
     assert "fabric_etl_migration_accelerator-1.0.0-py3-none-any.whl" in delete_calls[0]["Uri"]
+
+    retry_dir = tmp_path / "retry-after-empty-environment"
+    retry_dir.mkdir()
+    retry = _run_workspace_installer(
+        retry_dir,
+        existing_items=True,
+        staged_libraries_missing=True,
+    )
+    assert retry.returncode == 0, retry.stderr
+    assert "Environment has no staged libraries yet" in retry.stdout
+
+
+def test_workspace_installer_restores_recorded_recoverable_app(tmp_path: Path) -> None:
+    pwsh = shutil.which("pwsh")
+    if pwsh is None:
+        pytest.skip("PowerShell 7 is required to exercise Fabric App recovery")
+
+    app_dir = tmp_path / "app"
+    deployments_dir = app_dir / "rayfin"
+    deployments_dir.mkdir(parents=True)
+    app_id = "88888888-8888-4888-8888-888888888888"
+    registry = {
+        "active": "Synthetic Workspace",
+        "deployments": {
+            "Synthetic Workspace": {
+                "fabricItemId": app_id,
+                "itemName": "fema-etl-migration-app",
+                "fabricWorkspaceId": GUID_WS,
+            }
+        },
+    }
+    (deployments_dir / ".deployments.json").write_text(
+        json.dumps(registry),
+        encoding="utf-8",
+    )
+    calls_path = tmp_path / "restore-calls.json"
+    script_path = ROOT / "scripts" / "Deploy-AcceleratorWorkspace.ps1"
+    harness = f"""
+$ErrorActionPreference = 'Stop'
+$global:Calls = [System.Collections.Generic.List[object]]::new()
+$Tokens = $null
+$Errors = $null
+$Ast = [System.Management.Automation.Language.Parser]::ParseFile(
+    '{script_path.as_posix()}', [ref]$Tokens, [ref]$Errors
+)
+$FunctionAst = $Ast.Find({{
+    param($Node)
+    $Node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $Node.Name -eq 'Restore-RecordedFabricAppIfRecoverable'
+}}, $true)
+Invoke-Expression $FunctionAst.Extent.Text
+$GuidPattern = (
+    '^[0-9a-fA-F]{{8}}-[0-9a-fA-F]{{4}}-' +
+    '[1-5][0-9a-fA-F]{{3}}-[89abAB][0-9a-fA-F]{{3}}-' +
+    '[0-9a-fA-F]{{12}}$'
+)
+$FabricApi = 'https://api.fabric.microsoft.com/v1'
+
+function global:Invoke-FabricRequest {{
+    param($Method, $Uri, $Token, $SkillName, $Body)
+    $global:Calls.Add([pscustomobject]@{{ Method = $Method; Uri = $Uri }})
+    if ($Method -eq 'Get') {{
+        return @{{ value = @(@{{
+            id = '{app_id}'
+            displayName = 'fema-etl-migration-app'
+            type = 'AppBackend'
+        }}) }}
+    }}
+    if ($Method -eq 'Post' -and $Uri -match '/recover$') {{
+        return @{{ status = 'Succeeded' }}
+    }}
+    throw "Unexpected call: $Method $Uri"
+}}
+
+$Restored = Restore-RecordedFabricAppIfRecoverable `
+    -WorkspaceGuid '{GUID_WS}' `
+    -WorkspaceName 'Synthetic Workspace' `
+    -AppDirectory '{app_dir.as_posix()}' `
+    -AppName 'fema-etl-migration-app' `
+    -Token 'synthetic-token'
+if (-not $Restored) {{ throw 'Expected the AppBackend to be restored.' }}
+$Mismatched = Restore-RecordedFabricAppIfRecoverable `
+    -WorkspaceGuid '{GUID_WS}' `
+    -WorkspaceName 'Synthetic Workspace' `
+    -AppDirectory '{app_dir.as_posix()}' `
+    -AppName 'different-app' `
+    -Token 'synthetic-token'
+if ($Mismatched) {{ throw 'A mismatched AppBackend must not be restored.' }}
+$global:Calls | ConvertTo-Json -Depth 5 |
+    Set-Content -LiteralPath '{calls_path.as_posix()}' -Encoding utf8
+"""
+    proc = subprocess.run(
+        [pwsh, "-NoProfile", "-Command", harness],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "Restoring deleted Fabric App backend" in proc.stdout
+    calls = json.loads(calls_path.read_text(encoding="utf-8"))
+    assert calls == [
+        {
+            "Method": "Get",
+            "Uri": (
+                f"https://api.fabric.microsoft.com/v1/workspaces/{GUID_WS}"
+                "/recoverableItems?type=AppBackend&recoverableByMe=true"
+            ),
+        },
+        {
+            "Method": "Post",
+            "Uri": (
+                f"https://api.fabric.microsoft.com/v1/workspaces/{GUID_WS}"
+                f"/recoverableItems/{app_id}/recover"
+            ),
+        },
+    ]
 
 
 def test_fabric_environment_excludes_web_server_dependencies() -> None:

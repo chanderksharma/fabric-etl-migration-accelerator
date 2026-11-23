@@ -588,6 +588,76 @@ function New-RandomSecretHex {
     return ([Convert]::ToHexString($Bytes)).ToLowerInvariant()
 }
 
+function Restore-RecordedFabricAppIfRecoverable {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$WorkspaceGuid,
+
+        [Parameter(Mandatory = $true)]
+        [string]$WorkspaceName,
+
+        [Parameter(Mandatory = $true)]
+        [string]$AppDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [string]$AppName,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Token
+    )
+
+    $DeploymentsPath = Join-Path $AppDirectory 'rayfin/.deployments.json'
+    if (-not (Test-Path -LiteralPath $DeploymentsPath -PathType Leaf)) {
+        return $false
+    }
+
+    try {
+        $Registry = Get-Content -LiteralPath $DeploymentsPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        Write-Warning "Could not read Rayfin deployment registry '$DeploymentsPath': $($_.Exception.Message)"
+        return $false
+    }
+
+    $Deployment = $Registry.deployments.$WorkspaceName
+    if ($null -eq $Deployment -and -not [string]::IsNullOrWhiteSpace([string]$Registry.active)) {
+        $Deployment = $Registry.deployments.([string]$Registry.active)
+    }
+    if (
+        $null -eq $Deployment -or
+        [string]$Deployment.fabricWorkspaceId -ne $WorkspaceGuid -or
+        [string]$Deployment.itemName -cne $AppName -or
+        [string]$Deployment.fabricItemId -notmatch $GuidPattern
+    ) {
+        return $false
+    }
+
+    $RecordedId = [string]$Deployment.fabricItemId
+    $Recoverable = Invoke-FabricRequest -Method Get `
+        -Uri "$FabricApi/workspaces/$WorkspaceGuid/recoverableItems?type=AppBackend&recoverableByMe=true" `
+        -Token $Token -SkillName 'fabric-app-dev'
+    $Match = @(
+        $Recoverable.value |
+            Where-Object {
+                [string]$_.id -eq $RecordedId -and
+                [string]$_.type -eq 'AppBackend' -and
+                [string]$_.displayName -ceq $AppName
+            }
+    )
+    if ($Match.Count -eq 0) {
+        return $false
+    }
+
+    Write-Host "Restoring deleted Fabric App backend '$AppName' ($RecordedId)."
+    $null = Invoke-FabricRequest -Method Post `
+        -Uri "$FabricApi/workspaces/$WorkspaceGuid/recoverableItems/$RecordedId/recover" `
+        -Token $Token -SkillName 'fabric-app-dev'
+    Write-Host 'Fabric App backend restored successfully.'
+    return $true
+}
+
 $OrderFile = Join-Path $PSScriptRoot 'deployment_order.json'
 if (-not (Test-Path -LiteralPath $OrderFile -PathType Leaf)) {
     throw "Missing deployment manifest: $OrderFile"
@@ -700,9 +770,20 @@ try {
             -Uri "$FabricApi/workspaces/$WsId/environments/$($Environment.id)/staging/sparkcompute?beta=false" `
             -Token $Token -SkillName 'spark-cli' -Body $SparkComputeBody
 
-        $StagedLibs = Invoke-FabricRequest -Method Get `
-            -Uri "$FabricApi/workspaces/$WsId/environments/$($Environment.id)/staging/libraries" `
-            -Token $Token -SkillName 'spark-cli'
+        try {
+            $StagedLibs = Invoke-FabricRequest -Method Get `
+                -Uri "$FabricApi/workspaces/$WsId/environments/$($Environment.id)/staging/libraries" `
+                -Token $Token -SkillName 'spark-cli'
+        }
+        catch {
+            if ($_.Exception.Message -notmatch '"errorCode":"EnvironmentLibrariesNotFound"') {
+                throw
+            }
+            $StagedLibs = [pscustomobject]@{
+                customLibraries = [pscustomobject]@{ wheelFiles = @() }
+            }
+            Write-Host 'Environment has no staged libraries yet; uploading the requested libraries.'
+        }
         $DesiredWheelNames = @($ResolvedWheels | ForEach-Object { [IO.Path]::GetFileName($_) })
         foreach ($ExistingWheel in @($StagedLibs.customLibraries.wheelFiles)) {
             $NameStr = [string]$ExistingWheel
@@ -829,6 +910,9 @@ try {
     $FabricAppDeployed = $false
     $FabricAppId = $null
     if (-not $SkipFabricApp -and (Test-Path -LiteralPath $FabricAppDir -PathType Container)) {
+        $null = Restore-RecordedFabricAppIfRecoverable `
+            -WorkspaceGuid $WsId -WorkspaceName $Workspace.displayName `
+            -AppDirectory $FabricAppDir -AppName $FabricAppName -Token $Token
         Push-Location $FabricAppDir
         try {
             $env:FABRIC_WORKSPACE_ID = $WsId

@@ -7,7 +7,7 @@ ms.topic: reference
 
 ## Objective and scope
 
-This plan defines the incremental engineering roadmap to transform the single-package `fabric-etl-migration-accelerator` monolith into a modular, portable, and pluggable multi-package architecture with strict separation of duties. It aligns with [Figure ARCH-02](../Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png), [Pluggable Architecture Business Requirements](./pluggable-architecture-business-requirements.md), and [Pluggable Architecture Analysis and Target Approach](./pluggable-architecture-analysis-and-approach.md).
+This plan defines the incremental engineering roadmap to transform the single-package `fabric-etl-migration-accelerator` monolith into a modular, portable, and pluggable multi-package architecture with strict separation of duties. It aligns with the [pluggable solution architecture diagram](../Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png), [Pluggable Architecture Business Requirements](./pluggable-architecture-business-requirements.md), and [Pluggable Architecture Analysis and Target Approach](./pluggable-architecture-analysis-and-approach.md).
 
 Key engineering outcomes:
 

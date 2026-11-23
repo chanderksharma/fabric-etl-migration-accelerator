@@ -16,7 +16,7 @@ The migration platform uses a modular microkernel workspace organized into three
 | Microsoft Fabric Provider | `etl-target-fabric` | Fabric target-fit evaluator, F-SKU capacity model, Dataflow Gen2 / PySpark / Data Pipeline compilers, artifact writer, dry-run planner, and `etl-fabric` CLI |
 | Application Shell | `fabric-etl-migration-accelerator` | FastAPI loopback server, SQLite WAL `RunService`, Typer CLI (`tool`), CI dispatchers, and Windows Desktop utility |
 
-See [Figure ARCH-02](../Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png) and the [Pluggable Architecture Implementation Plan](../Planning/pluggable-architecture-implementation-plan.md) for full boundary contracts.
+See the [pluggable solution architecture diagram](../Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png) and the [Pluggable Architecture Implementation Plan](../Planning/pluggable-architecture-implementation-plan.md) for full boundary contracts.
 
 ## Adding a target platform provider
 

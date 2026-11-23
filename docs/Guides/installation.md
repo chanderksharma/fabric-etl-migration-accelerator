@@ -263,11 +263,11 @@ change the target folder (or `-FolderName ""` for workspace root),
 or `-SkipFabricApp` to deploy only the Lakehouse, Spark, and Power BI items.
 
 > [!NOTE]
-> If you clean up a workspace by deleting its items before redeploying, wait
-> one to two minutes for Fabric to release the deleted display names. If you
-> deleted the Fabric App item, remove the local
-> `apps/etl-migration-assessment-app/rayfin/.deployments.json` and `rayfin/.env`
-> files before re-running so `npx rayfin up` provisions a fresh item cleanly.
+> If a previously deployed Fabric App was soft-deleted, the installer uses the
+> matching Rayfin deployment record to restore its recoverable AppBackend and
+> child items before updating it. The workspace ID, item name, and recorded item
+> ID must all match. If the item was permanently deleted or its local deployment
+> record was removed, deploy with a new `-FabricAppName`.
 
 ### Option B: In-Fabric deployment notebook (FEMA pattern)
 

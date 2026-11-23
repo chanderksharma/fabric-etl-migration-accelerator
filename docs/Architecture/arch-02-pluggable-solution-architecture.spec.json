@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Figure ARCH-02 — Pluggable & Extensible ETL Migration Solution Architecture",
+    "title": "Pluggable & Extensible ETL Migration Solution Architecture",
     "subtitle": "Target-neutral portfolio assessment, pure canonical IR core, independent target-platform provider PyPI bundles, IDE/BI consumers, and CI/CD governance plane",
     "audience": "tech",
     "layout": "box",
