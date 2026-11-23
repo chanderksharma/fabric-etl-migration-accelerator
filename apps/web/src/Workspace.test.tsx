@@ -54,7 +54,7 @@ test.each([
     generating={false} generate={vi.fn()} request={request} onStartIntake={vi.fn()}/>);
 
   expect(await screen.findByText(new RegExp(message, "i"))).toBeInTheDocument();
-  expect(screen.queryByRole("button", {name: "Generate Notebook previews"})).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", {name: "Generate Notebook code"})).not.toBeInTheDocument();
   expect(screen.queryByRole("button", {name: "Trigger GitHub Actions"})).not.toBeInTheDocument();
 });
 
@@ -66,12 +66,12 @@ test("rechecks capabilities without exposing stale generation on return", async 
     runId="test-ui" candidates={[]} generating={false} generate={vi.fn()} request={request}
     onStartIntake={vi.fn()}/>;
   const page = render(view(true));
-  expect(await screen.findByRole("button", {name: "Generate Notebook previews"})).toBeInTheDocument();
+  expect(await screen.findByRole("button", {name: "Generate Notebook code"})).toBeInTheDocument();
 
   page.rerender(view(false));
   page.rerender(view(true));
   expect(screen.getByText("Loading target capabilities.")).toBeInTheDocument();
-  expect(screen.queryByRole("button", {name: "Generate Notebook previews"})).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", {name: "Generate Notebook code"})).not.toBeInTheDocument();
   await act(async () => rejectCatalog(new Error("network unavailable")));
   expect(await screen.findByRole("alert")).toHaveTextContent("could not be loaded");
   expect(screen.queryByRole("button", {name: "Trigger GitHub Actions"})).not.toBeInTheDocument();
@@ -88,12 +88,12 @@ test("offers only the generation kinds the provider advertises", async () => {
   render(<FabricDeploymentPage active assessment={assessment} runId="test-ui" candidates={[]}
     generating={false} generate={vi.fn()} request={request} onStartIntake={vi.fn()}/>);
 
-  expect(await screen.findByRole("button", {name: "Generate Notebook previews"}))
+  expect(await screen.findByRole("button", {name: "Generate Notebook code"}))
     .toBeInTheDocument();
   expect(screen.getByRole("link", {name: "Download Notebook package"})).toBeInTheDocument();
-  expect(screen.queryByRole("button", {name: "Generate Dataflow previews"}))
+  expect(screen.queryByRole("button", {name: "Generate Dataflow code"}))
     .not.toBeInTheDocument();
-  expect(screen.queryByRole("button", {name: "Generate Pipeline previews"}))
+  expect(screen.queryByRole("button", {name: "Generate Pipeline code"}))
     .not.toBeInTheDocument();
   expect(screen.queryByRole("link", {name: "Download Pipeline package"})).not.toBeInTheDocument();
 });
@@ -724,13 +724,13 @@ test("groups fabric deployment outputs into packages and code previews with clea
   expect(screen.getByRole("heading", {name: "1. Target platform"})).toBeInTheDocument();
   expect(await screen.findByRole("heading", {name: "2. Generate & download Fabric definitions"})).toBeInTheDocument();
   expect(screen.getByRole("heading", {name: "Download Fabric packages"})).toBeInTheDocument();
-  expect(screen.getByRole("heading", {name: "Preview generated code"})).toBeInTheDocument();
+  expect(screen.getByRole("heading", {name: "Generate and review code (not saved)"})).toBeInTheDocument();
   expect(screen.getByRole("heading", {name: "3. Select workflow & dispatch deployment"})).toBeInTheDocument();
-  expect(screen.getByText("Fabric Notebook previews (2)")).toBeInTheDocument();
+  expect(screen.getByText("Fabric Notebook generated code (2)")).toBeInTheDocument();
   expect(screen.getByText("1 deployable · 1 manual scaffold")).toBeInTheDocument();
   expect(screen.getByText("Deployable definition")).toBeInTheDocument();
   expect(screen.getByText("Scaffold / manual rework")).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Filter generated previews"), {target: {value: "scaffold"}});
+  fireEvent.change(screen.getByLabelText("Filter generated code"), {target: {value: "scaffold"}});
   expect(screen.queryByText("Deployable definition")).not.toBeInTheDocument();
   expect(screen.getByText("Scaffold / manual rework")).toBeInTheDocument();
 });

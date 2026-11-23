@@ -708,7 +708,7 @@ test("generates and displays explicit unvalidated review candidates on Fabric De
     }));
   render(<App />);
   await screen.findByRole("heading", {name: "Portfolio Migration Summary"});
-  expect(screen.queryByRole("button", { name: "Generate Notebook previews" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Generate Notebook code" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Open Fabric Deployment →" })).toBeInTheDocument();
 
   fireEvent.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Fabric Deployment" }));
@@ -716,7 +716,7 @@ test("generates and displays explicit unvalidated review candidates on Fabric De
   expect(screen.getByRole("radio", { name: /Azure Databricks/ })).toBeDisabled();
   expect(screen.getByText("Not integrated for generation")).toBeInTheDocument();
 
-  fireEvent.click(await screen.findByRole("button", { name: "Generate Notebook previews" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Generate Notebook code" }));
   expect(await screen.findByRole("heading", {
     name: "orders.yxmd: generated_unvalidated",
   })).toBeInTheDocument();
@@ -751,7 +751,7 @@ test("discards a late generation response after the analyst changes selection", 
   render(<App />);
   await screen.findByRole("heading", {name: "Portfolio Migration Summary"});
   fireEvent.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Fabric Deployment" }));
-  fireEvent.click(await screen.findByRole("button", { name: "Generate Notebook previews" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Generate Notebook code" }));
   fireEvent.click(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "New Assessment" }));
   expect(sessionStorage.getItem("accelerator-run-v6")).toBeNull();
   fireEvent.click(screen.getByRole("radio", { name: /Select folder/ }));

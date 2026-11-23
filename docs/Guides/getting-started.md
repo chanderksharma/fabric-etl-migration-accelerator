@@ -49,7 +49,7 @@ Open **`http://127.0.0.1:8050`** in your browser.
 5. Inspect the **Portfolio** dashboard:
    - A banner reads **Routing basis: static mapping**. Assessment does not generate code, so the Fabric targets, waves, effort, and capacity are the support-matrix mapping until you open **Fabric Deployment** in the next section.
    - Export estate assessment summaries as **JSON** or formula-defused **CSV**, or click **Open Fabric Deployment** to proceed to code generation.
-   - Open **Workflows** and click any workflow row to open the **six-tab workflow inspection drawer** (Summary, Canvas Graph, Source Register, Generated Code, Readiness & Diagnostics, and Fabric Deployment handoff).
+   - Open **Workflows** and click any workflow row to open the **six-tab workflow inspection drawer** (Summary, Source Workflow, Fabric design, Risk assessment, Validation, and Fabric deployment handoff).
    - Switch to **Technical Details** for filterable, paginated tool and endpoint registers, and **Capacity Sizing** to model Fabric F-SKU capacity.
 
 ## 3. Generate and Export Microsoft Fabric Artifacts
@@ -57,7 +57,7 @@ Open **`http://127.0.0.1:8050`** in your browser.
 Open the **Fabric Deployment** tab in the sidebar (or click **Continue to Fabric Deployment** from a workflow drawer). Opening it first confirms each Fabric route with the compiler, once per run. Return to **Portfolio** afterwards and the figures read **compiler-confirmed Fabric fit**. Some workflows change target or wave, and capacity is recalculated. Then:
 
 - Select the target platform (**Microsoft Fabric** is ready; **Databricks**, **Azure Synapse**, and **Snowflake** appear as fail-closed roadmap placeholders).
-- Generate **Dataflow Gen2** (`mashup.pq` + `queryMetadata.json`), **Fabric Notebook** (`.ipynb`), and **Data Pipeline** (`pipeline-content.json`) previews, or download target/workflow ZIP packages.
+- Click **Generate Notebook code**, **Generate Dataflow code**, or **Generate Pipeline code** to compile **Dataflow Gen2** (`mashup.pq` + `queryMetadata.json`), **Fabric Notebook** (`.ipynb`), or **Data Pipeline** (`pipeline-content.json`) definitions now and review them on the page. Nothing is saved to the shared artifacts folder. You can also download target/workflow ZIP packages.
 - Select ready workflows, run dry-run validation, and dispatch GitHub Actions or GitLab CI workflows.
 
 Equivalent CLI workflow:

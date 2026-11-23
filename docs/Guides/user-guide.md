@@ -95,12 +95,12 @@ The remaining steps apply to the existing Alteryx and Informatica Fabric workspa
 
    Portfolio assessment is static: it never generates code. Until you open **Fabric Deployment**, the Fabric target, wave, and remaining effort come from the support matrix, and a banner on **Portfolio**, **Workflows**, **Migration Plan**, and **Capacity Planning** reads **Routing basis: static mapping**. Opening **Fabric Deployment** asks the compilers to confirm each route. Those figures then update and the banner reads **compiler-confirmed Fabric fit**. Complexity, tool counts, and findings do not change. Expect the confirmed view to be stricter. For the synthetic sample estate, a workflow the support matrix maps to Dataflow Gen2 can be downgraded to **Manual rework**.
 2. Open **Workflows** and select any workflow row to open its six-tab inspection drawer:
-   * Summary tab showing complexity score, migration wave, residual effort estimate, and recommendation rationale
-   * Canvas Graph tab showing the visual DAG reconstructed from redacted node and edge evidence
-   * Source Register tab listing the tool or operation inventory, data endpoints, and dependencies
-   * Generated Code tab previewing compiled Power Query M (`mashup.pq`), PySpark notebook cells, or Data Pipeline JSON, or explicit scaffold diagnostics when compilation is blocked
-   * Readiness & Diagnostics tab highlighting missing runtime bindings (`source_paths`, `transform_bindings`, `destination`), unsupported tools, and the semantic parity checklist
-   * Fabric Deployment tab showing readiness metadata, workflow bundle download, and a **Continue to Fabric Deployment** handoff button that opens the dedicated deployment tab with that workflow preselected
+   * **Summary** tab showing complexity score, recommended target, remaining effort, source metadata, and graph evidence
+   * **Source Workflow** tab showing the source graph, tool mapping, dependency references, and material workflow components
+   * **Fabric design** tab showing the recommendation rationale, target architecture interpretation, supporting components, and implementation approach
+   * **Risk assessment** tab showing static review priorities, unmapped tools, and priority findings
+   * **Validation** tab listing functional parity, operational acceptance, and cutover checklists
+   * **Fabric deployment** tab showing readiness metadata, workflow bundle download, and a **Continue to Fabric Deployment** handoff button that opens the dedicated deployment tab with that workflow preselected. The drawer does not preview generated code; generate and inspect code on the **Fabric Deployment** page.
 3. Use **Technical Details** to search across full tool, endpoint, and dependency registers and export formula-safe CSV files.
 
 ### Step 3: Model Fabric capacity
@@ -115,7 +115,7 @@ Assessment exports (`GET /api/runs/{run_id}/export`) keep their file formats and
 
 `tool assess` and `etl-assess` are static. The Fabric-native notebook confirms routing during its run.
 
-1. Open the **Fabric Deployment** tab in the sidebar, verify **Microsoft Fabric** is selected in **Target Platform** (roadmap placeholders for Azure Databricks, Azure Synapse Analytics, and Snowflake are shown as disabled), and generate Fabric definitions (`Dataflow Gen2`, `Fabric Notebook`, `Data Pipeline`), inspect filterable code/scaffold previews, or download target/workflow ZIP packages. You can also generate definitions via CLI:
+1. Open the **Fabric Deployment** tab in the sidebar, verify **Microsoft Fabric** is selected in **Target Platform** (roadmap placeholders for Azure Databricks, Azure Synapse Analytics, and Snowflake are shown as disabled), and click **Generate Notebook code**, **Generate Dataflow code**, or **Generate Pipeline code** (`Fabric Notebook`, `Dataflow Gen2`, `Data Pipeline`) to compile the definitions and review the filterable code and scaffold results on the page, or download target/workflow ZIP packages. Generating and downloading compile the workflows now but save nothing to the shared artifacts folder. **Trigger GitHub Actions** and **Trigger GitLab CI** save the files there unless **Isolate local deployment planning** is ticked, and the CLI always does. You can also generate definitions via CLI:
 
    ```powershell
    uv run tool generate <completed-run-id> --target all --output generated-fabric-workflows

@@ -18,6 +18,12 @@ Generation status: `native_ready`
 | `dataflow-mashup.pq` | Power Query M transformations. |
 | `dataflow-queryMetadata.json` | Dataflow queries, groups, loads, and connections. |
 | `dataflow.platform.json` | Dataflow Fabric item metadata. |
+| `notebook-content.ipynb` | Documented Fabric PySpark notebook. |
+| `notebook-create-item.json` | Fabric REST create-item request for the Notebook. |
+| `notebook-manifest.json` | Generated candidate status, bindings, and diagnostics. |
+| `notebook.platform.json` | Notebook Fabric item metadata. |
+| `pipeline-diagnostics.json` | Compiler blockers that require implementation. |
+| `pipeline-manifest.json` | Generated candidate status, bindings, and diagnostics. |
 
 ## Manual deployment
 
@@ -56,6 +62,13 @@ az rest --method post `
   --url "https://api.fabric.microsoft.com/v1/workspaces/$WorkspaceId/items" `
   --headers "Content-Type=application/json" `
   --body "@dataflow-create-item.json"
+
+# Create the item described by notebook-create-item.json
+az rest --method post `
+  --resource "https://api.fabric.microsoft.com" `
+  --url "https://api.fabric.microsoft.com/v1/workspaces/$WorkspaceId/items" `
+  --headers "Content-Type=application/json" `
+  --body "@notebook-create-item.json"
 
 ```
 

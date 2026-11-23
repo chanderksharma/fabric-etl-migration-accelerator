@@ -212,15 +212,16 @@ export function FabricDeploymentPage({
             <div>
               <h2>2. Generate &amp; download Fabric definitions</h2>
               <p>
-                Previews are unbound and unvalidated; nothing is executed or deployed until you
-                explicitly dispatch.
+                Generating compiles your workflows now. Definitions are unbound and unvalidated,
+                nothing here is saved to the shared artifacts folder, and nothing is executed or
+                deployed until you explicitly dispatch.
               </p>
             </div>
           </div>
           <div className="outputs-grid">
             <div className="output-group">
-              <h3>Preview generated code</h3>
-              <p>Compile definitions and inspect diagnostics, required bindings, and generated code.</p>
+              <h3>Generate and review code (not saved)</h3>
+              <p>Compiles the workflows now and shows diagnostics, required bindings, and the generated code.</p>
               <div className="deploy-actions">
                 {offers("notebook") && (
                   <button
@@ -228,7 +229,7 @@ export function FabricDeploymentPage({
                     disabled={generating}
                     onClick={() => void generate("notebook")}
                   >
-                    Generate Notebook previews
+                    Generate Notebook code
                   </button>
                 )}
                 {offers("dataflow") && (
@@ -237,7 +238,7 @@ export function FabricDeploymentPage({
                     disabled={generating}
                     onClick={() => void generate("dataflow")}
                   >
-                    Generate Dataflow previews
+                    Generate Dataflow code
                   </button>
                 )}
                 {offers("pipeline") && (
@@ -246,14 +247,14 @@ export function FabricDeploymentPage({
                     disabled={generating}
                     onClick={() => void generate("pipeline")}
                   >
-                    Generate Pipeline previews
+                    Generate Pipeline code
                   </button>
                 )}
               </div>
             </div>
             <div className="output-group">
               <h3>Download Fabric packages</h3>
-              <p>Build and download a ZIP of generated artifacts for each Fabric item type.</p>
+              <p>Generates and downloads a ZIP of artifacts for each Fabric item type. Nothing is saved to the shared artifacts folder.</p>
               <div className="deploy-actions">
                 {offers("notebook") && (
                   <a className="secondary-button" href={`/api/runs/${runId}/candidates?target=notebook`}>
@@ -276,7 +277,7 @@ export function FabricDeploymentPage({
 
           {generating && (
             <p className="output-status" role="status">
-              Generating Fabric definitions for preview…
+              Generating and compiling Fabric definitions…
             </p>
           )}
 
@@ -284,7 +285,7 @@ export function FabricDeploymentPage({
             <div className="outputs-preview-list">
               <div className="outputs-preview-header">
                 <strong>
-                  {targetNames.join(" / ")} previews ({candidates.length})
+                  {targetNames.join(" / ")} generated code ({candidates.length})
                 </strong>
                 <div className="deploy-actions">
                   <span>
@@ -292,7 +293,7 @@ export function FabricDeploymentPage({
                     {scaffoldCount === 1 ? "" : "s"}
                   </span>
                   <select
-                    aria-label="Filter generated previews"
+                    aria-label="Filter generated code"
                     value={previewFilter}
                     onChange={(event) =>
                       setPreviewFilter(event.target.value as "all" | "deployable" | "scaffold")
@@ -313,7 +314,7 @@ export function FabricDeploymentPage({
                       : "Fabric Notebook";
                 const validationSummary =
                   candidate.validation_state === "generated_unvalidated"
-                    ? "Unvalidated preview (bind sources and test parity before deploy)"
+                    ? "Unvalidated definition (bind sources and test parity before deploy)"
                     : candidate.validation_state === "scaffold_only" ||
                         candidate.validation_state === "scaffold"
                       ? "Scaffold only (manual redesign required)"
@@ -346,7 +347,7 @@ export function FabricDeploymentPage({
                     </p>
                     {candidate.artifact_path && (
                       <p>
-                        Download folder: <code>{candidate.artifact_path}</code>
+                        Folder in downloaded package: <code>{candidate.artifact_path}</code>
                       </p>
                     )}
                     {candidate.diagnostics.map((value) => (

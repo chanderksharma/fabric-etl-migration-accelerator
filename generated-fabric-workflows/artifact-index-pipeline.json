@@ -1,5 +1,5 @@
 {
-  "run_id": "0b82203552fb4b55872b1fc44be8f1f3",
+  "run_id": "94a13b81d77f499aadce5212cace4b23",
   "target": "pipeline",
   "artifact_count": 15,
   "generated_count": 0,
@@ -7,12 +7,12 @@
   "artifacts": [
     {
       "position": 0,
-      "workflow": "alteryx-workflows\\01_low_clean_orders.yxmd",
+      "workflow": "01_low_clean_orders.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/01_low_clean_orders",
+      "path": "01_low_clean_orders",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -20,12 +20,12 @@
     },
     {
       "position": 1,
-      "workflow": "alteryx-workflows\\02_low_west_sample.yxmd",
+      "workflow": "02_low_west_sample.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/02_low_west_sample",
+      "path": "02_low_west_sample",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -33,12 +33,12 @@
     },
     {
       "position": 2,
-      "workflow": "alteryx-workflows\\03_low_unique_customers.yxmd",
+      "workflow": "03_low_unique_customers.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/03_low_unique_customers",
+      "path": "03_low_unique_customers",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -46,12 +46,12 @@
     },
     {
       "position": 3,
-      "workflow": "alteryx-workflows\\04_low_parse_sku_dates.yxmd",
+      "workflow": "04_low_parse_sku_dates.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/04_low_parse_sku_dates",
+      "path": "04_low_parse_sku_dates",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -59,12 +59,12 @@
     },
     {
       "position": 4,
-      "workflow": "alteryx-workflows\\05_high_spend_by_tier.yxmd",
+      "workflow": "05_high_spend_by_tier.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/05_high_spend_by_tier",
+      "path": "05_high_spend_by_tier",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -72,12 +72,12 @@
     },
     {
       "position": 5,
-      "workflow": "alteryx-workflows\\06_high_channel_crosstab.yxmd",
+      "workflow": "06_high_channel_crosstab.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/06_high_channel_crosstab",
+      "path": "06_high_channel_crosstab",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -85,12 +85,12 @@
     },
     {
       "position": 6,
-      "workflow": "alteryx-workflows\\07_high_target_variance.yxmd",
+      "workflow": "07_high_target_variance.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/07_high_target_variance",
+      "path": "07_high_target_variance",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -98,12 +98,12 @@
     },
     {
       "position": 7,
-      "workflow": "alteryx-workflows\\08_very_high_customer_attainment.yxmd",
+      "workflow": "08_very_high_customer_attainment.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/08_very_high_customer_attainment",
+      "path": "08_very_high_customer_attainment",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -111,12 +111,12 @@
     },
     {
       "position": 8,
-      "workflow": "alteryx-workflows\\09_very_high_batch_reconcile.yxmd",
+      "workflow": "09_very_high_batch_reconcile.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/09_very_high_batch_reconcile",
+      "path": "09_very_high_batch_reconcile",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -124,12 +124,12 @@
     },
     {
       "position": 9,
-      "workflow": "alteryx-workflows\\10_very_high_sales_pipeline.yxmd",
+      "workflow": "10_very_high_sales_pipeline.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/10_very_high_sales_pipeline",
+      "path": "10_very_high_sales_pipeline",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -137,12 +137,12 @@
     },
     {
       "position": 10,
-      "workflow": "alteryx-workflows\\Broadridge_OCEND_Fabric_Reconstruction.yxmd",
+      "workflow": "Broadridge_OCEND_Fabric_Reconstruction.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/Broadridge_OCEND_Fabric_Reconstruction",
+      "path": "Broadridge_OCEND_Fabric_Reconstruction",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -150,12 +150,12 @@
     },
     {
       "position": 11,
-      "workflow": "alteryx-workflows\\my_alteryx-workflow.yxmd",
+      "workflow": "my_alteryx-workflow.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/my_alteryx-workflow",
+      "path": "my_alteryx-workflow",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -163,12 +163,12 @@
     },
     {
       "position": 12,
-      "workflow": "alteryx-workflows\\sample_alteryx_workflow.yxmd",
+      "workflow": "sample_alteryx_workflow.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/sample_alteryx_workflow",
+      "path": "sample_alteryx_workflow",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -176,12 +176,12 @@
     },
     {
       "position": 13,
-      "workflow": "alteryx-workflows\\sample_container_sequence.yxmd",
+      "workflow": "sample_container_sequence.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/sample_container_sequence",
+      "path": "sample_container_sequence",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
@@ -189,12 +189,12 @@
     },
     {
       "position": 14,
-      "workflow": "alteryx-workflows\\sample_merge_append_joins.yxmd",
+      "workflow": "sample_merge_append_joins.yxmd",
       "target": "pipeline",
       "state": "scaffold",
       "deployable_definition": false,
       "runtime_ready": false,
-      "path": "alteryx-workflows/sample_merge_append_joins",
+      "path": "sample_merge_append_joins",
       "files": [
         "pipeline-diagnostics.json",
         "pipeline-manifest.json"
