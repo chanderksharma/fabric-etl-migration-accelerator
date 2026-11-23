@@ -140,9 +140,35 @@ export function DeploymentPage({
     provider === "github"
       ? configuration?.githubConfigured
       : configuration?.gitlabConfigured;
+  const providerName = provider === "github" ? "GitHub Actions" : "GitLab CI";
   const fitConfirmed = Boolean(
     selectedRun && selectedRun.routingBasis !== "static_mapping",
   );
+  const previewRequirements = [
+    {
+      ready: fitConfirmed,
+      label: "Compiler-confirmed Fabric fit",
+      action: "Use Confirm Fabric fit above.",
+    },
+    {
+      ready: providerConfigured === true,
+      label: `${providerName} server-side secrets`,
+      action: provider === "github"
+        ? "Configure GITHUB_TOKEN and GITHUB_ALLOWED_REPOSITORIES."
+        : "Configure GITLAB_TOKEN and GITLAB_ALLOWED_PROJECTS.",
+    },
+    {
+      ready: validSelected.size > 0,
+      label: "At least one ready workflow selected",
+      action: "Select a workflow in Ready workflows.",
+    },
+    {
+      ready: Boolean(repositoryUrl.trim()),
+      label: "Repository or project URL entered",
+      action: "Enter the approved repository URL under CI/CD target.",
+    },
+  ];
+  const previewReady = previewRequirements.every((requirement) => requirement.ready);
 
   const clearApproval = () => {
     setPreview(undefined);
@@ -257,40 +283,40 @@ export function DeploymentPage({
             The app validates an existing CI definition and sends one dispatch per confirmed workflow. It never accepts provider tokens in the browser or calls Fabric item deployment APIs directly.
           </p>
         </div>
+      </div>
 
-        <div className="rounded-xl border bg-card p-5" role="note">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <strong>
-                Routing basis: {fitConfirmed
-                  ? "compiler-confirmed Fabric fit"
-                  : "static mapping"}.
-              </strong>
-              <p className="mt-1 text-200 text-muted-foreground">
-                {fitConfirmed
-                  ? "This run can proceed to manifest validation. Generated artifacts must already exist in the selected repository and ref."
-                  : "Confirm Fabric fit before dispatch. This runs the compilers in a separate notebook job and stores a new confirmed run; it does not generate repository artifacts."}
+      <div className="rounded-xl border bg-card p-5" role="note">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <strong>
+              Routing basis: {fitConfirmed
+                ? "compiler-confirmed Fabric fit"
+                : "static mapping"}.
+            </strong>
+            <p className="mt-1 text-200 text-muted-foreground">
+              {fitConfirmed
+                ? "This run can proceed to manifest validation. Generated artifacts must already exist in the selected repository and ref."
+                : "Confirm Fabric fit before dispatch. This runs the compilers in a separate notebook job and stores a new confirmed run; it does not generate repository artifacts."}
+            </p>
+            {fitStatus && (
+              <p className="mt-2 text-200">
+                Fabric fit status: <strong>{fitStatus}</strong>
               </p>
-              {fitStatus && (
-                <p className="mt-2 text-200">
-                  Fabric fit status: <strong>{fitStatus}</strong>
-                </p>
-              )}
-            </div>
-            {!fitConfirmed && (
-              <button
-                className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-300 font-semibold text-on-brand disabled:cursor-not-allowed disabled:opacity-50"
-                type="button"
-                disabled={isStartingFit || Boolean(fitJobInstanceId && !["Completed", "Failed", "Cancelled", "Deduped"].includes(fitStatus))}
-                onClick={() => void confirmFabricFit()}
-              >
-                {isStartingFit || (fitJobInstanceId && !["Completed", "Failed", "Cancelled", "Deduped"].includes(fitStatus))
-                  ? <RefreshCw className="icon-size-200 animate-spin" />
-                  : <ShieldCheck className="icon-size-200" />}
-                Confirm Fabric fit
-              </button>
             )}
           </div>
+          {!fitConfirmed && (
+            <button
+              className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-300 font-semibold text-on-brand disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              disabled={isStartingFit || Boolean(fitJobInstanceId && !["Completed", "Failed", "Cancelled", "Deduped"].includes(fitStatus))}
+              onClick={() => void confirmFabricFit()}
+            >
+              {isStartingFit || (fitJobInstanceId && !["Completed", "Failed", "Cancelled", "Deduped"].includes(fitStatus))
+                ? <RefreshCw className="icon-size-200 animate-spin" />
+                : <ShieldCheck className="icon-size-200" />}
+              Confirm Fabric fit
+            </button>
+          )}
         </div>
       </div>
 
@@ -418,12 +444,31 @@ export function DeploymentPage({
           <button
             className="inline-flex items-center gap-2 rounded-lg border bg-background px-4 py-2 text-300 font-semibold hover:bg-hover focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
-            disabled={!fitConfirmed || isPreviewing || validSelected.size === 0 || !repositoryUrl || !providerConfigured}
+            disabled={!previewReady || isPreviewing}
             onClick={() => void previewManifest()}
           >
             {isPreviewing ? <LoaderCircle className="icon-size-200 animate-spin" /> : <ShieldCheck className="icon-size-200" />}
             Preview manifest
           </button>
+        </div>
+
+        <div className="mt-5 grid gap-2 md:grid-cols-2" aria-label="Manifest prerequisites">
+          {previewRequirements.map((requirement) => (
+            <div
+              className={`flex items-start gap-2 rounded-lg border p-3 text-200 ${
+                requirement.ready ? "text-success" : "text-muted-foreground"
+              }`}
+              key={requirement.label}
+            >
+              {requirement.ready
+                ? <CheckCircle2 className="icon-size-200 shrink-0" />
+                : <XCircle className="icon-size-200 shrink-0" />}
+              <span>
+                <strong>{requirement.label}</strong>
+                {!requirement.ready && <span className="block">{requirement.action}</span>}
+              </span>
+            </div>
+          ))}
         </div>
 
         {preview && (
@@ -452,17 +497,29 @@ export function DeploymentPage({
               <input className="mt-1" type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
               <span>I reviewed the provider, ref, conflict behavior, workflow selections, artifact paths, and targets above.</span>
             </label>
-            <button
-              className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-3 text-300 font-semibold text-on-brand focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              type="button"
-              disabled={!confirmed || isDispatching}
-              onClick={() => void dispatch()}
-            >
-              {isDispatching ? <LoaderCircle className="icon-size-200 animate-spin" /> : <Rocket className="icon-size-200" />}
-              Confirm and dispatch
-            </button>
           </div>
         )}
+
+        <div className="mt-5 flex flex-wrap items-center gap-3 rounded-lg border p-4">
+          <button
+            className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-3 text-300 font-semibold text-on-brand focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            disabled={!preview || !confirmed || isDispatching}
+            onClick={() => void dispatch()}
+          >
+            {isDispatching
+              ? <LoaderCircle className="icon-size-200 animate-spin" />
+              : <Rocket className="icon-size-200" />}
+            Trigger {providerName}
+          </button>
+          <p className="text-200 text-muted-foreground">
+            {!preview
+              ? "Available after all prerequisites pass and Preview manifest succeeds."
+              : !confirmed
+                ? "Review the manifest and select the confirmation checkbox."
+                : `Ready to trigger ${providerName}.`}
+          </p>
+        </div>
 
         {(feedback || preselectionNotice) && <p className="mt-4 text-200" role="status">{feedback || preselectionNotice}</p>}
         {result && (
