@@ -144,12 +144,19 @@ connector, and server-side Functions.
 
 The analyst views include a leadership decision brief and readiness scorecard,
 searchable workflow register, workflow-level source, design, risk, validation,
-and deployment tabs (with one-click deployment preselection), migration wave
+and CI/CD dispatch tabs (with one-click workflow preselection), migration wave
 gates and rationale, technical evidence registers, and an interactive
 capacity-planning page using persisted static workflow profiles (`model v3.1.0`)
 with fallback heuristics when older runs lack profile rows. Calibrate capacity
 estimates against measured pilot evidence before making a capacity or cost
 commitment.
+
+Fabric notebook assessment is static by default and persists
+`RoutingBasis = static_mapping`, the assessed OneLake input path, and deterministic
+remaining effort. **CI/CD dispatch** provides a separate **Confirm Fabric fit**
+action, which reruns the notebook with compiler routing and persists a new
+`compiler_confirmed` run. It does not generate repository artifacts. Generate
+and commit `generated-fabric-workflows` before dispatch.
 
 Before deploying, confirm that the Fabric Apps workload, Semantic Model Execute
 Queries API, and external OneLake access tenant settings are enabled. The app
@@ -226,7 +233,15 @@ owner also needs access to the target Lakehouse and notebook.
 The intake flow accepts `.yxmd`, `.yxmc`, `.yxwz`, `.yxzp`, `.xml`, `.json`,
 and `.zip` files up to 3 MiB each. Files are staged under
 `Files/app-intake/<run-folder>` before the app starts the assessment notebook
-with persistence enabled.
+with persistence enabled. The app enforces one nonarchive source family per
+batch, caps a batch at 100 files and 100 MiB, skips duplicate content, shows the
+staged scope for confirmation, and can request cancellation of an active
+notebook job.
+
+Portfolio, workflow, migration, capacity, and technical pages provide
+formula-safe downloads. Capacity assumptions and per-workflow overrides are
+stored in the current browser by selected assessment run; they are not shared
+Fabric metadata.
 
 ## One-step FEMA Fabric workspace deployment
 

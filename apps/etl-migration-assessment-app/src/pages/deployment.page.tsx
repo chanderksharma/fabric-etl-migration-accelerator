@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ExternalLink, LoaderCircle, Rocket, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, ExternalLink, LoaderCircle, RefreshCw, Rocket, ShieldCheck, XCircle } from "lucide-react";
 
+import { useAssessmentRunContext } from "@/hooks/assessment-run.context";
 import { useSemanticModelQuery } from "@/hooks/use-semantic-model-query";
 import { getRayfinClient } from "@/lib/rayfin-client";
 import { toDataTable } from "@/lib/to-data-table";
@@ -28,6 +29,10 @@ export function DeploymentPage({
 }: {
   preselectedWorkflowPath?: string;
 }) {
+  const { activeRunId, runs, refreshRuns } = useAssessmentRunContext();
+  const selectedRun = activeRunId
+    ? runs.find((run) => run.runId === activeRunId)
+    : runs[0];
   const { data, isLoading, error: queryError } = useSemanticModelQuery(workflows.register);
   const [provider, setProvider] = useState<DeploymentProvider>("github");
   const [repositoryUrl, setRepositoryUrl] = useState("");
@@ -44,6 +49,43 @@ export function DeploymentPage({
   const [isDispatching, setIsDispatching] = useState(false);
   const [configuration, setConfiguration] = useState<DeploymentConfiguration>();
   const [configurationError, setConfigurationError] = useState("");
+  const [fitJobInstanceId, setFitJobInstanceId] = useState("");
+  const [fitStatus, setFitStatus] = useState("");
+  const [isStartingFit, setIsStartingFit] = useState(false);
+
+  useEffect(() => {
+    if (!fitJobInstanceId || ["Completed", "Failed", "Cancelled", "Deduped"].includes(fitStatus)) {
+      return;
+    }
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const status = await getRayfinClient().functions.getAssessmentStatus.invoke(
+          { jobInstanceId: fitJobInstanceId },
+          { timeoutMs: 120_000 },
+        );
+        if (cancelled) return;
+        setFitStatus(status.status);
+        if (status.status === "Completed") {
+          await refreshRuns({ selectLatest: true });
+        } else if (status.status === "Failed" || status.status === "Cancelled") {
+          setFeedback(formatFailureReason(status.failureReason) || `Fabric fit ${status.status.toLowerCase()}.`);
+        } else {
+          timer = setTimeout(poll, 5_000);
+        }
+      } catch (reason) {
+        if (!cancelled) {
+          setFeedback(reason instanceof Error ? reason.message : String(reason));
+        }
+      }
+    };
+    timer = setTimeout(poll, 3_000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [fitJobInstanceId, fitStatus, refreshRuns]);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,6 +140,9 @@ export function DeploymentPage({
     provider === "github"
       ? configuration?.githubConfigured
       : configuration?.gitlabConfigured;
+  const fitConfirmed = Boolean(
+    selectedRun && selectedRun.routingBasis !== "static_mapping",
+  );
 
   const clearApproval = () => {
     setPreview(undefined);
@@ -177,10 +222,32 @@ export function DeploymentPage({
     }
   };
 
+  const confirmFabricFit = async () => {
+    if (!selectedRun?.inputPath) {
+      setFeedback("This assessment run does not retain an input path. Run a new static assessment first.");
+      return;
+    }
+    setFeedback("");
+    setIsStartingFit(true);
+    try {
+      const result = await getRayfinClient().functions.startFabricFit.invoke(
+        { inputPath: selectedRun.inputPath },
+        { timeoutMs: 120_000 },
+      );
+      setFitJobInstanceId(result.jobInstanceId);
+      setFitStatus("Submitted");
+      setFeedback("Compiler-confirmed Fabric fit submitted. Dispatch remains disabled until it completes.");
+    } catch (reason) {
+      setFeedback(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setIsStartingFit(false);
+    }
+  };
+
   return (
     <PageFrame
-      title="Fabric deployment"
-      subtitle="Validate and dispatch selected generated definitions through existing GitHub Actions or GitLab CI controls."
+      title="CI/CD dispatch"
+      subtitle="Dispatch existing generated-fabric-workflows definitions through approved GitHub Actions or GitLab CI controls."
     >
       <div className="flex items-start gap-3 rounded-xl border border-brand bg-card p-4">
         <ShieldCheck className="icon-size-300 shrink-0 text-brand-foreground" aria-hidden="true" />
@@ -190,11 +257,46 @@ export function DeploymentPage({
             The app validates an existing CI definition and sends one dispatch per confirmed workflow. It never accepts provider tokens in the browser or calls Fabric item deployment APIs directly.
           </p>
         </div>
+
+        <div className="rounded-xl border bg-card p-5" role="note">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <strong>
+                Routing basis: {fitConfirmed
+                  ? "compiler-confirmed Fabric fit"
+                  : "static mapping"}.
+              </strong>
+              <p className="mt-1 text-200 text-muted-foreground">
+                {fitConfirmed
+                  ? "This run can proceed to manifest validation. Generated artifacts must already exist in the selected repository and ref."
+                  : "Confirm Fabric fit before dispatch. This runs the compilers in a separate notebook job and stores a new confirmed run; it does not generate repository artifacts."}
+              </p>
+              {fitStatus && (
+                <p className="mt-2 text-200">
+                  Fabric fit status: <strong>{fitStatus}</strong>
+                </p>
+              )}
+            </div>
+            {!fitConfirmed && (
+              <button
+                className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-300 font-semibold text-on-brand disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                disabled={isStartingFit || Boolean(fitJobInstanceId && !["Completed", "Failed", "Cancelled", "Deduped"].includes(fitStatus))}
+                onClick={() => void confirmFabricFit()}
+              >
+                {isStartingFit || (fitJobInstanceId && !["Completed", "Failed", "Cancelled", "Deduped"].includes(fitStatus))
+                  ? <RefreshCw className="icon-size-200 animate-spin" />
+                  : <ShieldCheck className="icon-size-200" />}
+                Confirm Fabric fit
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-(--grid-gap) xl:grid-cols-5">
         <section className="space-y-5 rounded-xl border bg-card p-6 shadow-container-2 xl:col-span-2">
-          <h2 className="font-visual-title text-visual-title font-semibold">Deployment target</h2>
+          <h2 className="font-visual-title text-visual-title font-semibold">CI/CD target</h2>
           <label className="block text-200 font-semibold" htmlFor="deployment-provider">
             CI/CD provider
           </label>
@@ -272,7 +374,7 @@ export function DeploymentPage({
           <div className="flex items-center justify-between gap-4">
             <div>
               <h2 className="font-visual-title text-visual-title font-semibold">Ready workflows</h2>
-              <p className="mt-1 text-200 text-muted-foreground">Select up to ten workflows from the latest completed run.</p>
+              <p className="mt-1 text-200 text-muted-foreground">Select up to ten compiler-confirmed workflows whose generated artifacts already exist in the repository.</p>
             </div>
             <span className="rounded-full bg-muted px-3 py-1 text-200 font-semibold">{validSelected.size} selected</span>
           </div>
@@ -316,7 +418,7 @@ export function DeploymentPage({
           <button
             className="inline-flex items-center gap-2 rounded-lg border bg-background px-4 py-2 text-300 font-semibold hover:bg-hover focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
-            disabled={isPreviewing || validSelected.size === 0 || !repositoryUrl || !providerConfigured}
+            disabled={!fitConfirmed || isPreviewing || validSelected.size === 0 || !repositoryUrl || !providerConfigured}
             onClick={() => void previewManifest()}
           >
             {isPreviewing ? <LoaderCircle className="icon-size-200 animate-spin" /> : <ShieldCheck className="icon-size-200" />}
@@ -388,4 +490,18 @@ export function DeploymentPage({
       </section>
     </PageFrame>
   );
+}
+
+function formatFailureReason(reason: unknown): string {
+  if (!reason) return "";
+  if (typeof reason === "string") return reason;
+  if (typeof reason === "object") {
+    const record = reason as Record<string, unknown>;
+    if (typeof record.message === "string") {
+      return typeof record.errorCode === "string"
+        ? `${record.errorCode}: ${record.message}`
+        : record.message;
+    }
+  }
+  return String(reason);
 }

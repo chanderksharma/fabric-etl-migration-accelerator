@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
 
 import { DataState, Panel, Pill, SimpleTable } from "@/components/assessment-ui";
+import { SourceGraph } from "@/components/source-graph";
 import { useQueryRecords, type QueryRecord } from "@/hooks/use-query-records";
 import { formatValue } from "@/lib/format-value";
+import { downloadCsv } from "@/lib/download";
 import { waveLabel } from "@/lib/migration-wave";
 import { PageFrame } from "@/pages/portfolio.page";
 import { workflows } from "@/queries";
@@ -54,6 +56,28 @@ export function WorkflowsPage({
       subtitle="Search the live assessment register and open source, design, risk, validation, and deployment evidence."
     >
       <Panel title="Workflow assessment register" subtitle="Latest completed run, sorted by technical complexity">
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border bg-background px-3 py-2 text-200 font-semibold hover:bg-hover"
+            disabled={!filtered.length}
+            onClick={() => downloadCsv(
+              "workflows.csv",
+              [
+                "WorkflowPath",
+                "SourcePlatform",
+                "ComplexityBand",
+                "RecommendedTarget",
+                "EstimatedEffortDays",
+                "MigrationWave",
+                "RecommendationReason",
+              ],
+              filtered,
+            )}
+          >
+            Export filtered register
+          </button>
+        </div>
         <div className="mb-4 grid gap-3 md:grid-cols-3">
           <label className="text-200 font-semibold">Search
             <input className="mt-1 w-full rounded-lg border bg-background p-2.5 font-normal" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Workflow name" />
@@ -147,7 +171,7 @@ function WorkflowDialog({
     { key: "design", label: "Fabric design" },
     { key: "risk", label: "Risk assessment" },
     { key: "validation", label: "Validation" },
-    { key: "deployment", label: "Fabric deployment" },
+    { key: "deployment", label: "CI/CD dispatch" },
   ];
 
   return (
@@ -202,10 +226,10 @@ function SourceTab({ nodes, connections, dependencies, tools, isLoading, error }
   return <>
     <DataState isLoading={isLoading} error={error} />
     <Panel title="Source workflow graph" subtitle={`${nodes.length} tools · ${connections.length} connections · bounded normalized evidence`}>
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {nodes.slice(0, 12).map((node, index) => <div key={`${String(node.NodeId)}-${index}`} className="flex shrink-0 items-center gap-2"><div className="w-40 rounded-lg border bg-muted/40 p-3"><strong className="block truncate">{formatValue(node.NodeName)}</strong><span className="text-100 text-muted-foreground">#{formatValue(node.NodeId)} · {formatValue(node.SupportCategory)}</span></div>{index < Math.min(nodes.length, 12) - 1 && <ArrowRight className="icon-size-200 text-muted-foreground" />}</div>)}
-      </div>
-      {nodes.length > 12 && <p className="mt-2 text-200 text-muted-foreground">Showing the first 12 nodes. Use the register below for complete evidence.</p>}
+      {nodes.length > 0 && <SourceGraph nodes={nodes} connections={connections} />}
+      {!isLoading && !error && !nodes.length && (
+        <p className="text-200 text-muted-foreground">No source tools to draw.</p>
+      )}
     </Panel>
     <Panel title="Tool mappings"><SimpleTable records={tools} columns={[{ key: "ToolName", label: "Tool" }, { key: "ToolCount", label: "Count" }, { key: "SupportCategory", label: "Mapping" }]} />{!tools.length && <p className="text-200 text-muted-foreground">No tool mappings recorded.</p>}</Panel>
     <Panel title="Tool register"><SimpleTable records={nodes} columns={[{ key: "NodeId", label: "ID" }, { key: "NodeName", label: "Tool" }, { key: "NodeLabel", label: "Label" }, { key: "SupportCategory", label: "Support" }, { key: "Disabled", label: "Disabled" }]} /></Panel>
@@ -263,7 +287,7 @@ function DeploymentTab({
   target: string;
   onOpenDeployment?: (workflowPath: string) => void;
 }) {
-  return <><div className="rounded-lg border border-brand p-4"><strong>Dispatch-only deployment</strong><p className="mt-1 text-200 text-muted-foreground">The app validates an existing GitHub Actions or GitLab CI definition, creates a signed preview, and requires explicit confirmation. Provider credentials remain server-side.</p></div><Panel title="Deployment bundle"><dl className="grid gap-4 sm:grid-cols-3"><Brief label="Target" value={target} /><Brief label="Artifact root" value="generated-fabric-workflows" /><Brief label="Behavior" value="Fail, Skip, or Update" /></dl></Panel><button type="button" className="rounded-lg bg-brand px-4 py-3 font-semibold text-on-brand" onClick={() => onOpenDeployment?.(workflowPath)}>Open Fabric deployment</button></>;
+  return <><div className="rounded-lg border border-brand p-4"><strong>Dispatch-only CI/CD</strong><p className="mt-1 text-200 text-muted-foreground">The app validates an existing GitHub Actions or GitLab CI definition and repository artifacts, creates a signed preview, and requires explicit confirmation. Provider credentials remain server-side.</p></div><Panel title="Repository artifact contract"><dl className="grid gap-4 sm:grid-cols-3"><Brief label="Target" value={target} /><Brief label="Required root" value="generated-fabric-workflows" /><Brief label="Behavior" value="Fail, Skip, or Update" /></dl></Panel><button type="button" className="rounded-lg bg-brand px-4 py-3 font-semibold text-on-brand" onClick={() => onOpenDeployment?.(workflowPath)}>Open CI/CD dispatch</button></>;
 }
 
 function Brief({ label, value }: { label: string; value: string }) {

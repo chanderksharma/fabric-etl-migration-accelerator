@@ -15,6 +15,7 @@ export const columnMetadata: ColumnMetadataMap = {
   "[Pilot Assets]": { name: "PilotAssets", displayName: "Pilot assets", format: "#,##0" },
   "[Redesign Assets]": { name: "RedesignAssets", displayName: "Redesign assets", format: "#,##0" },
   "[Manual Review Assets]": { name: "ManualReviewAssets", displayName: "Manual review", format: "#,##0" },
+  "[Estimated Remaining Effort]": { name: "EstimatedRemainingEffort", displayName: "Remaining effort", format: "#,##0.0" },
   "[Average Complexity Score]": { name: "AverageComplexityScore", displayName: "Average complexity", format: "#,##0.0" },
   "[Source Components]": { name: "SourceComponents", displayName: "Source components", format: "#,##0" },
   "[Connections]": { name: "Connections", displayName: "Connections", format: "#,##0" },

@@ -11,7 +11,9 @@ TOPN(
             'AssessmentRun'[WorkflowCount],
             'AssessmentRun'[FailedCount],
             'AssessmentRun'[SkippedCount],
-            'AssessmentRun'[RulesVersion]
+            'AssessmentRun'[RulesVersion],
+            'AssessmentRun'[InputPath],
+            'AssessmentRun'[RoutingBasis]
         ),
         'AssessmentRun'[Status] = "completed"
     ),

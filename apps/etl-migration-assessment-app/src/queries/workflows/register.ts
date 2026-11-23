@@ -19,6 +19,7 @@ export const columnMetadata: ColumnMetadataMap = {
   "WorkflowAssessment[RecommendedTarget]": { name: "RecommendedTarget", displayName: "Fabric target" },
   "WorkflowAssessment[MigrationWave]": { name: "MigrationWave", displayName: "Migration wave" },
   "WorkflowAssessment[RecommendationReason]": { name: "RecommendationReason", displayName: "Recommendation" },
+  "WorkflowAssessment[EstimatedEffortDays]": { name: "EstimatedEffortDays", displayName: "Remaining effort", format: "#,##0.0" },
   "WorkflowAssessment[RegistryVersion]": { name: "RegistryVersion", displayName: "Registry version" },
   "[Assets]": { name: "Assets", displayName: "Assets", format: "#,##0" },
 };

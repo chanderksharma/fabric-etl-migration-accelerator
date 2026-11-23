@@ -33,7 +33,7 @@ const navigation = [
   { key: "migration", label: "Migration plan", icon: GitPullRequestArrow },
   { key: "capacity", label: "Capacity planning", icon: Gauge },
   { key: "technical", label: "Technical evidence", icon: Wrench },
-  { key: "deployment", label: "Fabric deployment", icon: Rocket },
+  { key: "deployment", label: "CI/CD dispatch", icon: Rocket },
 ] as const;
 
 function App() {

@@ -1,11 +1,43 @@
 import { portfolio } from "@/queries";
 import { MetricCards, SemanticChart } from "@/components/semantic-visuals";
-import { Panel, Pill } from "@/components/assessment-ui";
+import { DataState, Panel, Pill } from "@/components/assessment-ui";
+import { useAssessmentRunContext } from "@/hooks/assessment-run.context";
+import { downloadJson } from "@/lib/download";
 import { useQueryRecords } from "@/hooks/use-query-records";
 
 export function PortfolioPage() {
-  const { records } = useQueryRecords(portfolio.summary);
-  const summary = records[0] ?? {};
+  const summaryQuery = useQueryRecords(portfolio.summary);
+  const { activeRunId, runs } = useAssessmentRunContext();
+  const selectedRun = activeRunId
+    ? runs.find((run) => run.runId === activeRunId)
+    : runs[0];
+  if (summaryQuery.isLoading || summaryQuery.error || !summaryQuery.records.length) {
+    return (
+      <PageFrame
+        title="Portfolio"
+        subtitle="A governed view of estate readiness, complexity, and recommended Fabric targets."
+      >
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border bg-background px-3 py-2 text-200 font-semibold hover:bg-hover"
+            onClick={() => downloadJson("portfolio-summary.json", {
+              run: selectedRun,
+              summary,
+            })}
+          >
+            Export summary JSON
+          </button>
+        </div>
+        <DataState
+          isLoading={summaryQuery.isLoading}
+          error={summaryQuery.error}
+          empty={!summaryQuery.isLoading && !summaryQuery.error && !summaryQuery.records.length}
+        />
+      </PageFrame>
+    );
+  }
+  const summary = summaryQuery.records[0];
   const assessed = Number(summary.AssessedAssets ?? 0);
   const manual = Number(summary.ManualReviewAssets ?? 0);
   const high = Number(summary.HighComplexityAssets ?? 0);
@@ -16,6 +48,22 @@ export function PortfolioPage() {
       title="Portfolio"
       subtitle="A governed view of estate readiness, complexity, and recommended Fabric targets."
     >
+      <div className="rounded-xl border bg-card p-4 text-200" role="note">
+        <strong>
+          Routing basis: {!selectedRun
+            ? "unavailable"
+            : selectedRun.routingBasis === "static_mapping"
+              ? "static mapping"
+              : "compiler-confirmed Fabric fit"}.
+        </strong>
+        <span className="ml-1 text-muted-foreground">
+          {!selectedRun
+            ? "Run metadata is still loading; target, wave, effort, and capacity must not be used for delivery yet."
+            : selectedRun.routingBasis === "static_mapping"
+            ? "Assessment did not compile code. Confirm Fabric fit from CI/CD dispatch before using target, wave, effort, or capacity for delivery."
+            : "Target, wave, effort, and capacity use compiler-confirmed routing."}
+        </span>
+      </div>
       <div className="rounded-xl border border-brand bg-card p-5 shadow-container-2">
         <p className="text-100 font-semibold uppercase tracking-widest text-brand-foreground">Leadership recommendation</p>
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
@@ -57,6 +105,7 @@ export function PortfolioPage() {
           { rawName: "[High Complexity Assets]", title: "High complexity", subtitle: "Requires focused design" },
           { rawName: "[Wave 2 Assets]", title: "Wave 2 (Pilot)", subtitle: "Validate first" },
           { rawName: "[Wave 4 Assets]", title: "Wave 4 (Redesign)", subtitle: "Manual engineering path" },
+          { rawName: "[Estimated Remaining Effort]", title: "Remaining effort", subtitle: "Deterministic person-days" },
         ]}
       />
       <div className="grid gap-(--grid-gap) xl:grid-cols-3">

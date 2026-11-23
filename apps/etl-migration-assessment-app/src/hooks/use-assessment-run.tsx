@@ -32,6 +32,12 @@ export function AssessmentRunProvider({ children }: { children: ReactNode }) {
       failedCount: Number(record.FailedCount ?? 0),
       skippedCount: Number(record.SkippedCount ?? 0),
       rulesVersion: String(record.RulesVersion ?? ""),
+      inputPath: String(record.InputPath ?? ""),
+      routingBasis: (
+        record.RoutingBasis === "static_mapping"
+          ? "static_mapping"
+          : "compiler_confirmed"
+      ) as AssessmentRunOption["routingBasis"],
     })).filter((run) => isAssessmentRunId(run.runId)),
     [records],
   );

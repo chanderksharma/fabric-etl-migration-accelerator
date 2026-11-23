@@ -4,6 +4,7 @@ import { DataState, Panel, SimpleTable, type TableColumn } from "@/components/as
 import { MetricCards, SemanticChart } from "@/components/semantic-visuals";
 import { useQueryRecords, type QueryRecord } from "@/hooks/use-query-records";
 import { PageFrame } from "@/pages/portfolio.page";
+import { downloadCsv } from "@/lib/download";
 import { portfolio, technical, workflows } from "@/queries";
 
 type EvidenceTab = "tools" | "findings" | "dependencies" | "nodes" | "connections";
@@ -57,6 +58,20 @@ export function TechnicalPage() {
         </Panel>
       </div>
       <Panel title="Technical assessment registers" subtitle="Bounded normalized evidence from the latest completed run">
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border bg-background px-3 py-2 text-200 font-semibold hover:bg-hover"
+            disabled={!filtered.length}
+            onClick={() => downloadCsv(
+              `technical-${tab}.csv`,
+              active.columns.map((column) => column.key),
+              filtered,
+            )}
+          >
+            Export current register
+          </button>
+        </div>
         <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Technical evidence registers">
           {(Object.keys(definitions) as EvidenceTab[]).map((key) => <button key={key} type="button" role="tab" aria-selected={tab === key} className={`rounded-lg px-3 py-2 text-200 font-semibold capitalize ${tab === key ? "bg-brand text-on-brand" : "border hover:bg-hover"}`} onClick={() => setTab(key)}>{key}</button>)}
         </div>

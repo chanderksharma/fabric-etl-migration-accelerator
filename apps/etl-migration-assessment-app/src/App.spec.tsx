@@ -28,6 +28,8 @@ vi.mock("@/hooks/assessment-run.context", () => ({
             failedCount: 0,
             skippedCount: 0,
             rulesVersion: "1.0.0",
+            inputPath: "app-intake/run-42",
+            routingBasis: "static_mapping",
         }],
         isLoading: false,
         revision: 0,
@@ -57,6 +59,8 @@ describe("App", () => {
     it("mounts content into the document", () => {
         render(<App />);
         expect(document.body).not.toBeEmptyDOMElement();
+        expect(screen.queryByText(/Proceed conditionally/)).not.toBeInTheDocument();
+        expect(screen.getByText("Loading live assessment data")).toBeInTheDocument();
     });
 
     it("allows users to scope the application to a retained assessment run", () => {

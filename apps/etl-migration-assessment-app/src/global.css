@@ -191,3 +191,92 @@ textarea,
 button {
   font-family: inherit;
 }
+
+@layer components {
+  .source-graph-button {
+    @apply rounded-lg border bg-background px-3 py-2 text-200 font-semibold hover:bg-hover;
+  }
+
+  .source-graph-viewport {
+    @apply relative min-h-[360px] cursor-grab overflow-auto rounded-xl border bg-muted/30 active:cursor-grabbing;
+    max-height: 520px;
+    touch-action: none;
+  }
+
+  .source-graph-viewport svg {
+    display: block;
+    min-width: 760px;
+  }
+
+  .source-graph-edge {
+    fill: none;
+    stroke: var(--color-muted-foreground);
+    stroke-width: 1.4;
+    opacity: 0.7;
+  }
+
+  .source-graph-arrow {
+    fill: var(--color-muted-foreground);
+  }
+
+  .source-graph-node {
+    cursor: pointer;
+    outline: none;
+  }
+
+  .source-graph-node rect {
+    fill: var(--color-card);
+    stroke: var(--color-border);
+    stroke-width: 1.4;
+    transition: fill 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
+  }
+
+  .source-graph-node:hover rect,
+  .source-graph-node:focus-visible rect,
+  .source-graph-node.is-selected rect {
+    fill: color-mix(in srgb, var(--color-brand) 10%, var(--color-card));
+    stroke: var(--color-brand-foreground);
+    stroke-width: 2.2;
+  }
+
+  .source-graph-node.support-dataflow rect {
+    fill: color-mix(in srgb, var(--color-brand) 7%, var(--color-card));
+  }
+
+  .source-graph-node.support-notebook rect {
+    fill: color-mix(in srgb, #7655c7 10%, var(--color-card));
+  }
+
+  .source-graph-node.support-pipeline rect {
+    fill: color-mix(in srgb, var(--color-success) 8%, var(--color-card));
+  }
+
+  .source-graph-node.support-manual rect,
+  .source-graph-node.support-unsupported rect {
+    stroke: var(--color-destructive);
+    stroke-width: 1.8;
+  }
+
+  .source-graph-node.support-neutral rect {
+    fill: var(--color-muted);
+  }
+
+  .source-graph-node.is-disabled {
+    opacity: 0.48;
+  }
+
+  .source-graph-label {
+    fill: var(--color-foreground);
+    font-family: var(--font-base);
+    font-size: 9px;
+    font-weight: 700;
+    pointer-events: none;
+  }
+
+  .source-graph-sublabel {
+    fill: var(--color-muted-foreground);
+    font-family: var(--font-base);
+    font-size: 7.5px;
+    pointer-events: none;
+  }
+}

@@ -79,4 +79,31 @@ describe("estimateCapacity", () => {
     expect(autoscaleBilled.autoscaleSparkMonthlyCuHours).toBeGreaterThan(0);
     expect(autoscaleBilled.monthlyCuHours).toBeLessThan(capacityBilled.monthlyCuHours);
   });
+
+  it("applies per-workflow operational overrides independently", () => {
+    const baseline = estimateCapacity([
+      {
+        workflowPath: "daily.yxmd",
+        recommendedTarget: "Dataflow Gen2",
+        toolCount: 5,
+        complexityScore: 9,
+      },
+      {
+        workflowPath: "hourly.yxmd",
+        recommendedTarget: "Dataflow Gen2",
+        toolCount: 5,
+        complexityScore: 9,
+        refreshIntervalMinutes: 60,
+        sourceRowsPerRun: 50_000,
+        sparkVcores: 16,
+      },
+    ]);
+
+    expect(baseline.workflows[0].refreshIntervalMinutes).toBe(1440);
+    expect(baseline.workflows[1].refreshIntervalMinutes).toBe(60);
+    expect(baseline.workflows[1].sourceRowsPerRun).toBe(50_000);
+    expect(baseline.workflows[1].sparkVcores).toBe(16);
+    expect(baseline.workflows[1].monthlyCuHours)
+      .toBeGreaterThan(baseline.workflows[0].monthlyCuHours);
+  });
 });

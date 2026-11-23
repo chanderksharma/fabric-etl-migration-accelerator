@@ -16,6 +16,7 @@ TOPN(
             'WorkflowAssessment'[RecommendedTarget],
             'WorkflowAssessment'[MigrationWave],
             'WorkflowAssessment'[RecommendationReason],
+            'WorkflowAssessment'[EstimatedEffortDays],
             'WorkflowAssessment'[RegistryVersion],
             "Assets", [Assessed Assets]
         ),

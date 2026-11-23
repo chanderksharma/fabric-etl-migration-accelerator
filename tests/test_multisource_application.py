@@ -148,10 +148,6 @@ def test_fabric_notebook_assesses_and_exports_web_app_targets(
     assert {item.path: item.model_dump() for item in baseline.assessments} == {
         item.path: item.model_dump() for item in static_result.assessments
     }, "portfolio assessment equals the static facade; neither runs a compiler"
-    # The notebook confirms routing with the compilers. The web runtime reaches the same
-    # answer through its separate Fabric evaluation stage.
-    web_result = service.ensure_fabric_fit(run.id).result
-    assert web_result is not None
     alteryx_baseline = next(item for item in baseline.assessments if item.path == "=orders.yxmd")
     assert alteryx_baseline.recommended_target == "Dataflow Gen2"
 
@@ -187,7 +183,21 @@ def test_fabric_notebook_assesses_and_exports_web_app_targets(
         def write(self) -> FakeWriter:
             return FakeWriter(list(self))
 
+        def createOrReplaceTempView(self, _name: str) -> None:
+            return None
+
+    class FakeTable:
+        def __init__(self, columns: list[str]) -> None:
+            self.columns = columns
+
+    class FakeCatalog:
+        @staticmethod
+        def tableExists(_table_name: str) -> bool:
+            return False
+
     class SparkDisplayStub:
+        catalog = FakeCatalog()
+
         def createDataFrame(
             self, rows: list[dict[str, object]], _schema: object = None
         ) -> FakeDataFrame:
@@ -195,6 +205,10 @@ def test_fabric_notebook_assesses_and_exports_web_app_targets(
 
         def sql(self, query: str) -> None:
             sql_queries.append(query)
+
+        def table(self, table_name: str) -> FakeTable:
+            rows = saved_tables.get(table_name, [])
+            return FakeTable(list(rows[0]) if rows else [])
 
     pyspark_mod = types.ModuleType("pyspark")
     pyspark_sql = types.ModuleType("pyspark.sql")
@@ -271,21 +285,22 @@ def test_fabric_notebook_assesses_and_exports_web_app_targets(
     assert dashboards == []
     expected = {
         item.path: (item.recommended_target, item.migration_wave, item.complexity_score)
-        for item in web_result.assessments
+        for item in baseline.assessments
     }
-    assert expected["=orders.yxmd"][0] == "Fabric Notebook"
+    assert expected["=orders.yxmd"][0] == "Dataflow Gen2"
     assert {
         row["path"]: (row["recommended_target"], row["migration_wave"], row["complexity_score"])
         for row in report["assessments"]
     } == expected
     assert report["workflows"] == [
         item.model_dump(mode="json", include={"display_path", "sha256"})
-        for item in web_result.workflows
+        for item in baseline.workflows
     ]
-    assert "estimated_effort_days" not in json.dumps(report)
+    assert report["routing_basis"] == "static_mapping"
+    assert all("estimated_effort_days" in row for row in report["assessments"])
     csv_report = report_path.with_suffix(".csv").read_text(encoding="utf-8-sig")
     assert "'=orders.yxmd" in csv_report
-    assert "effort" not in csv_report
+    assert "estimated_effort_days" in csv_report
 
 
 def test_run_service_generates_platform_scoped_informatica_artifacts(

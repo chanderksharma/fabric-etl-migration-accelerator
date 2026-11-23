@@ -9,6 +9,8 @@ export interface AssessmentRunOption {
   failedCount: number;
   skippedCount: number;
   rulesVersion: string;
+  inputPath: string;
+  routingBasis: "static_mapping" | "compiler_confirmed";
 }
 
 export interface RefreshAssessmentRunsOptions {

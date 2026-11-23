@@ -61,6 +61,18 @@ table AssessmentRun
 		summarizeBy: none
 		sourceColumn: RulesVersion
 
+	/// Lakehouse Files path assessed by this run; used to request an explicit Fabric-fit rerun.
+	column InputPath
+		dataType: string
+		summarizeBy: none
+		sourceColumn: InputPath
+
+	/// Whether target routing is the static support mapping or compiler-confirmed Fabric fit.
+	column RoutingBasis
+		dataType: string
+		summarizeBy: none
+		sourceColumn: RoutingBasis
+
 	/// Identifies the newest successfully completed assessment run.
 	column IsLatestCompletedRun
 		dataType: boolean

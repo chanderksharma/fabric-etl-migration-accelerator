@@ -20,8 +20,11 @@ export function IntakeRunPage() {
   const [jobInstanceId, setJobInstanceId] = useState("");
   const [jobStatus, setJobStatus] = useState("");
   const [error, setError] = useState("");
+  const [duplicateFiles, setDuplicateFiles] = useState<string[]>([]);
+  const [scopeConfirmed, setScopeConfirmed] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     if (!jobInstanceId || terminalStatuses.has(jobStatus)) {
@@ -71,19 +74,44 @@ export function IntakeRunPage() {
     setError("");
     setIsUploading(true);
     setUploadedFiles([]);
+    setDuplicateFiles([]);
+    setScopeConfirmed(false);
     setInputPath("");
     const batchFolder = `run-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
     try {
+      if (files.length > 100) {
+        throw new Error("Select no more than 100 files per assessment batch.");
+      }
+      const totalBytes = files.reduce((total, file) => total + file.size, 0);
+      if (totalBytes > 100 * 1024 * 1024) {
+        throw new Error("The assessment batch exceeds the 100 MiB staging limit.");
+      }
+      const families = new Set(
+        files.map(fileFamily).filter((family): family is string => family !== null),
+      );
+      if (families.size > 1) {
+        throw new Error("Stage one source family at a time: Alteryx, PowerCenter, or IDMC.");
+      }
+
       const results: UploadedFile[] = [];
+      const seenHashes = new Set<string>();
+      const duplicates: string[] = [];
       let stagedPath = "";
       for (const file of files) {
         if (file.size > 3 * 1024 * 1024) {
           throw new Error(`${file.name} exceeds the 3 MiB upload limit.`);
         }
+        const content = await file.arrayBuffer();
+        const digest = bytesToHex(await crypto.subtle.digest("SHA-256", content));
+        if (seenHashes.has(digest)) {
+          duplicates.push(file.name);
+          continue;
+        }
+        seenHashes.add(digest);
         const result = await getRayfinClient().functions.uploadWorkflow.invoke(
           {
             fileName: file.name,
-            contentBase64: await fileToBase64(file),
+            contentBase64: bytesToBase64(new Uint8Array(content)),
             inputFolder: batchFolder,
           },
           { timeoutMs: 250_000 },
@@ -92,11 +120,29 @@ export function IntakeRunPage() {
         results.push({ fileName: result.fileName, size: result.size });
       }
       setUploadedFiles(results);
+      setDuplicateFiles(duplicates);
       setInputPath(stagedPath);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const cancel = async () => {
+    if (!jobInstanceId) return;
+    setError("");
+    setIsCancelling(true);
+    try {
+      const result = await getRayfinClient().functions.cancelAssessment.invoke(
+        { jobInstanceId },
+        { timeoutMs: 120_000 },
+      );
+      setJobStatus(result.status);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -138,7 +184,16 @@ export function IntakeRunPage() {
             type="file"
             multiple
             accept=".yxmd,.yxmc,.yxwz,.yxzp,.xml,.json,.zip"
-            onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+            onChange={(event) => {
+              setFiles(Array.from(event.target.files ?? []));
+              setUploadedFiles([]);
+              setDuplicateFiles([]);
+              setInputPath("");
+              setScopeConfirmed(false);
+              setJobInstanceId("");
+              setJobStatus("");
+              setError("");
+            }}
           />
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
@@ -155,14 +210,42 @@ export function IntakeRunPage() {
             </span>
           </div>
           {uploadedFiles.length > 0 && (
-            <ul className="mt-5 space-y-2" aria-label="Staged files">
-              {uploadedFiles.map((file) => (
-                <li key={file.fileName} className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-200">
-                  <span>{file.fileName}</span>
-                  <span className="text-muted-foreground">{formatBytes(file.size)}</span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <div className="mt-5 rounded-lg border p-4">
+                <h3 className="font-semibold">Staged scope preview</h3>
+                <p className="mt-1 text-200 text-muted-foreground">
+                  {uploadedFiles.length} unique file{uploadedFiles.length === 1 ? "" : "s"} staged
+                  {duplicateFiles.length
+                    ? `; ${duplicateFiles.length} duplicate${duplicateFiles.length === 1 ? "" : "s"} skipped`
+                    : "; no duplicate content detected"}.
+                </p>
+                <ul className="mt-3 space-y-2" aria-label="Staged files">
+                  {uploadedFiles.map((file) => (
+                    <li key={file.fileName} className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-200">
+                      <span>{file.fileName}</span>
+                      <span className="text-muted-foreground">{formatBytes(file.size)}</span>
+                    </li>
+                  ))}
+                </ul>
+                {duplicateFiles.length > 0 && (
+                  <p className="mt-3 text-200 text-muted-foreground">
+                    Skipped duplicates: {duplicateFiles.join(", ")}
+                  </p>
+                )}
+              </div>
+              <label className="mt-4 flex items-start gap-3 rounded-lg border border-brand p-4 text-200">
+                <input
+                  className="mt-1"
+                  type="checkbox"
+                  checked={scopeConfirmed}
+                  onChange={(event) => setScopeConfirmed(event.target.checked)}
+                />
+                <span>
+                  I reviewed the staged file scope. The notebook will perform bounded discovery,
+                  fingerprint verification, and static assessment without generating code.
+                </span>
+              </label>
+            </>
           )}
         </section>
 
@@ -174,12 +257,23 @@ export function IntakeRunPage() {
           <button
             className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-3 text-300 font-semibold text-on-brand focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             type="button"
-            disabled={!inputPath || isStarting || Boolean(jobInstanceId && !terminalStatuses.has(jobStatus))}
+            disabled={!inputPath || !scopeConfirmed || isStarting || Boolean(jobInstanceId && !terminalStatuses.has(jobStatus))}
             onClick={() => void start()}
           >
             {isStarting ? <LoaderCircle className="icon-size-200 animate-spin" /> : <Play className="icon-size-200" />}
             Run assessment
           </button>
+          {jobInstanceId && !terminalStatuses.has(jobStatus) && (
+            <button
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-3 text-300 font-semibold hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              disabled={isCancelling}
+              onClick={() => void cancel()}
+            >
+              {isCancelling ? <LoaderCircle className="icon-size-200 animate-spin" /> : <XCircle className="icon-size-200" />}
+              Cancel assessment
+            </button>
+          )}
           <div className="mt-6 rounded-lg bg-muted p-4">
             <p className="text-200 text-muted-foreground">Status</p>
             <div className="mt-2 flex items-center gap-2 font-semibold">
@@ -205,14 +299,27 @@ export function IntakeRunPage() {
   );
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
+function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   const chunkSize = 32_768;
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
   }
   return btoa(binary);
+}
+
+function bytesToHex(buffer: ArrayBuffer): string {
+  return [...new Uint8Array(buffer)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function fileFamily(file: File): string | null {
+  const extension = file.name.toLowerCase().split(".").at(-1);
+  if (["yxmd", "yxmc", "yxwz", "yxzp"].includes(extension ?? "")) return "alteryx";
+  if (extension === "xml") return "powercenter";
+  if (extension === "json") return "idmc";
+  return null;
 }
 
 function formatBytes(bytes: number): string {

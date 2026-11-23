@@ -37,6 +37,14 @@ export type AppFunctionsSchema = {
     input: { inputPath: string };
     output: { jobInstanceId: string; statusUrl: string };
   };
+  startFabricFit: {
+    input: { inputPath: string };
+    output: { jobInstanceId: string; statusUrl: string };
+  };
+  cancelAssessment: {
+    input: { jobInstanceId: string };
+    output: { status: string };
+  };
   getAssessmentStatus: {
     input: { jobInstanceId: string };
     output: { status: string; startTimeUtc?: undefined | string; endTimeUtc?: undefined | string; exitValue?: undefined | string; failureReason?: unknown };

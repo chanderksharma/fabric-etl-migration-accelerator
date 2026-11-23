@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
-import { DataState, Panel, Pill, SimpleTable } from "@/components/assessment-ui";
+import { DataState, Panel, Pill } from "@/components/assessment-ui";
+import { useAssessmentRunContext } from "@/hooks/assessment-run.context";
 import { useQueryRecords } from "@/hooks/use-query-records";
 import {
   defaultCapacitySettings,
@@ -9,13 +10,37 @@ import {
   type CapacitySettings,
   type SparkBillingMode,
 } from "@/lib/capacity-estimate";
+import { downloadCsv, downloadJson } from "@/lib/download";
 import { PageFrame } from "@/pages/portfolio.page";
 import { workflows } from "@/queries";
 
+type CapacityOverrides = Record<string, {
+  refreshIntervalMinutes: number;
+  sourceRowsPerRun: number;
+  sparkVcores: number;
+}>;
+
+interface SavedCapacityScenario {
+  settings: CapacitySettings;
+  overrides: CapacityOverrides;
+}
+
 export function CapacityPage() {
+  const { activeRunId, runs, revision } = useAssessmentRunContext();
+  const runId = activeRunId ?? runs[0]?.runId ?? "latest";
+  return <CapacityPageForRun key={`${runId}:${revision}`} runId={runId} />;
+}
+
+function CapacityPageForRun({ runId }: { runId: string }) {
   const workflowQuery = useQueryRecords(workflows.register);
   const profileQuery = useQueryRecords(workflows.capacityProfiles);
-  const [settings, setSettings] = useState<CapacitySettings>(defaultCapacitySettings);
+  const storageKey = `etl-capacity-scenario:${runId}`;
+  const saved = loadCapacityScenario(storageKey);
+  const [settings, setSettings] = useState<CapacitySettings>(
+    saved?.settings ?? defaultCapacitySettings,
+  );
+  const [overrides, setOverrides] = useState<CapacityOverrides>(saved?.overrides ?? {});
+  const [savedNotice, setSavedNotice] = useState("");
 
   const profileByKey = useMemo(() => {
     const map = new Map<unknown, CapacityProfileMetrics>();
@@ -44,10 +69,11 @@ export function CapacityPage() {
           toolCount: Number(record.ToolCount ?? 0),
           complexityScore: Number(record.ComplexityScore ?? 0),
           profile: profileByKey.get(record.WorkflowKey),
+          ...overrides[String(record.WorkflowPath ?? "")],
         })),
         settings,
       ),
-    [profileByKey, settings, workflowQuery.records],
+    [overrides, profileByKey, settings, workflowQuery.records],
   );
 
   const rows = estimate.workflows.map((item) => ({
@@ -59,6 +85,9 @@ export function CapacityPage() {
     PipelineCu: item.pipelineCuSecondsPerRun,
     CuSeconds: item.cuSecondsPerRun,
     MonthlyCuHours: item.monthlyCuHours,
+    RefreshIntervalMinutes: item.refreshIntervalMinutes,
+    SourceRowsPerRun: item.sourceRowsPerRun,
+    SparkVcores: item.sparkVcores,
   }));
 
   const hasStaticProfiles = profileByKey.size > 0;
@@ -68,6 +97,56 @@ export function CapacityPage() {
       title="Capacity planning"
       subtitle="Calibrated Fabric Dataflow Gen2, Notebook, and Pipeline sizing from static workflow profiles."
     >
+      <div className="flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          className="rounded-lg border bg-background px-3 py-2 text-200 font-semibold hover:bg-hover"
+          disabled={!rows.length}
+          onClick={() => downloadCsv(
+            "capacity-estimate.csv",
+            [
+              "WorkflowPath",
+              "RecommendedTarget",
+              "Basis",
+              "RefreshIntervalMinutes",
+              "SourceRowsPerRun",
+              "SparkVcores",
+              "DataflowCu",
+              "NotebookCu",
+              "PipelineCu",
+              "CuSeconds",
+              "MonthlyCuHours",
+            ],
+            rows,
+          )}
+        >
+          Export CSV
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border bg-background px-3 py-2 text-200 font-semibold hover:bg-hover"
+          disabled={!rows.length}
+          onClick={() => downloadJson("capacity-estimate.json", {
+            runId,
+            settings,
+            overrides,
+            estimate,
+          })}
+        >
+          Export JSON
+        </button>
+        <button
+          type="button"
+          className="rounded-lg bg-brand px-3 py-2 text-200 font-semibold text-on-brand"
+          onClick={() => {
+            localStorage.setItem(storageKey, JSON.stringify({ settings, overrides }));
+            setSavedNotice("Capacity assumptions saved in this browser for the selected run.");
+          }}
+        >
+          Save assumptions
+        </button>
+      </div>
+      {savedNotice && <p className="text-right text-200 text-muted-foreground" role="status">{savedNotice}</p>}
       <div className="rounded-xl border border-brand bg-card p-5">
         <strong>{hasStaticProfiles ? "Calibrated + heuristic planning estimate" : "Preliminary planning estimate"}</strong>
         <p className="mt-1 text-200 text-muted-foreground">
@@ -78,7 +157,7 @@ export function CapacityPage() {
       </div>
 
       <Panel title="Operational assumptions" subtitle="Adjust schedule, volume, Spark sizing, and capacity utilization for interactive F-SKU scenarios">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
           <label className="text-200 font-semibold">
             Refresh schedule
             <select
@@ -166,6 +245,19 @@ export function CapacityPage() {
             />
           </label>
           <label className="text-200 font-semibold">
+            Interactive users
+            <input
+              type="number"
+              min={0}
+              max={10_000}
+              className="mt-1 w-full rounded-lg border bg-background p-2.5 font-normal"
+              value={settings.interactiveUsers}
+              onChange={(event) =>
+                setSettings((prev) => ({ ...prev, interactiveUsers: Number(event.target.value) || 0 }))
+              }
+            />
+          </label>
+          <label className="text-200 font-semibold">
             Burst window (min)
             <input
               type="number"
@@ -224,21 +316,60 @@ export function CapacityPage() {
           </div>
           <Panel
             title="Workflow capacity contributions"
-            subtitle={`${settings.sourceRowsPerRun.toLocaleString()} source rows/run · ${settings.sparkVcores} Spark vCores`}
+            subtitle="Per-workflow overrides are saved locally for this browser and selected run"
           >
-            <SimpleTable
-              records={rows}
-              columns={[
-                { key: "WorkflowPath", label: "Workflow" },
-                { key: "RecommendedTarget", label: "Fabric target" },
-                { key: "Basis", label: "Basis" },
-                { key: "DataflowCu", label: "Dataflow CU-s", render: (record) => Number(record.DataflowCu).toFixed(1) },
-                { key: "NotebookCu", label: "Notebook CU-s", render: (record) => Number(record.NotebookCu).toFixed(1) },
-                { key: "PipelineCu", label: "Pipeline CU-s", render: (record) => Number(record.PipelineCu).toFixed(1) },
-                { key: "CuSeconds", label: "Projected CU-s/run", render: (record) => Number(record.CuSeconds).toFixed(1) },
-                { key: "MonthlyCuHours", label: "Monthly CU-h", render: (record) => Number(record.MonthlyCuHours).toFixed(2) },
-              ]}
-            />
+            <div className="overflow-x-auto">
+              <table className="w-full border-separate border-spacing-0 text-left text-200">
+                <thead>
+                  <tr>
+                    {["Workflow", "Refresh (min)", "Rows/run", "Spark vCores", "Basis", "CU-s/run", "Monthly CU-h"].map((label) => (
+                      <th className="border-b p-3" key={label}>{label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {estimate.workflows.map((item) => (
+                    <tr key={item.workflowPath}>
+                      <td className="border-b p-3"><strong>{item.workflowPath}</strong><span className="block text-muted-foreground">{item.recommendedTarget}</span></td>
+                      <td className="border-b p-3">
+                        <input
+                          aria-label={`Refresh interval for ${item.workflowPath}`}
+                          type="number"
+                          min={1}
+                          max={1440}
+                          className="w-24 rounded border bg-background p-2"
+                          value={item.refreshIntervalMinutes}
+                          onChange={(event) => updateOverride(item.workflowPath, { refreshIntervalMinutes: Number(event.target.value) || 1 })}
+                        />
+                      </td>
+                      <td className="border-b p-3">
+                        <input
+                          aria-label={`Source rows for ${item.workflowPath}`}
+                          type="number"
+                          min={1}
+                          className="w-32 rounded border bg-background p-2"
+                          value={item.sourceRowsPerRun}
+                          onChange={(event) => updateOverride(item.workflowPath, { sourceRowsPerRun: Number(event.target.value) || 1 })}
+                        />
+                      </td>
+                      <td className="border-b p-3">
+                        <select
+                          aria-label={`Spark vCores for ${item.workflowPath}`}
+                          className="rounded border bg-background p-2"
+                          value={item.sparkVcores}
+                          onChange={(event) => updateOverride(item.workflowPath, { sparkVcores: Number(event.target.value) })}
+                        >
+                          {[4, 8, 16, 32, 64].map((value) => <option key={value}>{value}</option>)}
+                        </select>
+                      </td>
+                      <td className="border-b p-3">{item.basis}</td>
+                      <td className="border-b p-3">{item.cuSecondsPerRun.toFixed(1)}</td>
+                      <td className="border-b p-3">{item.monthlyCuHours.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Panel>
           <Panel title="Assumptions and limitations">
             <ul className="space-y-2 text-200 text-muted-foreground">
@@ -252,4 +383,37 @@ export function CapacityPage() {
       )}
     </PageFrame>
   );
+
+  function updateOverride(
+    workflowPath: string,
+    patch: Partial<CapacityOverrides[string]>,
+  ) {
+    setOverrides((current) => ({
+      ...current,
+      [workflowPath]: {
+        refreshIntervalMinutes:
+          current[workflowPath]?.refreshIntervalMinutes ?? settings.refreshIntervalMinutes,
+        sourceRowsPerRun:
+          current[workflowPath]?.sourceRowsPerRun ?? settings.sourceRowsPerRun,
+        sparkVcores: current[workflowPath]?.sparkVcores ?? settings.sparkVcores,
+        ...patch,
+      },
+    }));
+    setSavedNotice("");
+  }
+}
+
+function loadCapacityScenario(storageKey: string): SavedCapacityScenario | null {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<SavedCapacityScenario>;
+    if (!parsed.settings || !parsed.overrides) return null;
+    return {
+      settings: { ...defaultCapacitySettings, ...parsed.settings },
+      overrides: parsed.overrides,
+    };
+  } catch {
+    return null;
+  }
 }

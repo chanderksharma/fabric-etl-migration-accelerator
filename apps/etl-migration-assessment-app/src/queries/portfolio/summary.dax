@@ -10,6 +10,7 @@ CALCULATETABLE(
         "Pilot Assets", [Pilot Assets],
         "Redesign Assets", [Redesign Assets],
         "Manual Review Assets", [Manual Review Assets],
+        "Estimated Remaining Effort", [Estimated Remaining Effort],
         "Average Complexity Score", [Average Complexity Score],
         "Source Components", [Source Components],
         "Connections", [Connections],

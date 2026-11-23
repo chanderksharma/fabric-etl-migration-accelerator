@@ -133,6 +133,11 @@ table WorkflowAssessment
 		formatString: #,##0
 		displayFolder: Technical Evidence
 
+	/// Deterministic remaining implementation effort across the selected workflows.
+	measure 'Estimated Remaining Effort' = SUMX(WorkflowAssessment, COALESCE(WorkflowAssessment[EstimatedEffortDays], 0))
+		formatString: #,##0.0
+		displayFolder: Migration Plan
+
 	column WorkflowKey
 		dataType: string
 		isHidden
@@ -222,6 +227,13 @@ table WorkflowAssessment
 		dataType: string
 		summarizeBy: none
 		sourceColumn: RecommendationReason
+
+	/// Deterministic remaining implementation effort in person-days.
+	column EstimatedEffortDays
+		dataType: double
+		formatString: #,##0.0
+		summarizeBy: none
+		sourceColumn: EstimatedEffortDays
 
 	/// Tool-mapping registry version used for the assessment.
 	column RegistryVersion

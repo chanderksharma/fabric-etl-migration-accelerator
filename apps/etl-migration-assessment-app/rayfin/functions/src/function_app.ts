@@ -235,14 +235,30 @@ udf.func(
 udf.func(
   "startAssessment",
   async (inputPath: string, ctx: ExternalContext): Promise<StartResult> => {
-    if (!/^app-intake\/[a-z0-9][a-z0-9-]{0,63}$/.test(inputPath)) {
-      throw new UserThrownError("The assessment input path is invalid.");
+    return startAssessmentNotebook(inputPath, false, ctx);
+  },
+  [],
+);
+
+udf.func(
+  "startFabricFit",
+  async (inputPath: string, ctx: ExternalContext): Promise<StartResult> => {
+    return startAssessmentNotebook(inputPath, true, ctx);
+  },
+  [],
+);
+
+udf.func(
+  "cancelAssessment",
+  async (jobInstanceId: string, ctx: ExternalContext): Promise<{ status: string }> => {
+    if (!allowedJobId.test(jobInstanceId)) {
+      throw new UserThrownError("The notebook job instance ID is invalid.");
     }
 
     const workspaceId = requiredSecret(ctx, "FABRIC_WORKSPACE_ID");
     const notebookId = requiredSecret(ctx, "FABRIC_NOTEBOOK_ID");
     const response = await fetch(
-      `https://api.fabric.microsoft.com/v1/workspaces/${workspaceId}/notebooks/${notebookId}/jobs/execute/instances?beta=false`,
+      `https://api.fabric.microsoft.com/v1/workspaces/${workspaceId}/items/${notebookId}/jobs/instances/${jobInstanceId}/cancel`,
       {
         method: "POST",
         headers: {
@@ -250,30 +266,13 @@ udf.func(
           "Content-Type": "application/json",
           "x-ms-fabric-skill": "spark-cli",
         },
-        body: JSON.stringify({
-          parameters: [
-            { name: "INPUT_PATH", value: inputPath, type: "Text" },
-            { name: "CONFIRM_ASSESSMENT", value: true, type: "Boolean" },
-            { name: "PERSIST_DELTA_TABLES", value: true, type: "Boolean" },
-            { name: "WRITE_REPORTS", value: false, type: "Boolean" },
-          ],
-        }),
+        body: "{}",
       },
     );
-    if (response.status !== 202) {
-      throw await responseError("Fabric rejected the notebook run", response);
+    if (!response.ok) {
+      throw await responseError("Fabric could not cancel the notebook run", response);
     }
-
-    const statusUrl = response.headers.get("Location");
-    if (!statusUrl) {
-      throw new UserThrownError("Fabric accepted the run without returning a status URL.");
-    }
-    const jobInstanceId = new URL(statusUrl).pathname.split("/").filter(Boolean).at(-1);
-    if (!jobInstanceId || !allowedJobId.test(jobInstanceId)) {
-      throw new UserThrownError("Fabric returned an invalid notebook job instance ID.");
-    }
-
-    return { jobInstanceId, statusUrl };
+    return { status: "Cancelling" };
   },
   [],
 );
@@ -311,6 +310,53 @@ udf.func(
   },
   [],
 );
+
+async function startAssessmentNotebook(
+  inputPath: string,
+  confirmFabricFit: boolean,
+  ctx: ExternalContext,
+): Promise<StartResult> {
+  if (!/^app-intake\/[a-z0-9][a-z0-9-]{0,63}$/.test(inputPath)) {
+    throw new UserThrownError("The assessment input path is invalid.");
+  }
+
+  const workspaceId = requiredSecret(ctx, "FABRIC_WORKSPACE_ID");
+  const notebookId = requiredSecret(ctx, "FABRIC_NOTEBOOK_ID");
+  const response = await fetch(
+    `https://api.fabric.microsoft.com/v1/workspaces/${workspaceId}/notebooks/${notebookId}/jobs/execute/instances?beta=false`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ctx.Tokens.Fabric}`,
+        "Content-Type": "application/json",
+        "x-ms-fabric-skill": "spark-cli",
+      },
+      body: JSON.stringify({
+        parameters: [
+          { name: "INPUT_PATH", value: inputPath, type: "Text" },
+          { name: "CONFIRM_ASSESSMENT", value: true, type: "Boolean" },
+          { name: "CONFIRM_FABRIC_FIT", value: confirmFabricFit, type: "Boolean" },
+          { name: "PERSIST_DELTA_TABLES", value: true, type: "Boolean" },
+          { name: "WRITE_REPORTS", value: false, type: "Boolean" },
+        ],
+      }),
+    },
+  );
+  if (response.status !== 202) {
+    throw await responseError("Fabric rejected the notebook run", response);
+  }
+
+  const statusUrl = response.headers.get("Location");
+  if (!statusUrl) {
+    throw new UserThrownError("Fabric accepted the run without returning a status URL.");
+  }
+  const jobInstanceId = new URL(statusUrl).pathname.split("/").filter(Boolean).at(-1);
+  if (!jobInstanceId || !allowedJobId.test(jobInstanceId)) {
+    throw new UserThrownError("Fabric returned an invalid notebook job instance ID.");
+  }
+
+  return { jobInstanceId, statusUrl };
+}
 
 function requiredSecret(ctx: ExternalContext, name: string): string {
   const value = ctx.getSecret(name);

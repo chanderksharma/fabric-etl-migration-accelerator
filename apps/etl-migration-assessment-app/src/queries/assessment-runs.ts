@@ -15,4 +15,6 @@ export const columnMetadata: ColumnMetadataMap = {
   "AssessmentRun[FailedCount]": { name: "FailedCount", displayName: "Failed", format: "#,##0" },
   "AssessmentRun[SkippedCount]": { name: "SkippedCount", displayName: "Skipped", format: "#,##0" },
   "AssessmentRun[RulesVersion]": { name: "RulesVersion", displayName: "Rules version" },
+  "AssessmentRun[InputPath]": { name: "InputPath", displayName: "Input path" },
+  "AssessmentRun[RoutingBasis]": { name: "RoutingBasis", displayName: "Routing basis" },
 };

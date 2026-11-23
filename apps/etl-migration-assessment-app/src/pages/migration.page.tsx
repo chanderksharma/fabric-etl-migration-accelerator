@@ -2,6 +2,7 @@ import { MetricCards, SemanticChart } from "@/components/semantic-visuals";
 import { DataState, Panel, Pill, SimpleTable } from "@/components/assessment-ui";
 import { useQueryRecords } from "@/hooks/use-query-records";
 import { waveDefinitions, waveLabel } from "@/lib/migration-wave";
+import { downloadCsv } from "@/lib/download";
 import { PageFrame } from "@/pages/portfolio.page";
 import { portfolio, workflows } from "@/queries";
 
@@ -18,6 +19,27 @@ export function MigrationPage() {
       title="Migration plan"
       subtitle="Sequence work from compiler routing, complexity, and Wave 1 through Wave 4 delivery stages."
     >
+      <div className="flex justify-end">
+        <button
+          type="button"
+          className="rounded-lg border bg-background px-3 py-2 text-200 font-semibold hover:bg-hover"
+          disabled={!workflowQuery.records.length}
+          onClick={() => downloadCsv(
+            "migration-plan.csv",
+            [
+              "WorkflowPath",
+              "ComplexityBand",
+              "RecommendedTarget",
+              "EstimatedEffortDays",
+              "MigrationWave",
+              "RecommendationReason",
+            ],
+            workflowQuery.records,
+          )}
+        >
+          Export migration plan
+        </button>
+      </div>
       <MetricCards
         definition={portfolio.summary}
         metrics={[
@@ -77,6 +99,7 @@ export function MigrationPage() {
             { key: "WorkflowPath", label: "Workflow" },
             { key: "ComplexityBand", label: "Complexity" },
             { key: "RecommendedTarget", label: "Fabric target" },
+            { key: "EstimatedEffortDays", label: "Remaining effort" },
             { key: "MigrationWave", label: "Wave", render: (record) => waveLabel(record.MigrationWave) },
             { key: "RecommendationReason", label: "Rationale" },
           ]}

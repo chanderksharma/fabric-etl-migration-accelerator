@@ -18,6 +18,9 @@ export interface CapacityWorkflow {
   toolCount: number;
   complexityScore: number;
   profile?: CapacityProfileMetrics;
+  refreshIntervalMinutes?: number;
+  sourceRowsPerRun?: number;
+  sparkVcores?: number;
 }
 
 export interface CapacitySettings {
@@ -28,6 +31,7 @@ export interface CapacitySettings {
   targetUtilization: number;
   burstWindowMinutes: number;
   sparkBillingMode: SparkBillingMode;
+  interactiveUsers: number;
 }
 
 export const defaultCapacitySettings: CapacitySettings = {
@@ -38,6 +42,7 @@ export const defaultCapacitySettings: CapacitySettings = {
   targetUtilization: 0.8,
   burstWindowMinutes: 5,
   sparkBillingMode: "capacity",
+  interactiveUsers: 1,
 };
 
 export interface CapacityWorkflowEstimate extends CapacityWorkflow {
@@ -134,32 +139,44 @@ export function estimateCapacity(
       1,
       1440,
     ),
+    interactiveUsers: clampPositive(
+      settingsInput.interactiveUsers ?? defaultCapacitySettings.interactiveUsers,
+      1,
+      0,
+      10_000,
+    ),
   };
 
-  const runsPerDay = 1440 / settings.refreshIntervalMinutes;
-  const estimates = workflows.map((workflow) => estimateWorkflow(workflow, settings, runsPerDay));
-  const dailyCuSeconds = estimates.reduce((total, item) => total + item.cuSecondsPerRun * runsPerDay, 0);
+  const estimates = workflows.map((workflow) => estimateWorkflow(workflow, settings));
+  const dailyCuSeconds = estimates.reduce(
+    (total, item) =>
+      total + item.cuSecondsPerRun * 1440 / (item.refreshIntervalMinutes ?? settings.refreshIntervalMinutes),
+    0,
+  );
   const monthlyCuHours = estimates.reduce((total, item) => total + item.monthlyCuHours, 0);
   const autoscaleSparkMonthlyCuHours = estimates.reduce(
     (total, item) => total + item.autoscaleSparkMonthlyCuHours,
     0,
   );
   const largestRun = Math.max(0, ...estimates.map((item) => item.cuSecondsPerRun));
-  const burstFactor = Math.max(settings.burstWindowMinutes * runsPerDay / 1440, 1);
   const peakWindowCuSeconds = estimates.reduce(
-    (total, item) => total + item.cuSecondsPerRun * burstFactor,
+    (total, item) => {
+      const runsPerDay = 1440 / (item.refreshIntervalMinutes ?? settings.refreshIntervalMinutes);
+      const burstFactor = Math.max(settings.burstWindowMinutes * runsPerDay / 1440, 1);
+      return total + item.cuSecondsPerRun * burstFactor;
+    },
     0,
   );
 
   const backgroundCu = dailyCuSeconds / 86_400;
   const interactiveAverage =
-    MODEL.activeUsersPerDay *
+    settings.interactiveUsers *
     MODEL.averageActiveHoursPerUser *
     3600 *
     MODEL.cuPerActiveUser /
     86_400;
   const interactivePeak =
-    MODEL.peakConcurrentUsers * MODEL.cuPerActiveUser * MODEL.interactivePeakFactor;
+    settings.interactiveUsers * MODEL.cuPerActiveUser * MODEL.interactivePeakFactor;
   const averageNeed = (backgroundCu + interactiveAverage) / settings.targetUtilization;
   const windowSeconds = settings.burstWindowMinutes * 60;
   const optimized = Math.max(averageNeed, largestRun / windowSeconds + interactivePeak);
@@ -183,10 +200,31 @@ export function estimateCapacity(
 function estimateWorkflow(
   workflow: CapacityWorkflow,
   settings: CapacitySettings,
-  runsPerDay: number,
 ): CapacityWorkflowEstimate {
+  const workflowSettings = {
+    ...settings,
+    refreshIntervalMinutes: clampPositive(
+      workflow.refreshIntervalMinutes ?? settings.refreshIntervalMinutes,
+      settings.refreshIntervalMinutes,
+      1,
+      1440,
+    ),
+    sourceRowsPerRun: clampPositive(
+      workflow.sourceRowsPerRun ?? settings.sourceRowsPerRun,
+      settings.sourceRowsPerRun,
+      1,
+      100_000_000,
+    ),
+    sparkVcores: clampPositive(
+      workflow.sparkVcores ?? settings.sparkVcores,
+      settings.sparkVcores,
+      2,
+      512,
+    ),
+  };
+  const runsPerDay = 1440 / workflowSettings.refreshIntervalMinutes;
   if (!workflow.profile) {
-    return estimateNormalizedFallback(workflow, settings, runsPerDay);
+    return estimateNormalizedFallback(workflow, workflowSettings, runsPerDay);
   }
 
   const profile = workflow.profile;
@@ -204,7 +242,7 @@ function estimateWorkflow(
   let dataflowCuSeconds = 0;
   if (hasDataflow) {
     const complexitySeconds = profile.complexityUnits * MODEL.secondsPerComplexityElement;
-    const volumeSeconds = (settings.sourceRowsPerRun / 100) * MODEL.secondsPerHundredRows;
+    const volumeSeconds = (workflowSettings.sourceRowsPerRun / 100) * MODEL.secondsPerHundredRows;
     const baseSeconds = Math.max(
       MODEL.minimumSecondsPerOutput,
       complexitySeconds,
@@ -212,7 +250,7 @@ function estimateWorkflow(
     );
     const querySeconds =
       baseSeconds +
-      (settings.sourceRowsPerRun / 1000) *
+      (workflowSettings.sourceRowsPerRun / 1000) *
         profile.heavySteps *
         MODEL.secondsPerHeavyStepPerThousandRows;
     const outputs = Math.max(profile.destCount, 1);
@@ -226,7 +264,7 @@ function estimateWorkflow(
 
   let notebookCuSeconds = 0;
   if (hasNotebook) {
-    const sparkCu = settings.sparkVcores / 2;
+    const sparkCu = workflowSettings.sparkVcores / 2;
     const nbWeight = hasDataflow
       ? Math.max(
           1,
@@ -237,8 +275,8 @@ function estimateWorkflow(
       60,
       45 +
         nbWeight * 4 +
-        (settings.sourceRowsPerRun / 50_000) * 5 +
-        profile.heavySteps * (settings.sourceRowsPerRun / 1000) * 0.5,
+        (workflowSettings.sourceRowsPerRun / 50_000) * 5 +
+        profile.heavySteps * (workflowSettings.sourceRowsPerRun / 1000) * 0.5,
     );
     notebookCuSeconds = sparkCu * runtimeSeconds;
   }
@@ -250,7 +288,7 @@ function estimateWorkflow(
     const orchestrationCu = activityCount * MODEL.pipelineOrchestrationCuSecondsPerActivity;
     const hasCopy = profile.pipelineSteps > 0 || !(hasDataflow || hasNotebook);
     const copySeconds = hasCopy
-      ? MODEL.pipelineCopyBaseSeconds + (settings.sourceRowsPerRun / 100_000) * 10
+      ? MODEL.pipelineCopyBaseSeconds + (workflowSettings.sourceRowsPerRun / 100_000) * 10
       : 0;
     pipelineCuSeconds = orchestrationCu + copySeconds * MODEL.pipelineCopyCuPerSecond;
   }
@@ -264,6 +302,9 @@ function estimateWorkflow(
 
   return {
     ...workflow,
+    refreshIntervalMinutes: workflowSettings.refreshIntervalMinutes,
+    sourceRowsPerRun: workflowSettings.sourceRowsPerRun,
+    sparkVcores: workflowSettings.sparkVcores,
     basis,
     dataflowCuSecondsPerRun: dataflowCuSeconds,
     notebookCuSecondsPerRun: notebookCuSeconds,
@@ -307,6 +348,9 @@ function estimateNormalizedFallback(
 
   return {
     ...workflow,
+    refreshIntervalMinutes: settings.refreshIntervalMinutes,
+    sourceRowsPerRun: settings.sourceRowsPerRun,
+    sparkVcores: settings.sparkVcores,
     basis: "normalized heuristic",
     dataflowCuSecondsPerRun: dataflowCuSeconds,
     notebookCuSecondsPerRun: notebookCuSeconds,
