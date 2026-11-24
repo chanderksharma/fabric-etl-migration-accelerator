@@ -64,6 +64,7 @@ vi.mock("@/lib/rayfin-client", () => ({
 
 describe("DeploymentPage", () => {
   beforeEach(() => {
+    sessionStorage.clear();
     mocks.configuration.mockReset();
     mocks.preview.mockReset();
     mocks.dispatch.mockReset();
@@ -123,5 +124,43 @@ describe("DeploymentPage", () => {
     await waitFor(() => expect(
       screen.getByRole("button", { name: "Trigger GitHub Actions" }),
     ).toBeEnabled());
+  });
+
+  it("shows only the applicable Dataflow Gen2 target, validates URLs client-side, and isolates provider URLs", async () => {
+    mocks.configuration.mockResolvedValue({
+      githubConfigured: true,
+      gitlabConfigured: true,
+    });
+
+    render(<DeploymentPage preselectedWorkflowPath="orders.yxmd" />);
+
+    expect(screen.getByText("Deployment target:")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Deployment target for orders\.yxmd/ }))
+      .not.toBeInTheDocument();
+
+    const urlInput = screen.getByRole("textbox", { name: "GitHub repository URL" });
+    fireEvent.change(urlInput, { target: { value: "not-a-valid-url" } });
+    const preview = await screen.findByRole("button", { name: "Preview manifest" });
+    await waitFor(() => expect(preview).toBeEnabled());
+    fireEvent.click(preview);
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      /Use an HTTPS GitHub repository URL/,
+    );
+    expect(mocks.preview).not.toHaveBeenCalled();
+
+    fireEvent.change(urlInput, { target: { value: "https://github.com/owner/repository" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "CI/CD provider" }), {
+      target: { value: "gitlab" },
+    });
+    expect(screen.getByRole("textbox", { name: "GitLab project URL" })).toHaveValue("");
+    fireEvent.change(screen.getByRole("textbox", { name: "GitLab project URL" }), {
+      target: { value: "https://gitlab.com/group/project" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "CI/CD provider" }), {
+      target: { value: "github" },
+    });
+    expect(screen.getByRole("textbox", { name: "GitHub repository URL" }))
+      .toHaveValue("https://github.com/owner/repository");
   });
 });

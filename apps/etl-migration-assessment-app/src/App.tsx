@@ -47,6 +47,8 @@ function App() {
 function AppShell() {
   const [page, setPage] = useState<PageKey>("portfolio");
   const [deploymentWorkflowPath, setDeploymentWorkflowPath] = useState<string>();
+  const [selectedWorkflowPath, setSelectedWorkflowPath] = useState<string>();
+  const [technicalWorkflowPath, setTechnicalWorkflowPath] = useState<string>();
   const { isDark, toggleTheme } = useThemeContext();
   const { activeRunId, runs, isLoading: runsLoading, error: runsError, selectRun } =
     useAssessmentRunContext();
@@ -127,19 +129,38 @@ function AppShell() {
         </nav>
 
         <main className="min-w-0">
-          {page === "intake" && <IntakeRunPage />}
-          {page === "portfolio" && <PortfolioPage />}
+          {page === "intake" && <IntakeRunPage onOpenPortfolio={() => setPage("portfolio")} />}
+          {page === "portfolio" && (
+            <PortfolioPage
+              onOpenDeployment={() => setPage("deployment")}
+              onOpenWorkflows={(workflowPath) => {
+                setSelectedWorkflowPath(workflowPath);
+                setPage("workflows");
+              }}
+            />
+          )}
           {page === "workflows" && (
             <WorkflowsPage
+              key={selectedWorkflowPath ?? "default"}
+              initialWorkflowPath={selectedWorkflowPath}
               onOpenDeployment={(workflowPath) => {
                 setDeploymentWorkflowPath(workflowPath);
                 setPage("deployment");
+              }}
+              onOpenTechnical={(workflowPath) => {
+                setTechnicalWorkflowPath(workflowPath);
+                setPage("technical");
               }}
             />
           )}
           {page === "migration" && <MigrationPage />}
           {page === "capacity" && <CapacityPage />}
-          {page === "technical" && <TechnicalPage />}
+          {page === "technical" && (
+            <TechnicalPage
+              key={technicalWorkflowPath ?? "all"}
+              initialWorkflowPath={technicalWorkflowPath}
+            />
+          )}
           {page === "deployment" && (
             <DeploymentPage
               key={deploymentWorkflowPath ?? "default"}

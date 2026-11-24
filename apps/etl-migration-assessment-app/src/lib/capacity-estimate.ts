@@ -21,6 +21,7 @@ export interface CapacityWorkflow {
   refreshIntervalMinutes?: number;
   sourceRowsPerRun?: number;
   sparkVcores?: number;
+  notebookRuntimeSeconds?: number | null;
 }
 
 export interface CapacitySettings {
@@ -46,7 +47,11 @@ export const defaultCapacitySettings: CapacitySettings = {
 };
 
 export interface CapacityWorkflowEstimate extends CapacityWorkflow {
-  basis: "calibrated" | "heuristic" | "normalized heuristic";
+  basis: "calibrated" | "heuristic" | "normalized heuristic" | "excluded";
+  targetComponents: string[];
+  excluded: boolean;
+  exclusionReason?: string;
+  effectiveNotebookRuntimeSeconds: number | null;
   dataflowCuSecondsPerRun: number;
   notebookCuSecondsPerRun: number;
   pipelineCuSecondsPerRun: number;
@@ -66,6 +71,7 @@ export interface CapacityEstimate {
   autoscaleSparkMonthlyCuHours: number;
   calibratedCount: number;
   heuristicCount: number;
+  excludedCount: number;
   scenarios: CapacityScenario[];
   workflows: CapacityWorkflowEstimate[];
 }
@@ -73,7 +79,7 @@ export interface CapacityEstimate {
 const skuTiers = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192];
 const fabricComponents = new Set(["Dataflow Gen2", "Fabric Notebook", "Fabric Pipeline"]);
 
-// Constants synchronized with src/accelerator/capacity.py (CAPACITY_MODEL_VERSION = "3.1.0").
+// Constants synchronized with packages/etl-target-fabric/src/etl_target_fabric/capacity/model.py (CAPACITY_MODEL_VERSION = "3.1.0").
 const MODEL = {
   secondsPerComplexityElement: 5.231236918751955,
   minimumSecondsPerOutput: 39.18196452145214,
@@ -148,18 +154,19 @@ export function estimateCapacity(
   };
 
   const estimates = workflows.map((workflow) => estimateWorkflow(workflow, settings));
-  const dailyCuSeconds = estimates.reduce(
+  const modeled = estimates.filter((item) => !item.excluded);
+  const dailyCuSeconds = modeled.reduce(
     (total, item) =>
       total + item.cuSecondsPerRun * 1440 / (item.refreshIntervalMinutes ?? settings.refreshIntervalMinutes),
     0,
   );
-  const monthlyCuHours = estimates.reduce((total, item) => total + item.monthlyCuHours, 0);
-  const autoscaleSparkMonthlyCuHours = estimates.reduce(
+  const monthlyCuHours = modeled.reduce((total, item) => total + item.monthlyCuHours, 0);
+  const autoscaleSparkMonthlyCuHours = modeled.reduce(
     (total, item) => total + item.autoscaleSparkMonthlyCuHours,
     0,
   );
-  const largestRun = Math.max(0, ...estimates.map((item) => item.cuSecondsPerRun));
-  const peakWindowCuSeconds = estimates.reduce(
+  const largestRun = Math.max(0, ...modeled.map((item) => item.cuSecondsPerRun));
+  const peakWindowCuSeconds = modeled.reduce(
     (total, item) => {
       const runsPerDay = 1440 / (item.refreshIntervalMinutes ?? settings.refreshIntervalMinutes);
       const burstFactor = Math.max(settings.burstWindowMinutes * runsPerDay / 1440, 1);
@@ -186,8 +193,9 @@ export function estimateCapacity(
   return {
     monthlyCuHours,
     autoscaleSparkMonthlyCuHours,
-    calibratedCount: estimates.filter((item) => item.basis === "calibrated").length,
-    heuristicCount: estimates.filter((item) => item.basis !== "calibrated").length,
+    calibratedCount: modeled.filter((item) => item.basis === "calibrated").length,
+    heuristicCount: modeled.filter((item) => item.basis !== "calibrated").length,
+    excludedCount: estimates.length - modeled.length,
     workflows: estimates,
     scenarios: [
       scenario("Optimized", optimized),
@@ -222,13 +230,45 @@ function estimateWorkflow(
       512,
     ),
   };
+  const notebookRuntimeOverride =
+    workflow.notebookRuntimeSeconds != null &&
+    Number.isFinite(workflow.notebookRuntimeSeconds) &&
+    workflow.notebookRuntimeSeconds > 0
+      ? clampPositive(workflow.notebookRuntimeSeconds, 60, 1, 86_400)
+      : null;
   const runsPerDay = 1440 / workflowSettings.refreshIntervalMinutes;
   if (!workflow.profile) {
-    return estimateNormalizedFallback(workflow, workflowSettings, runsPerDay);
+    return estimateNormalizedFallback(
+      workflow,
+      workflowSettings,
+      runsPerDay,
+      notebookRuntimeOverride,
+    );
   }
 
   const profile = workflow.profile;
   const components = resolveComponents(workflow.recommendedTarget, profile.targetComponents);
+  if (profile.coveredByLinkedMapping) {
+    return {
+      ...workflow,
+      refreshIntervalMinutes: workflowSettings.refreshIntervalMinutes,
+      sourceRowsPerRun: workflowSettings.sourceRowsPerRun,
+      sparkVcores: workflowSettings.sparkVcores,
+      notebookRuntimeSeconds: notebookRuntimeOverride,
+      effectiveNotebookRuntimeSeconds: null,
+      targetComponents: components,
+      basis: "excluded",
+      excluded: true,
+      exclusionReason: "Mapping task is covered by its referenced mapping and taskflow.",
+      dataflowCuSecondsPerRun: 0,
+      notebookCuSecondsPerRun: 0,
+      pipelineCuSecondsPerRun: 0,
+      cuSecondsPerRun: 0,
+      monthlyCuHours: 0,
+      autoscaleSparkMonthlyCuHours: 0,
+    };
+  }
+
   const hasDataflow = components.includes("Dataflow Gen2");
   const hasNotebook = components.includes("Fabric Notebook");
   const hasPipeline = components.includes("Fabric Pipeline");
@@ -263,22 +303,27 @@ function estimateWorkflow(
   }
 
   let notebookCuSeconds = 0;
+  let effectiveNotebookRuntimeSeconds: number | null = null;
   if (hasNotebook) {
     const sparkCu = workflowSettings.sparkVcores / 2;
-    const nbWeight = hasDataflow
-      ? Math.max(
-          1,
-          profile.notebookSteps * 1.5 + Math.max(profile.totalSteps - profile.notebookSteps, 0) * 0.15,
-        )
-      : Math.max(1, profile.complexityUnits);
-    const runtimeSeconds = Math.max(
-      60,
-      45 +
-        nbWeight * 4 +
-        (workflowSettings.sourceRowsPerRun / 50_000) * 5 +
-        profile.heavySteps * (workflowSettings.sourceRowsPerRun / 1000) * 0.5,
-    );
-    notebookCuSeconds = sparkCu * runtimeSeconds;
+    if (notebookRuntimeOverride !== null) {
+      effectiveNotebookRuntimeSeconds = notebookRuntimeOverride;
+    } else {
+      const nbWeight = hasDataflow
+        ? Math.max(
+            1,
+            profile.notebookSteps * 1.5 + Math.max(profile.totalSteps - profile.notebookSteps, 0) * 0.15,
+          )
+        : Math.max(1, profile.complexityUnits);
+      effectiveNotebookRuntimeSeconds = Math.max(
+        60,
+        45 +
+          nbWeight * 4 +
+          (workflowSettings.sourceRowsPerRun / 50_000) * 5 +
+          profile.heavySteps * (workflowSettings.sourceRowsPerRun / 1000) * 0.5,
+      );
+    }
+    notebookCuSeconds = sparkCu * effectiveNotebookRuntimeSeconds;
   }
 
   let pipelineCuSeconds = 0;
@@ -305,7 +350,11 @@ function estimateWorkflow(
     refreshIntervalMinutes: workflowSettings.refreshIntervalMinutes,
     sourceRowsPerRun: workflowSettings.sourceRowsPerRun,
     sparkVcores: workflowSettings.sparkVcores,
+    notebookRuntimeSeconds: notebookRuntimeOverride,
+    effectiveNotebookRuntimeSeconds,
+    targetComponents: components,
     basis,
+    excluded: false,
     dataflowCuSecondsPerRun: dataflowCuSeconds,
     notebookCuSecondsPerRun: notebookCuSeconds,
     pipelineCuSecondsPerRun: pipelineCuSeconds,
@@ -319,9 +368,19 @@ function estimateNormalizedFallback(
   workflow: CapacityWorkflow,
   settings: CapacitySettings,
   runsPerDay: number,
+  notebookRuntimeOverride: number | null,
 ): CapacityWorkflowEstimate {
+  const components = resolveComponents(workflow.recommendedTarget, "");
   const dataflow = Math.max(470.2, workflow.toolCount * 20);
-  const notebook = Math.max(240, (180 + workflow.toolCount * 3) * (settings.sparkVcores / 8));
+  const sparkCu = settings.sparkVcores / 2;
+  const defaultNotebookRuntime = Math.max(60, 45 + workflow.toolCount * 0.75);
+  const hasNotebook = components.includes("Fabric Notebook");
+  const effectiveNotebookRuntimeSeconds = hasNotebook
+    ? (notebookRuntimeOverride ?? defaultNotebookRuntime)
+    : null;
+  const notebook = effectiveNotebookRuntimeSeconds !== null
+    ? sparkCu * effectiveNotebookRuntimeSeconds
+    : 0;
   const pipeline = 40;
   let dataflowCuSeconds = 0;
   let notebookCuSeconds = 0;
@@ -351,7 +410,11 @@ function estimateNormalizedFallback(
     refreshIntervalMinutes: settings.refreshIntervalMinutes,
     sourceRowsPerRun: settings.sourceRowsPerRun,
     sparkVcores: settings.sparkVcores,
+    notebookRuntimeSeconds: notebookRuntimeOverride,
+    effectiveNotebookRuntimeSeconds,
+    targetComponents: components,
     basis: "normalized heuristic",
+    excluded: false,
     dataflowCuSecondsPerRun: dataflowCuSeconds,
     notebookCuSecondsPerRun: notebookCuSeconds,
     pipelineCuSecondsPerRun: pipelineCuSeconds,

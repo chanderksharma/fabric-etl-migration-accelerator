@@ -11,17 +11,122 @@ import type { AppFunctionsSchema } from "../../rayfin/functions/src/types";
 
 type DeploymentProvider = "github" | "gitlab";
 type ConflictBehavior = "Fail" | "Skip" | "Update";
+type DeploymentTarget = "notebook" | "dataflow" | "pipeline" | "bundle";
 type DeploymentPreview = AppFunctionsSchema["previewDeployment"]["output"];
 type DeploymentResult = AppFunctionsSchema["dispatchDeployment"]["output"];
 type DeploymentConfiguration = AppFunctionsSchema["getDeploymentConfiguration"]["output"];
 
 interface WorkflowOption {
+  workflowKey: string;
   workflowPath: string;
   sourcePlatform: string;
   nativeId: string;
   recommendedTarget: string;
+  targetComponents: string[];
   migrationWave: string;
   complexityScore: number;
+}
+
+interface DeployPrefs {
+  provider?: DeploymentProvider;
+  githubRepositoryUrl?: string;
+  gitlabProjectUrl?: string;
+  gitRef?: string;
+  conflictBehavior?: ConflictBehavior;
+}
+
+const DEPLOY_PREFS_KEY = "etl-fabric-deploy-prefs";
+
+function readDeployPrefs(): DeployPrefs {
+  try {
+    const raw = sessionStorage.getItem(DEPLOY_PREFS_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null ? (parsed as DeployPrefs) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeDeployPrefs(prefs: DeployPrefs): void {
+  try {
+    sessionStorage.setItem(DEPLOY_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function allowedTargetsFor(workflow: WorkflowOption): DeploymentTarget[] {
+  const fromComponents: ("dataflow" | "notebook" | "pipeline")[] = [];
+  for (const component of workflow.targetComponents) {
+    if (component === "Dataflow Gen2" && !fromComponents.includes("dataflow")) fromComponents.push("dataflow");
+    if (component === "Fabric Notebook" && !fromComponents.includes("notebook")) fromComponents.push("notebook");
+    if (component === "Fabric Pipeline" && !fromComponents.includes("pipeline")) fromComponents.push("pipeline");
+  }
+  if (workflow.recommendedTarget === "Mixed Fabric solution") {
+    const components: ("dataflow" | "notebook" | "pipeline")[] =
+      fromComponents.length > 0 ? fromComponents : ["dataflow", "notebook", "pipeline"];
+    return ["bundle", ...components];
+  }
+  if (workflow.recommendedTarget === "Dataflow Gen2") return ["dataflow"];
+  if (workflow.recommendedTarget === "Fabric Notebook") return ["notebook"];
+  if (workflow.recommendedTarget === "Fabric Pipeline") return ["pipeline"];
+  return [];
+}
+
+function targetDisplayLabel(target: DeploymentTarget, components: string[]): string {
+  if (target === "bundle") {
+    const names = components.length > 0
+      ? components.map((value) =>
+          value === "Fabric Notebook"
+            ? "Notebook"
+            : value === "Fabric Pipeline"
+              ? "Pipeline"
+              : value,
+        )
+      : ["Dataflow Gen2", "Notebook", "Pipeline"];
+    return names.join(" + ");
+  }
+  if (target === "dataflow") return "Dataflow Gen2";
+  if (target === "pipeline") return "Fabric Data Pipeline";
+  return "Notebook";
+}
+
+function isValidGitHubRepositoryUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const parts = url.pathname.replace(/\.git$/i, "").split("/").filter(Boolean);
+    return (
+      url.protocol === "https:" &&
+      url.hostname.toLowerCase() === "github.com" &&
+      parts.length === 2 &&
+      parts.every((part) => /^[A-Za-z0-9_.-]+$/.test(part))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isValidGitLabProjectUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const parts = url.pathname.replace(/\/$/, "").replace(/\.git$/i, "").split("/").filter(Boolean);
+    return (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash &&
+      parts.length >= 2 &&
+      parts.every((part) => part !== "-" && /^[A-Za-z0-9_.-]+$/.test(part))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isValidGitRef(value: string): boolean {
+  return !value || (/^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$/.test(value) && !value.includes(".."));
 }
 
 export function DeploymentPage({
@@ -29,18 +134,41 @@ export function DeploymentPage({
 }: {
   preselectedWorkflowPath?: string;
 }) {
+  const initialPrefs = useMemo(() => readDeployPrefs(), []);
   const { activeRunId, runs, refreshRuns } = useAssessmentRunContext();
   const selectedRun = activeRunId
     ? runs.find((run) => run.runId === activeRunId)
     : runs[0];
   const { data, isLoading, error: queryError } = useSemanticModelQuery(workflows.register);
-  const [provider, setProvider] = useState<DeploymentProvider>("github");
-  const [repositoryUrl, setRepositoryUrl] = useState("");
-  const [gitRef, setGitRef] = useState("");
-  const [conflictBehavior, setConflictBehavior] = useState<ConflictBehavior>("Update");
+  const { data: profileData } = useSemanticModelQuery(workflows.capacityProfiles);
+  const [provider, setProvider] = useState<DeploymentProvider>(
+    initialPrefs.provider === "gitlab" ? "gitlab" : "github",
+  );
+  const [githubRepositoryUrl, setGithubRepositoryUrl] = useState(
+    initialPrefs.githubRepositoryUrl ?? "",
+  );
+  const [gitlabProjectUrl, setGitlabProjectUrl] = useState(
+    initialPrefs.gitlabProjectUrl ?? "",
+  );
+  const [gitRef, setGitRef] = useState(initialPrefs.gitRef ?? "");
+  const [conflictBehavior, setConflictBehavior] = useState<ConflictBehavior>(
+    initialPrefs.conflictBehavior ?? "Update",
+  );
   const [selected, setSelected] = useState<Set<string>>(() =>
     preselectedWorkflowPath ? new Set([preselectedWorkflowPath]) : new Set(),
   );
+  const [targetOverrides, setTargetOverrides] = useState<Record<string, DeploymentTarget>>({});
+  const repositoryUrl = provider === "github" ? githubRepositoryUrl : gitlabProjectUrl;
+
+  useEffect(() => {
+    writeDeployPrefs({
+      provider,
+      githubRepositoryUrl,
+      gitlabProjectUrl,
+      gitRef,
+      conflictBehavior,
+    });
+  }, [conflictBehavior, gitRef, githubRepositoryUrl, gitlabProjectUrl, provider]);
   const [preview, setPreview] = useState<DeploymentPreview>();
   const [confirmed, setConfirmed] = useState(false);
   const [result, setResult] = useState<DeploymentResult>();
@@ -104,21 +232,47 @@ export function DeploymentPage({
     };
   }, []);
 
+  const componentsByKey = useMemo(() => {
+    const map = new Map<string, string[]>();
+    if (profileData?.status !== "success") return map;
+    const table = toDataTable(profileData.table, workflows.capacityProfiles.columnMetadata);
+    const indexes = Object.fromEntries(table.columns.map((column, index) => [column.name, index]));
+    if (indexes.WorkflowKey === undefined || indexes.TargetComponents === undefined) return map;
+    for (const row of table.rows) {
+      const key = String(row[indexes.WorkflowKey] ?? "");
+      const raw = String(row[indexes.TargetComponents] ?? "");
+      if (!key || !raw) continue;
+      map.set(
+        key,
+        raw
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean),
+      );
+    }
+    return map;
+  }, [profileData]);
+
   const allWorkflows = useMemo(() => {
     if (data?.status !== "success") return [];
     const table = toDataTable(data.table, workflows.register.columnMetadata);
     const indexes = Object.fromEntries(table.columns.map((column, index) => [column.name, index]));
     return table.rows
-      .map((row): WorkflowOption => ({
-        workflowPath: String(row[indexes.WorkflowPath] ?? ""),
-        sourcePlatform: String(row[indexes.SourcePlatform] ?? ""),
-        nativeId: String(row[indexes.NativeId] ?? ""),
-        recommendedTarget: String(row[indexes.RecommendedTarget] ?? ""),
-        migrationWave: String(row[indexes.MigrationWave] ?? ""),
-        complexityScore: Number(row[indexes.ComplexityScore] ?? 0),
-      }))
+      .map((row): WorkflowOption => {
+        const workflowKey = String(row[indexes.WorkflowKey] ?? "");
+        return {
+          workflowKey,
+          workflowPath: String(row[indexes.WorkflowPath] ?? ""),
+          sourcePlatform: String(row[indexes.SourcePlatform] ?? ""),
+          nativeId: String(row[indexes.NativeId] ?? ""),
+          recommendedTarget: String(row[indexes.RecommendedTarget] ?? ""),
+          targetComponents: componentsByKey.get(workflowKey) ?? [],
+          migrationWave: String(row[indexes.MigrationWave] ?? ""),
+          complexityScore: Number(row[indexes.ComplexityScore] ?? 0),
+        };
+      })
       .filter((workflow) => workflow.workflowPath);
-  }, [data]);
+  }, [componentsByKey, data]);
   const workflowOptions = useMemo(
     () => allWorkflows.filter((workflow) => workflow.recommendedTarget !== "Manual rework"),
     [allWorkflows],
@@ -195,21 +349,39 @@ export function DeploymentPage({
   const previewManifest = async () => {
     setFeedback("");
     setResult(undefined);
+    if (provider === "github" && !isValidGitHubRepositoryUrl(repositoryUrl.trim())) {
+      setFeedback("Use an HTTPS GitHub repository URL such as https://github.com/owner/repository.");
+      return;
+    }
+    if (provider === "gitlab" && !isValidGitLabProjectUrl(repositoryUrl.trim())) {
+      setFeedback("Use an HTTPS GitLab project URL such as https://gitlab.com/group/project.");
+      return;
+    }
+    if (!isValidGitRef(gitRef.trim())) {
+      setFeedback("Git ref contains unsupported characters.");
+      return;
+    }
     setIsPreviewing(true);
     try {
       const selections = workflowOptions
         .filter((workflow) => validSelected.has(workflow.workflowPath))
-        .map(({ workflowPath, sourcePlatform, nativeId, recommendedTarget }) => ({
-          workflowPath,
-          sourcePlatform,
-          nativeId,
-          recommendedTarget,
-        }));
+        .map((workflow) => {
+          const allowed = allowedTargetsFor(workflow);
+          const requested = targetOverrides[workflow.workflowPath];
+          const target = requested && allowed.includes(requested) ? requested : allowed[0];
+          return {
+            workflowPath: workflow.workflowPath,
+            sourcePlatform: workflow.sourcePlatform,
+            nativeId: workflow.nativeId,
+            recommendedTarget: workflow.recommendedTarget,
+            ...(target ? { target } : {}),
+          };
+        });
       const nextPreview = await getRayfinClient().functions.previewDeployment.invoke(
         {
           providerValue: provider,
-          repositoryUrl,
-          refValue: gitRef,
+          repositoryUrl: repositoryUrl.trim(),
+          refValue: gitRef.trim(),
           conflictBehaviorValue: conflictBehavior,
           selectionsJson: JSON.stringify(selections),
         },
@@ -359,7 +531,8 @@ export function DeploymentPage({
             placeholder={provider === "github" ? "https://github.com/owner/repository" : "https://gitlab.com/group/project"}
             value={repositoryUrl}
             onChange={(event) => {
-              setRepositoryUrl(event.target.value);
+              if (provider === "github") setGithubRepositoryUrl(event.target.value);
+              else setGitlabProjectUrl(event.target.value);
               clearApproval();
             }}
           />
@@ -413,23 +586,63 @@ export function DeploymentPage({
             </div>
           ) : (
             <div className="mt-5 max-h-96 space-y-2 overflow-auto pr-2">
-              {workflowOptions.map((workflow) => (
-                <label key={workflow.workflowPath} className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 hover:bg-hover">
-                  <input
-                    className="mt-1"
-                    type="checkbox"
-                    checked={validSelected.has(workflow.workflowPath)}
-                    disabled={!validSelected.has(workflow.workflowPath) && validSelected.size >= 10}
-                    onChange={() => toggleWorkflow(workflow.workflowPath)}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">{workflow.workflowPath}</span>
-                    <span className="mt-1 block text-200 text-muted-foreground">
-                      {workflow.recommendedTarget} · {workflow.migrationWave} · complexity {workflow.complexityScore}
-                    </span>
-                  </span>
-                </label>
-              ))}
+              {workflowOptions.map((workflow) => {
+                const isSelected = validSelected.has(workflow.workflowPath);
+                const allowedTargets = allowedTargetsFor(workflow);
+                const selectedTarget =
+                  targetOverrides[workflow.workflowPath] &&
+                  allowedTargets.includes(targetOverrides[workflow.workflowPath])
+                    ? targetOverrides[workflow.workflowPath]
+                    : allowedTargets[0];
+                return (
+                  <div key={workflow.workflowPath} className="rounded-lg border p-3 hover:bg-hover">
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        className="mt-1"
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={!isSelected && validSelected.size >= 10}
+                        onChange={() => toggleWorkflow(workflow.workflowPath)}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold">{workflow.workflowPath}</span>
+                        <span className="mt-1 block text-200 text-muted-foreground">
+                          {workflow.recommendedTarget} · {workflow.migrationWave} · complexity {workflow.complexityScore}
+                        </span>
+                      </span>
+                    </label>
+                    {isSelected && allowedTargets.length > 0 && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 pl-7 text-200">
+                        <span className="text-muted-foreground">Deployment target:</span>
+                        {allowedTargets.length === 1 ? (
+                          <span className="rounded-full bg-muted px-2.5 py-0.5 font-semibold">
+                            {targetDisplayLabel(allowedTargets[0], workflow.targetComponents)}
+                          </span>
+                        ) : (
+                          <select
+                            aria-label={`Deployment target for ${workflow.workflowPath}`}
+                            className="rounded border bg-background px-2 py-1 text-200 font-semibold"
+                            value={selectedTarget}
+                            onChange={(event) => {
+                              setTargetOverrides((current) => ({
+                                ...current,
+                                [workflow.workflowPath]: event.target.value as DeploymentTarget,
+                              }));
+                              clearApproval();
+                            }}
+                          >
+                            {allowedTargets.map((option) => (
+                              <option key={option} value={option}>
+                                {targetDisplayLabel(option, workflow.targetComponents)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>

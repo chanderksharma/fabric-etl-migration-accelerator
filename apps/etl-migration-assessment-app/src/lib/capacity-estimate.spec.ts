@@ -106,4 +106,56 @@ describe("estimateCapacity", () => {
     expect(baseline.workflows[1].monthlyCuHours)
       .toBeGreaterThan(baseline.workflows[0].monthlyCuHours);
   });
+
+  it("excludes mapping tasks covered by linked mappings and honors notebook runtime overrides", () => {
+    const result = estimateCapacity([
+      {
+        workflowPath: "mt_orders",
+        recommendedTarget: "Dataflow Gen2",
+        toolCount: 4,
+        complexityScore: 8,
+        profile: {
+          profileKind: "informatica",
+          targetComponents: "Dataflow Gen2",
+          complexityUnits: 3,
+          destCount: 1,
+          heavySteps: 1,
+          notebookSteps: 0,
+          pipelineSteps: 0,
+          totalSteps: 4,
+          coveredByLinkedMapping: true,
+        },
+      },
+      {
+        workflowPath: "nb_scoring.yxmd",
+        recommendedTarget: "Fabric Notebook",
+        toolCount: 6,
+        complexityScore: 15,
+        sparkVcores: 8,
+        notebookRuntimeSeconds: 300,
+        profile: {
+          profileKind: "alteryx",
+          targetComponents: "Fabric Notebook",
+          complexityUnits: 4,
+          destCount: 1,
+          heavySteps: 0,
+          notebookSteps: 2,
+          pipelineSteps: 0,
+          totalSteps: 6,
+          coveredByLinkedMapping: false,
+        },
+      },
+    ]);
+
+    expect(result.excludedCount).toBe(1);
+    expect(result.calibratedCount).toBe(0);
+    expect(result.heuristicCount).toBe(1);
+    expect(result.workflows[0].excluded).toBe(true);
+    expect(result.workflows[0].cuSecondsPerRun).toBe(0);
+    expect(result.workflows[0].monthlyCuHours).toBe(0);
+    expect(result.workflows[1].excluded).toBe(false);
+    expect(result.workflows[1].effectiveNotebookRuntimeSeconds).toBe(300);
+    // 8 vCores = 4 Spark CU * 300s = 1200 notebook CU-s/run
+    expect(result.workflows[1].notebookCuSecondsPerRun).toBe(1200);
+  });
 });

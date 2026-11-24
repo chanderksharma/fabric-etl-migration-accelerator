@@ -907,7 +907,68 @@ test("supports drawer prev/next navigation, manual-rework guard, and remembered 
     target: {value: "custom.yxmd"},
   });
   expect(within(section).getByText("Manual rework required.")).toBeInTheDocument();
+  expect(within(section).getByLabelText("Deployment target")).toBeDisabled();
   expect(within(section).getByRole("button", {name: "Trigger GitHub Actions"})).toBeDisabled();
   expect(within(section).getByLabelText("GitHub repository URL")).toHaveValue("https://github.com/owner/repo");
   expect(within(section).getByLabelText("Git ref")).toHaveValue("main");
 });
+
+test("restricts deployment target options to applicable workflow components and deployable candidates", async () => {
+  const dataflowOnlyCandidates = [{
+    workflow: "orders.yxmd", target: "dataflow" as const, validation_state: "generated_unvalidated",
+    code: "section Section1;", diagnostics: [], deployable: true, definition_ready: true,
+    runtime_ready: true, artifact_path: "orders", definition_files: ["dataflow-mashup.pq"],
+  }];
+  const app = render(<FabricDeploymentPage active assessment={assessment} runId="test-targets"
+    candidates={dataflowOnlyCandidates} generating={false} generate={vi.fn()}
+    request={vi.fn().mockResolvedValue(targetCatalogResponse)} onStartIntake={vi.fn()}/>);
+
+  const targetSelect = await screen.findByLabelText("Deployment target");
+  expect(targetSelect).toHaveValue("dataflow");
+  expect(within(targetSelect).getAllByRole("option").map(option => option.textContent))
+    .toEqual(["Dataflow Gen2"]);
+
+  // A deployable generated Notebook candidate is offered alongside Dataflow Gen2, while scaffold Pipeline stays hidden.
+  app.rerender(<FabricDeploymentPage active assessment={assessment} runId="test-targets"
+    candidates={[
+      ...dataflowOnlyCandidates,
+      {
+        workflow: "orders.yxmd", target: "notebook", validation_state: "generated_unvalidated",
+        code: "display(df)", diagnostics: [], deployable: true, definition_ready: true,
+        runtime_ready: true, artifact_path: "orders", definition_files: ["notebook-content.ipynb"],
+      },
+      {
+        workflow: "orders.yxmd", target: "pipeline", validation_state: "scaffold",
+        code: "", diagnostics: ["Alteryx pipeline generation is available only for mixed-item bundles"],
+        deployable: false, definition_ready: false, runtime_ready: false,
+        artifact_path: null, definition_files: [],
+      },
+    ]}
+    generating={false} generate={vi.fn()}
+    request={vi.fn().mockResolvedValue(targetCatalogResponse)} onStartIntake={vi.fn()}/>);
+
+  expect(within(targetSelect).getAllByRole("option").map(option => option.textContent))
+    .toEqual(["Dataflow Gen2", "Notebook"]);
+
+  // A Dataflow + Pipeline mixed workflow omits Notebook when it is not part of target_components.
+  const mixedDfPlAssessment: AssessmentResult = {
+    ...assessment,
+    workflow_count: 1,
+    workflows: [{display_path: "wf_orders", sha256: "wf"}],
+    assessments: [{
+      ...assessment.assessments[0],
+      path: "wf_orders",
+      recommended_target: "Mixed Fabric solution",
+      target_components: ["Dataflow Gen2", "Fabric Pipeline"],
+    }],
+  };
+  app.rerender(<FabricDeploymentPage active assessment={mixedDfPlAssessment} runId="test-targets"
+    candidates={[]} generating={false} generate={vi.fn()}
+    request={vi.fn().mockResolvedValue(targetCatalogResponse)} onStartIntake={vi.fn()}/>);
+
+  const mixedSelect = await screen.findByLabelText("Deployment target");
+  expect(mixedSelect).toHaveValue("bundle");
+  expect(within(mixedSelect).getAllByRole("option").map(option => option.textContent))
+    .toEqual(["Dataflow Gen2 + Pipeline", "Dataflow Gen2", "Fabric Data Pipeline"]);
+});
+

@@ -21,9 +21,33 @@ type DeploymentProps = {
   candidates: Candidate[];
   runId: string | null;
   request: (path: string, init?: RequestInit) => Promise<Response>;
+  allowedTargetKinds?: Target[];
 };
 
 const DEPLOY_PREFS_KEY = "accelerator-deploy-prefs";
+
+function isTarget(value: string): value is Target {
+  return value === "notebook" || value === "dataflow" || value === "pipeline";
+}
+
+function componentToTarget(component: string): Target | null {
+  if (component === "Dataflow Gen2") return "dataflow";
+  if (component === "Fabric Notebook") return "notebook";
+  if (component === "Fabric Pipeline") return "pipeline";
+  return null;
+}
+
+function targetOptionLabel(value: Target): string {
+  if (value === "dataflow") return "Dataflow Gen2";
+  if (value === "pipeline") return "Fabric Data Pipeline";
+  return "Notebook";
+}
+
+function targetCardLabel(value: Target): string {
+  if (value === "dataflow") return "Dataflow Gen2";
+  if (value === "pipeline") return "Fabric Data Pipeline";
+  return "Fabric Notebook";
+}
 
 function readDeployPrefs(): DeployPrefs {
   try {
@@ -45,17 +69,48 @@ function writeDeployPrefs(prefs: DeployPrefs) {
   }
 }
 
-export function Deployment({item, candidates, runId, request}: DeploymentProps) {
+export function Deployment({item, candidates, runId, request, allowedTargetKinds}: DeploymentProps) {
   const initialPrefs = useMemo(() => readDeployPrefs(), []);
-  const [target, setTarget] = useState<DeploymentTarget>(
-    item.recommended_target === "Mixed Fabric solution"
-      ? "bundle"
-      : item.recommended_target === "Fabric Pipeline"
-        ? "pipeline"
-      : item.recommended_target === "Dataflow Gen2"
-        ? "dataflow"
-        : "notebook"
+  const isManualOnly = item.recommended_target === "Manual rework";
+  const bundleCandidates = candidates.filter(
+    value => value.workflow === item.path
   );
+  const componentTargets = (item.target_components ?? [])
+    .map(componentToTarget)
+    .filter((value): value is Target => value !== null);
+  const fallbackTarget = componentToTarget(item.recommended_target);
+  const bundleTargets: Target[] = componentTargets.length > 0
+    ? componentTargets
+    : fallbackTarget
+      ? [fallbackTarget]
+      : [];
+  const allowedSet = allowedTargetKinds?.length ? new Set<Target>(allowedTargetKinds) : null;
+  const deployableGeneratedTargets: Target[] = bundleCandidates
+    .filter(value => value.deployable)
+    .map(value => value.target)
+    .filter(isTarget);
+  const itemTargets: Target[] = [];
+  if (!isManualOnly) {
+    for (const candidateTarget of [...bundleTargets, ...deployableGeneratedTargets]) {
+      if (allowedSet && !allowedSet.has(candidateTarget)) continue;
+      if (!itemTargets.includes(candidateTarget)) {
+        itemTargets.push(candidateTarget);
+      }
+    }
+  }
+  const canDeployBundle =
+    !isManualOnly &&
+    item.recommended_target === "Mixed Fabric solution" &&
+    bundleTargets.length > 0 &&
+    (!allowedSet || bundleTargets.every(value => allowedSet.has(value)));
+  const availableTargets: DeploymentTarget[] = [
+    ...(canDeployBundle ? (["bundle"] as const) : []),
+    ...itemTargets,
+  ];
+  const defaultTarget: DeploymentTarget | "" = availableTargets[0] ?? "";
+  const [target, setTarget] = useState<DeploymentTarget | "">(defaultTarget);
+  const effectiveTarget: DeploymentTarget | "" =
+    target !== "" && availableTargets.includes(target) ? target : defaultTarget;
   const [provider, setProvider] = useState<DeploymentProvider>(initialPrefs.provider === "gitlab" ? "gitlab" : "github");
   const [repositoryUrl, setRepositoryUrl] = useState(initialPrefs.repositoryUrl ?? "");
   const [workflowFile, setWorkflowFile] = useState(initialPrefs.workflowFile ?? ".github/workflows/deploy-fabric-artifacts.yml");
@@ -80,24 +135,15 @@ export function Deployment({item, candidates, runId, request}: DeploymentProps) 
     });
   }, [provider, repositoryUrl, workflowFile, gitlabProjectUrl, gitRef, conflictBehavior]);
 
-  const isManualOnly = item.recommended_target === "Manual rework";
-  const candidate = target === "bundle"
+  const candidate = !effectiveTarget || effectiveTarget === "bundle"
     ? undefined
     : candidates.find(
-        value => value.workflow === item.path && value.target === target
+        value => value.workflow === item.path && value.target === effectiveTarget
       );
-  const bundleCandidates = candidates.filter(
-    value => value.workflow === item.path
-  );
-  const bundleTargets = [
-    ...(item.target_components?.includes("Dataflow Gen2") ? ["dataflow"] : []),
-    ...(item.target_components?.includes("Fabric Notebook") ? ["notebook"] : []),
-    ...(item.target_components?.includes("Fabric Pipeline") ? ["pipeline"] : []),
-  ] as Target[];
   const requiredBundleCandidates = bundleTargets.includes("notebook")
     ? bundleTargets.filter(value => value !== "pipeline")
     : bundleTargets;
-  const bundleReady = requiredBundleCandidates.every(bundleTarget =>
+  const bundleReady = requiredBundleCandidates.length > 0 && requiredBundleCandidates.every(bundleTarget =>
     bundleCandidates.some(value => value.target === bundleTarget && value.deployable)
   );
   const repository = githubRepository(repositoryUrl);
@@ -105,7 +151,7 @@ export function Deployment({item, candidates, runId, request}: DeploymentProps) 
   const providerName = provider === "github" ? "GitHub Actions" : "GitLab CI";
 
   function validateSetup() {
-    if (isManualOnly) {
+    if (isManualOnly || !effectiveTarget) {
       setFeedback("Manual rework workflows have no deployable native definition.");
       return false;
     }
@@ -156,7 +202,7 @@ export function Deployment({item, candidates, runId, request}: DeploymentProps) 
         ? {
             repository_url: repositoryUrl,
             source_workflow: item.path,
-            target,
+            target: effectiveTarget,
             workflow_file: workflowFile,
             ref: gitRef || null,
             expected_commit: expectedCommit || null,
@@ -167,7 +213,7 @@ export function Deployment({item, candidates, runId, request}: DeploymentProps) 
         : {
             project_url: gitlabProjectUrl,
             source_workflow: item.path,
-            target,
+            target: effectiveTarget,
             ci_file: ".gitlab-ci.yml",
             ref: gitRef || null,
             expected_commit: expectedCommit || null,
@@ -256,8 +302,61 @@ export function Deployment({item, candidates, runId, request}: DeploymentProps) 
         <div className="deploy-field full"><label htmlFor="providerIdentity">{providerName} authentication</label><input id="providerIdentity" value={provider === "github" ? "Server-side GitHub App installation" : "Server-side GitLab project access token"} readOnly/></div>
       </div>
     </div>
-    <div className="summary-box"><h3>Deployment bundle</h3><div className="deploy-field"><label htmlFor="bundleTarget">Deployment target</label><select id="bundleTarget" value={target} onChange={e => setTarget(e.target.value as DeploymentTarget)}>{item.recommended_target === "Mixed Fabric solution" && <option value="bundle">{bundleTargets.map(value => value === "dataflow" ? "Dataflow Gen2" : value === "notebook" ? "Notebook" : "Pipeline").join(" + ")}</option>}<option value="notebook">Notebook</option><option value="dataflow">Dataflow Gen2</option><option value="pipeline">Fabric Data Pipeline</option></select></div><div className="bundle-grid">{target === "bundle" ? <>{bundleTargets.map(value => <div className="bundle-card" key={value}><strong>{value === "dataflow" ? "Dataflow Gen2" : value === "notebook" ? "Fabric Notebook" : "Fabric Data Pipeline"}</strong><p>{value === "pipeline" ? "Binds and orchestrates the generated compute items." : "Generated compute item in the deployment bundle."}</p></div>)}</> : <div className="bundle-card"><strong>{target === "notebook" ? "Fabric Notebook" : target === "pipeline" ? "Fabric Data Pipeline" : "Dataflow Gen2"}</strong><p>Guarded, unbound and unvalidated.</p></div>}<div className="bundle-card"><strong>{providerName}</strong><p>Dev only; workspace and SPN resolve from the team profile.</p></div></div></div>
+    <div className="summary-box">
+      <h3>Deployment bundle</h3>
+      <div className="deploy-field">
+        <label htmlFor="bundleTarget">Deployment target</label>
+        <select
+          id="bundleTarget"
+          value={effectiveTarget}
+          disabled={isManualOnly || availableTargets.length === 0}
+          onChange={e => setTarget(e.target.value as DeploymentTarget)}
+        >
+          {availableTargets.length === 0 ? (
+            <option value="">No deployable target</option>
+          ) : (
+            availableTargets.map(option =>
+              option === "bundle" ? (
+                <option key="bundle" value="bundle">
+                  {bundleTargets.map(value => value === "dataflow" ? "Dataflow Gen2" : value === "notebook" ? "Notebook" : "Pipeline").join(" + ")}
+                </option>
+              ) : (
+                <option key={option} value={option}>
+                  {targetOptionLabel(option)}
+                </option>
+              )
+            )
+          )}
+        </select>
+      </div>
+      <div className="bundle-grid">
+        {!effectiveTarget ? (
+          <div className="bundle-card">
+            <strong>No deployable Fabric item</strong>
+            <p>Manual redesign required before deployment.</p>
+          </div>
+        ) : effectiveTarget === "bundle" ? (
+          <>
+            {bundleTargets.map(value => (
+              <div className="bundle-card" key={value}>
+                <strong>{targetCardLabel(value)}</strong>
+                <p>{value === "pipeline" ? "Binds and orchestrates the generated compute items." : "Generated compute item in the deployment bundle."}</p>
+              </div>
+            ))}
+          </>
+        ) : (
+          <div className="bundle-card">
+            <strong>{targetCardLabel(effectiveTarget)}</strong>
+            <p>Guarded, unbound and unvalidated.</p>
+          </div>
+        )}
+        <div className="bundle-card">
+          <strong>{providerName}</strong>
+          <p>Dev only; workspace and SPN resolve from the team profile.</p>
+        </div>
+      </div>
+    </div>
     <div className="summary-box"><h3>Manual deployment package</h3><p>Download this workflow's generated Dataflow, Notebook, Pipeline, manifests, diagnostics, and a README with manual installation steps.</p><div className="deploy-actions">{runId ? <a className="secondary-button" href={`/api/runs/${runId}/bundle?workflow=${encodeURIComponent(item.path)}`}>Download workflow bundle</a> : <button className="secondary-button" disabled>Download workflow bundle</button>}</div></div>
-    <div className="summary-box"><h3>Deployment behavior</h3><p>The backend sends one dispatch request to the existing {providerName} definition. The provider accepts and runs the pipeline; this application does not create repository content, monitor runs, or read logs.</p><div className="deploy-actions"><button className="secondary-button" disabled={deploying || isManualOnly} onClick={validateSetup}>Validate deployment request</button><button className="primary-button" disabled={deploying || !runId || isManualOnly} onClick={deploy}>{deploying ? "Triggering..." : `Trigger ${providerName}`}</button></div><p className={target === "bundle" ? bundleReady ? "good" : "review" : candidate?.deployable ? "good" : candidate ? "bad" : "review"}>{target === "bundle" ? bundleReady ? `${bundleTargets.length}-item Fabric bundle ready. Validate bindings and parity before running it.` : "Bundle deployment generates and validates all required definitions before dispatch." : candidate?.deployable ? "Fabric definition package ready. Validate bindings and parity before running it." : candidate ? "The selected definition is blocked; triggering will return its diagnostics." : "The backend will generate and validate this definition before dispatch."}</p>{feedback && <p role="status">{feedback}</p>}{runUrl && <a className="deploy-link" href={runUrl} target="_blank" rel="noreferrer">{provider === "github" ? "Open GitHub Actions runs ↗" : "Open GitLab pipeline ↗"}</a>}</div>
+    <div className="summary-box"><h3>Deployment behavior</h3><p>The backend sends one dispatch request to the existing {providerName} definition. The provider accepts and runs the pipeline; this application does not create repository content, monitor runs, or read logs.</p><div className="deploy-actions"><button className="secondary-button" disabled={deploying || isManualOnly || !effectiveTarget} onClick={validateSetup}>Validate deployment request</button><button className="primary-button" disabled={deploying || !runId || isManualOnly || !effectiveTarget} onClick={deploy}>{deploying ? "Triggering..." : `Trigger ${providerName}`}</button></div><p className={!effectiveTarget ? "bad" : effectiveTarget === "bundle" ? bundleReady ? "good" : "review" : candidate?.deployable ? "good" : candidate ? "bad" : "review"}>{!effectiveTarget ? "No deployable native Fabric definition is available for this workflow." : effectiveTarget === "bundle" ? bundleReady ? `${bundleTargets.length}-item Fabric bundle ready. Validate bindings and parity before running it.` : "Bundle deployment generates and validates all required definitions before dispatch." : candidate?.deployable ? "Fabric definition package ready. Validate bindings and parity before running it." : candidate ? "The selected definition is blocked; triggering will return its diagnostics." : "The backend will generate and validate this definition before dispatch."}</p>{feedback && <p role="status">{feedback}</p>}{runUrl && <a className="deploy-link" href={runUrl} target="_blank" rel="noreferrer">{provider === "github" ? "Open GitHub Actions runs ↗" : "Open GitLab pipeline ↗"}</a>}</div>
   </section>;
 }

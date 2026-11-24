@@ -12,7 +12,11 @@ interface UploadedFile {
 
 const terminalStatuses = new Set(["Completed", "Failed", "Cancelled", "Deduped"]);
 
-export function IntakeRunPage() {
+export function IntakeRunPage({
+  onOpenPortfolio,
+}: {
+  onOpenPortfolio?: () => void;
+} = {}) {
   const { refreshRuns } = useAssessmentRunContext();
   const [files, setFiles] = useState<File[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -287,6 +291,15 @@ export function IntakeRunPage() {
               <span>{jobStatus || "Waiting for staged files"}</span>
             </div>
             {jobInstanceId && <p className="mt-2 break-all font-monospace text-100 text-muted-foreground">{jobInstanceId}</p>}
+            {jobStatus === "Completed" && onOpenPortfolio && (
+              <button
+                type="button"
+                className="mt-4 inline-flex w-full items-center justify-center rounded-lg border bg-background px-4 py-2 text-200 font-semibold hover:bg-hover"
+                onClick={onOpenPortfolio}
+              >
+                View Portfolio →
+              </button>
+            )}
           </div>
         </section>
       </div>

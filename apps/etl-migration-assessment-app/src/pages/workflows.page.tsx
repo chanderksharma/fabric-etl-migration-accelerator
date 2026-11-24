@@ -13,27 +13,60 @@ import { workflows } from "@/queries";
 type DetailTab = "summary" | "source" | "design" | "risk" | "validation" | "deployment";
 
 export function WorkflowsPage({
+  initialWorkflowPath,
   onOpenDeployment,
+  onOpenTechnical,
 }: {
+  initialWorkflowPath?: string;
   onOpenDeployment?: (workflowPath: string) => void;
+  onOpenTechnical?: (workflowPath: string) => void;
 }) {
   const workflowQuery = useQueryRecords(workflows.register);
   const [search, setSearch] = useState("");
+  const [platform, setPlatform] = useState("All");
   const [complexity, setComplexity] = useState("All");
+  const [wave, setWave] = useState("All");
   const [target, setTarget] = useState("All");
-  const [selectedKey, setSelectedKey] = useState<string>();
+  const [selectedKey, setSelectedKey] = useState<string | undefined>(undefined);
+  const [preselectedConsumed, setPreselectedConsumed] = useState(false);
 
   const filtered = useMemo(() => workflowQuery.records.filter((record) => {
     const path = String(record.WorkflowPath ?? "");
     return (
       path.toLowerCase().includes(search.toLowerCase()) &&
+      (platform === "All" || String(record.SourcePlatform ?? "") === platform) &&
       (complexity === "All" || record.ComplexityBand === complexity) &&
+      (wave === "All" || waveLabel(record.MigrationWave) === wave) &&
       (target === "All" || record.RecommendedTarget === target)
     );
-  }), [complexity, search, target, workflowQuery.records]);
+  }), [complexity, platform, search, target, wave, workflowQuery.records]);
+
+  const effectiveSelectedKey = useMemo(() => {
+    if (selectedKey !== undefined) return selectedKey;
+    if (!preselectedConsumed && initialWorkflowPath) {
+      const matched = workflowQuery.records.find(
+        (record) => String(record.WorkflowPath ?? "") === initialWorkflowPath,
+      );
+      if (matched) return String(matched.WorkflowKey ?? matched.WorkflowPath);
+    }
+    return undefined;
+  }, [initialWorkflowPath, preselectedConsumed, selectedKey, workflowQuery.records]);
+
   const selected = workflowQuery.records.find(
-    (record) => String(record.WorkflowKey ?? record.WorkflowPath) === selectedKey,
+    (record) => String(record.WorkflowKey ?? record.WorkflowPath) === effectiveSelectedKey,
   );
+  const selectedFilteredIndex = selected
+    ? filtered.findIndex(
+        (record) =>
+          String(record.WorkflowKey ?? record.WorkflowPath) ===
+          String(selected.WorkflowKey ?? selected.WorkflowPath),
+      )
+    : -1;
+  const previousWorkflow = selectedFilteredIndex > 0 ? filtered[selectedFilteredIndex - 1] : undefined;
+  const nextWorkflow =
+    selectedFilteredIndex >= 0 && selectedFilteredIndex < filtered.length - 1
+      ? filtered[selectedFilteredIndex + 1]
+      : undefined;
   const detailKey =
     typeof selected?.WorkflowKey === "string" && /^[0-9a-f]{64}$/i.test(selected.WorkflowKey)
       ? selected.WorkflowKey
@@ -78,13 +111,23 @@ export function WorkflowsPage({
             Export filtered register
           </button>
         </div>
-        <div className="mb-4 grid gap-3 md:grid-cols-3">
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <label className="text-200 font-semibold">Search
             <input className="mt-1 w-full rounded-lg border bg-background p-2.5 font-normal" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Workflow name" />
+          </label>
+          <label className="text-200 font-semibold">Source
+            <select className="mt-1 w-full rounded-lg border bg-background p-2.5 font-normal" value={platform} onChange={(event) => setPlatform(event.target.value)}>
+              {["All", ...new Set(workflowQuery.records.map((record) => String(record.SourcePlatform ?? "")).filter(Boolean))].map((value) => <option key={value}>{value}</option>)}
+            </select>
           </label>
           <label className="text-200 font-semibold">Complexity
             <select className="mt-1 w-full rounded-lg border bg-background p-2.5 font-normal" value={complexity} onChange={(event) => setComplexity(event.target.value)}>
               {["All", "Low", "Medium", "High"].map((value) => <option key={value}>{value}</option>)}
+            </select>
+          </label>
+          <label className="text-200 font-semibold">Wave
+            <select className="mt-1 w-full rounded-lg border bg-background p-2.5 font-normal" value={wave} onChange={(event) => setWave(event.target.value)}>
+              {["All", ...new Set(workflowQuery.records.map((record) => waveLabel(record.MigrationWave)))].map((value) => <option key={value}>{value}</option>)}
             </select>
           </label>
           <label className="text-200 font-semibold">Fabric target
@@ -97,13 +140,17 @@ export function WorkflowsPage({
         {!!filtered.length && (
           <SimpleTable
             records={filtered}
-            onSelect={(record) => setSelectedKey(String(record.WorkflowKey ?? record.WorkflowPath))}
+            onSelect={(record) => {
+              setPreselectedConsumed(true);
+              setSelectedKey(String(record.WorkflowKey ?? record.WorkflowPath));
+            }}
             rowLabel={(record) => `Open workflow ${String(record.WorkflowPath)}`}
             columns={[
               { key: "WorkflowPath", label: "Workflow", render: (record) => <strong className="text-brand-foreground">{formatValue(record.WorkflowPath)}</strong> },
               { key: "SourcePlatform", label: "Source" },
               { key: "ComplexityBand", label: "Complexity", render: (record) => <Pill tone={record.ComplexityBand === "High" ? "danger" : record.ComplexityBand === "Medium" ? "warning" : "success"}>{formatValue(record.ComplexityBand)}</Pill> },
               { key: "RecommendedTarget", label: "Fabric target" },
+              { key: "EstimatedEffortDays", label: "Effort", render: (record) => `${Number(record.EstimatedEffortDays ?? 0).toFixed(1)}d` },
               { key: "MigrationWave", label: "Wave", render: (record) => waveLabel(record.MigrationWave) },
               { key: "RecommendationReason", label: "Key issue" },
             ]}
@@ -126,8 +173,28 @@ export function WorkflowsPage({
             toolQuery.isLoading
           }
           evidenceError={evidenceError}
-          onClose={() => setSelectedKey(undefined)}
+          onClose={() => {
+            setPreselectedConsumed(true);
+            setSelectedKey(undefined);
+          }}
+          onPrevious={
+            previousWorkflow
+              ? () => {
+                  setPreselectedConsumed(true);
+                  setSelectedKey(String(previousWorkflow.WorkflowKey ?? previousWorkflow.WorkflowPath));
+                }
+              : undefined
+          }
+          onNext={
+            nextWorkflow
+              ? () => {
+                  setPreselectedConsumed(true);
+                  setSelectedKey(String(nextWorkflow.WorkflowKey ?? nextWorkflow.WorkflowPath));
+                }
+              : undefined
+          }
           onOpenDeployment={onOpenDeployment}
+          onOpenTechnical={onOpenTechnical}
         />
       )}
     </PageFrame>
@@ -144,7 +211,10 @@ function WorkflowDialog({
   evidenceLoading,
   evidenceError,
   onClose,
+  onPrevious,
+  onNext,
   onOpenDeployment,
+  onOpenTechnical,
 }: {
   workflow: QueryRecord;
   nodes: QueryRecord[];
@@ -155,7 +225,10 @@ function WorkflowDialog({
   evidenceLoading: boolean;
   evidenceError?: Error;
   onClose: () => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
   onOpenDeployment?: (workflowPath: string) => void;
+  onOpenTechnical?: (workflowPath: string) => void;
 }) {
   const [tab, setTab] = useState<DetailTab>("summary");
   useEffect(() => {
@@ -177,15 +250,19 @@ function WorkflowDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label={String(workflow.WorkflowPath)}>
       <div className="max-h-[92vh] w-full max-w-6xl overflow-auto rounded-xl border bg-background shadow-xl">
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background p-5">
+        <header className="sticky top-0 z-10 flex flex-wrap items-start justify-between gap-4 border-b bg-background p-5">
           <div><p className="text-100 uppercase text-muted-foreground">Workflow details</p><h2 className="mt-1 text-section-title font-semibold">{formatValue(workflow.WorkflowPath)}</h2><p className="mt-1 text-200 text-muted-foreground">{formatValue(workflow.RecommendationReason)}</p></div>
-          <button type="button" className="rounded-lg border p-2 hover:bg-hover" onClick={onClose} aria-label="Close workflow details"><X className="icon-size-200" /></button>
+          <div className="flex items-center gap-2">
+            <button type="button" className="rounded-lg border px-3 py-1.5 text-200 font-semibold hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={!onPrevious} onClick={onPrevious}>← Previous workflow</button>
+            <button type="button" className="rounded-lg border px-3 py-1.5 text-200 font-semibold hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={!onNext} onClick={onNext}>Next workflow →</button>
+            <button type="button" className="rounded-lg border p-2 hover:bg-hover" onClick={onClose} aria-label="Close workflow details"><X className="icon-size-200" /></button>
+          </div>
         </header>
         <div className="flex gap-2 overflow-x-auto border-b p-3" role="tablist" aria-label="Workflow detail sections">
           {tabs.map((item) => <button key={item.key} type="button" role="tab" aria-selected={tab === item.key} className={`shrink-0 rounded-lg px-3 py-2 text-200 font-semibold ${tab === item.key ? "bg-brand text-on-brand" : "hover:bg-hover"}`} onClick={() => setTab(item.key)}>{item.label}</button>)}
         </div>
         <div className="space-y-5 p-5">
-          {tab === "summary" && <SummaryTab workflow={workflow} />}
+          {tab === "summary" && <SummaryTab workflow={workflow} onOpenTechnical={onOpenTechnical} />}
           {tab === "source" && <SourceTab nodes={nodes} connections={connections} dependencies={dependencies} tools={tools} isLoading={evidenceLoading} error={evidenceError} />}
           {tab === "design" && <DesignTab workflow={workflow} />}
           {tab === "risk" && <RiskTab workflow={workflow} findings={findings} nodes={nodes} dependencies={dependencies} isLoading={evidenceLoading} error={evidenceError} />}
@@ -197,7 +274,13 @@ function WorkflowDialog({
   );
 }
 
-function SummaryTab({ workflow }: { workflow: QueryRecord }) {
+function SummaryTab({
+  workflow,
+  onOpenTechnical,
+}: {
+  workflow: QueryRecord;
+  onOpenTechnical?: (workflowPath: string) => void;
+}) {
   const items = [
     ["Source path", workflow.WorkflowPath],
     ["Platform", workflow.SourcePlatform],
@@ -208,12 +291,24 @@ function SummaryTab({ workflow }: { workflow: QueryRecord }) {
     ["Registry version", workflow.RegistryVersion],
   ];
   return <>
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <SummaryMetric label="Complexity" value={`${formatValue(workflow.ComplexityBand)} · ${formatValue(workflow.ComplexityScore)} points`} />
       <SummaryMetric label="Recommended target" value={formatValue(workflow.RecommendedTarget)} />
+      <SummaryMetric label="Remaining effort" value={`${Number(workflow.EstimatedEffortDays ?? 0).toFixed(1)} days`} />
       <SummaryMetric label="Migration wave" value={waveLabel(workflow.MigrationWave)} />
     </div>
     <Panel title="Source metadata"><dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{items.map(([label, value]) => <div key={label as string}><dt className="text-100 uppercase text-muted-foreground">{label as string}</dt><dd className="mt-1 break-words font-semibold">{formatValue(value)}</dd></div>)}</dl></Panel>
+    {onOpenTechnical && (
+      <div className="flex justify-end">
+        <button
+          type="button"
+          className="rounded-lg border bg-background px-3 py-2 text-200 font-semibold hover:bg-hover"
+          onClick={() => onOpenTechnical(String(workflow.WorkflowPath ?? ""))}
+        >
+          Inspect technical evidence →
+        </button>
+      </div>
+    )}
     <div className="rounded-lg border p-4 text-200 text-muted-foreground">Static assessment evidence only. Runtime, throughput, production volume, ownership, and failure history are not measured.</div>
   </>;
 }
@@ -287,7 +382,41 @@ function DeploymentTab({
   target: string;
   onOpenDeployment?: (workflowPath: string) => void;
 }) {
-  return <><div className="rounded-lg border border-brand p-4"><strong>Dispatch-only CI/CD</strong><p className="mt-1 text-200 text-muted-foreground">The app validates an existing GitHub Actions or GitLab CI definition and repository artifacts, creates a signed preview, and requires explicit confirmation. Provider credentials remain server-side.</p></div><Panel title="Repository artifact contract"><dl className="grid gap-4 sm:grid-cols-3"><Brief label="Target" value={target} /><Brief label="Required root" value="generated-fabric-workflows" /><Brief label="Behavior" value="Fail, Skip, or Update" /></dl></Panel><button type="button" className="rounded-lg bg-brand px-4 py-3 font-semibold text-on-brand" onClick={() => onOpenDeployment?.(workflowPath)}>Open CI/CD dispatch</button></>;
+  const isManualOnly = target === "Manual rework";
+  return (
+    <>
+      {isManualOnly ? (
+        <div className="rounded-lg border border-destructive p-4" role="status">
+          <strong>Manual rework required.</strong>
+          <p className="mt-1 text-200 text-muted-foreground">
+            This workflow has no deployable native definition and cannot be dispatched through CI/CD until redesigned.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-brand p-4">
+          <strong>Dispatch-only CI/CD</strong>
+          <p className="mt-1 text-200 text-muted-foreground">
+            The app validates an existing GitHub Actions or GitLab CI definition and repository artifacts, creates a signed preview, and requires explicit confirmation. Provider credentials remain server-side.
+          </p>
+        </div>
+      )}
+      <Panel title="Repository artifact contract">
+        <dl className="grid gap-4 sm:grid-cols-3">
+          <Brief label="Target" value={target} />
+          <Brief label="Required root" value="generated-fabric-workflows" />
+          <Brief label="Behavior" value={isManualOnly ? "Manual redesign required" : "Fail, Skip, or Update"} />
+        </dl>
+      </Panel>
+      <button
+        type="button"
+        disabled={isManualOnly}
+        className="rounded-lg bg-brand px-4 py-3 font-semibold text-on-brand disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={() => onOpenDeployment?.(workflowPath)}
+      >
+        Open CI/CD dispatch
+      </button>
+    </>
+  );
 }
 
 function Brief({ label, value }: { label: string; value: string }) {

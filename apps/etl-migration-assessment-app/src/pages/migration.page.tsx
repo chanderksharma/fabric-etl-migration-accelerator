@@ -8,10 +8,14 @@ import { portfolio, workflows } from "@/queries";
 
 export function MigrationPage() {
   const workflowQuery = useQueryRecords(workflows.register);
-  const countsByWave = workflowQuery.records.reduce<Record<string, number>>((counts, record) => {
+  const waveTotals = workflowQuery.records.reduce<Record<string, { count: number; effort: number }>>((totals, record) => {
     const label = waveLabel(record.MigrationWave);
-    counts[label] = (counts[label] ?? 0) + 1;
-    return counts;
+    const current = totals[label] ?? { count: 0, effort: 0 };
+    totals[label] = {
+      count: current.count + 1,
+      effort: current.effort + (Number(record.EstimatedEffortDays ?? 0) || 0),
+    };
+    return totals;
   }, {});
 
   return (
@@ -65,13 +69,17 @@ export function MigrationPage() {
         <DataState isLoading={workflowQuery.isLoading} error={workflowQuery.error} empty={!workflowQuery.records.length} />
         {!!workflowQuery.records.length && (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {waveDefinitions.map((wave, index) => (
-              <div key={wave.label} className="rounded-lg border p-4">
-                <div className="flex items-center justify-between"><Pill>{index + 1}</Pill><strong>{countsByWave[wave.label] ?? 0} workflows</strong></div>
-                <h3 className="mt-3 font-semibold">{wave.label}</h3>
-                <p className="mt-1 text-200 text-muted-foreground">{wave.guidance}</p>
-              </div>
-            ))}
+            {waveDefinitions.map((wave, index) => {
+              const summary = waveTotals[wave.label] ?? { count: 0, effort: 0 };
+              return (
+                <div key={wave.label} className="rounded-lg border p-4">
+                  <div className="flex items-center justify-between"><Pill>{index + 1}</Pill><strong>{summary.count} workflows</strong></div>
+                  <h3 className="mt-3 font-semibold">{wave.label}</h3>
+                  <p className="mt-1 text-200 font-semibold text-brand-foreground">{summary.effort.toFixed(1)}d remaining effort</p>
+                  <p className="mt-1 text-200 text-muted-foreground">{wave.guidance}</p>
+                </div>
+              );
+            })}
           </div>
         )}
       </Panel>
@@ -80,7 +88,7 @@ export function MigrationPage() {
           <ul className="space-y-2 text-200 text-muted-foreground">
             <li>Sequencing uses technical complexity, target routing, dependencies, and static findings.</li>
             <li>Business criticality, runtime, schedules, and production failure history are not included.</li>
-            <li>Delivery effort is not persisted in the normalized semantic model and is not inferred here.</li>
+            <li>Remaining effort (days) is a deterministic baseline from bindings and redesign complexity, not a measured delivery quote.</li>
           </ul>
         </Panel>
         <Panel title="Exit gates" subtitle="Evidence required before promotion">

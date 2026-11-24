@@ -18,7 +18,31 @@ type CapacityOverrides = Record<string, {
   refreshIntervalMinutes: number;
   sourceRowsPerRun: number;
   sparkVcores: number;
+  notebookRuntimeSeconds?: number | null;
 }>;
+
+function componentBreakdown(
+  item: {
+    dataflowCuSecondsPerRun: number;
+    notebookCuSecondsPerRun: number;
+    pipelineCuSecondsPerRun: number;
+  },
+  billingMode: SparkBillingMode,
+): string {
+  const parts: string[] = [];
+  if (item.dataflowCuSecondsPerRun > 0) {
+    parts.push(`DF ${item.dataflowCuSecondsPerRun.toFixed(0)}`);
+  }
+  if (item.notebookCuSecondsPerRun > 0) {
+    parts.push(
+      `NB ${item.notebookCuSecondsPerRun.toFixed(0)}${billingMode === "autoscale" ? " (Autoscale)" : ""}`,
+    );
+  }
+  if (item.pipelineCuSecondsPerRun > 0) {
+    parts.push(`PL ${item.pipelineCuSecondsPerRun.toFixed(0)}`);
+  }
+  return parts.join(" · ");
+}
 
 interface SavedCapacityScenario {
   settings: CapacitySettings;
@@ -80,6 +104,8 @@ function CapacityPageForRun({ runId }: { runId: string }) {
     WorkflowPath: item.workflowPath,
     RecommendedTarget: item.recommendedTarget,
     Basis: item.basis,
+    ExcludedReason: item.exclusionReason ?? "",
+    NotebookRuntimeSeconds: item.effectiveNotebookRuntimeSeconds ?? "",
     DataflowCu: item.dataflowCuSecondsPerRun,
     NotebookCu: item.notebookCuSecondsPerRun,
     PipelineCu: item.pipelineCuSecondsPerRun,
@@ -91,6 +117,7 @@ function CapacityPageForRun({ runId }: { runId: string }) {
   }));
 
   const hasStaticProfiles = profileByKey.size > 0;
+  const modeledCount = estimate.workflows.length - estimate.excludedCount;
 
   return (
     <PageFrame
@@ -111,11 +138,13 @@ function CapacityPageForRun({ runId }: { runId: string }) {
               "RefreshIntervalMinutes",
               "SourceRowsPerRun",
               "SparkVcores",
+              "NotebookRuntimeSeconds",
               "DataflowCu",
               "NotebookCu",
               "PipelineCu",
               "CuSeconds",
               "MonthlyCuHours",
+              "ExcludedReason",
             ],
             rows,
           )}
@@ -134,6 +163,18 @@ function CapacityPageForRun({ runId }: { runId: string }) {
           })}
         >
           Export JSON
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border bg-background px-3 py-2 text-200 font-semibold hover:bg-hover"
+          onClick={() => {
+            setSettings(defaultCapacitySettings);
+            setOverrides({});
+            localStorage.removeItem(storageKey);
+            setSavedNotice("Capacity assumptions reset to model defaults.");
+          }}
+        >
+          Reset assumptions
         </button>
         <button
           type="button"
@@ -304,9 +345,10 @@ function CapacityPageForRun({ runId }: { runId: string }) {
               </p>
             </Panel>
             <Panel title="Coverage" subtitle="Persisted static profile match">
-              <p className="text-page-title font-semibold">{estimate.workflows.length}</p>
+              <p className="text-page-title font-semibold">{modeledCount}</p>
               <p className="text-200 text-muted-foreground">
                 {estimate.calibratedCount} calibrated · {estimate.heuristicCount} heuristic
+                {estimate.excludedCount > 0 ? ` · ${estimate.excludedCount} covered/excluded` : ""}
               </p>
             </Panel>
             <Panel title="Model basis" subtitle="Capacity model v3.1.0">
@@ -322,51 +364,92 @@ function CapacityPageForRun({ runId }: { runId: string }) {
               <table className="w-full border-separate border-spacing-0 text-left text-200">
                 <thead>
                   <tr>
-                    {["Workflow", "Refresh (min)", "Rows/run", "Spark vCores", "Basis", "CU-s/run", "Monthly CU-h"].map((label) => (
+                    {["Workflow", "Refresh (min)", "Rows/run", "Spark vCores", "Notebook runtime (s)", "Basis", "CU-s/run", "Monthly CU-h"].map((label) => (
                       <th className="border-b p-3" key={label}>{label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {estimate.workflows.map((item) => (
-                    <tr key={item.workflowPath}>
-                      <td className="border-b p-3"><strong>{item.workflowPath}</strong><span className="block text-muted-foreground">{item.recommendedTarget}</span></td>
-                      <td className="border-b p-3">
-                        <input
-                          aria-label={`Refresh interval for ${item.workflowPath}`}
-                          type="number"
-                          min={1}
-                          max={1440}
-                          className="w-24 rounded border bg-background p-2"
-                          value={item.refreshIntervalMinutes}
-                          onChange={(event) => updateOverride(item.workflowPath, { refreshIntervalMinutes: Number(event.target.value) || 1 })}
-                        />
-                      </td>
-                      <td className="border-b p-3">
-                        <input
-                          aria-label={`Source rows for ${item.workflowPath}`}
-                          type="number"
-                          min={1}
-                          className="w-32 rounded border bg-background p-2"
-                          value={item.sourceRowsPerRun}
-                          onChange={(event) => updateOverride(item.workflowPath, { sourceRowsPerRun: Number(event.target.value) || 1 })}
-                        />
-                      </td>
-                      <td className="border-b p-3">
-                        <select
-                          aria-label={`Spark vCores for ${item.workflowPath}`}
-                          className="rounded border bg-background p-2"
-                          value={item.sparkVcores}
-                          onChange={(event) => updateOverride(item.workflowPath, { sparkVcores: Number(event.target.value) })}
-                        >
-                          {[4, 8, 16, 32, 64].map((value) => <option key={value}>{value}</option>)}
-                        </select>
-                      </td>
-                      <td className="border-b p-3">{item.basis}</td>
-                      <td className="border-b p-3">{item.cuSecondsPerRun.toFixed(1)}</td>
-                      <td className="border-b p-3">{item.monthlyCuHours.toFixed(2)}</td>
-                    </tr>
-                  ))}
+                  {estimate.workflows.map((item) => {
+                    const usesNotebook = !item.excluded && item.targetComponents.includes("Fabric Notebook");
+                    const breakdown = componentBreakdown(item, settings.sparkBillingMode);
+                    return (
+                      <tr key={item.workflowPath} className={item.excluded ? "opacity-65" : ""}>
+                        <td className="border-b p-3">
+                          <strong>{item.workflowPath}</strong>
+                          <span className="block text-muted-foreground">{item.recommendedTarget}</span>
+                          {item.exclusionReason && (
+                            <span className="block text-100 text-muted-foreground">{item.exclusionReason}</span>
+                          )}
+                        </td>
+                        <td className="border-b p-3">
+                          <input
+                            aria-label={`Refresh interval for ${item.workflowPath}`}
+                            type="number"
+                            min={1}
+                            max={1440}
+                            disabled={item.excluded}
+                            className="w-24 rounded border bg-background p-2 disabled:opacity-50"
+                            value={item.refreshIntervalMinutes}
+                            onChange={(event) => updateOverride(item.workflowPath, { refreshIntervalMinutes: Number(event.target.value) || 1 })}
+                          />
+                        </td>
+                        <td className="border-b p-3">
+                          <input
+                            aria-label={`Source rows for ${item.workflowPath}`}
+                            type="number"
+                            min={1}
+                            disabled={item.excluded}
+                            className="w-32 rounded border bg-background p-2 disabled:opacity-50"
+                            value={item.sourceRowsPerRun}
+                            onChange={(event) => updateOverride(item.workflowPath, { sourceRowsPerRun: Number(event.target.value) || 1 })}
+                          />
+                        </td>
+                        <td className="border-b p-3">
+                          <select
+                            aria-label={`Spark vCores for ${item.workflowPath}`}
+                            disabled={!usesNotebook}
+                            className="rounded border bg-background p-2 disabled:opacity-50"
+                            value={item.sparkVcores}
+                            onChange={(event) => updateOverride(item.workflowPath, { sparkVcores: Number(event.target.value) })}
+                          >
+                            {[4, 8, 16, 32, 64].map((value) => <option key={value}>{value}</option>)}
+                          </select>
+                        </td>
+                        <td className="border-b p-3">
+                          {usesNotebook ? (
+                            <input
+                              aria-label={`Notebook runtime seconds for ${item.workflowPath}`}
+                              type="number"
+                              min={1}
+                              max={86400}
+                              placeholder={
+                                item.effectiveNotebookRuntimeSeconds != null
+                                  ? `Auto (${Math.round(item.effectiveNotebookRuntimeSeconds)}s)`
+                                  : "Auto"
+                              }
+                              className="w-28 rounded border bg-background p-2"
+                              value={item.notebookRuntimeSeconds ?? ""}
+                              onChange={(event) => {
+                                const raw = event.target.value.trim();
+                                updateOverride(item.workflowPath, {
+                                  notebookRuntimeSeconds: raw === "" ? null : Number(raw) || null,
+                                });
+                              }}
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="border-b p-3">{item.basis}</td>
+                        <td className="border-b p-3">
+                          <div>{item.cuSecondsPerRun.toFixed(1)}</div>
+                          {breakdown && <span className="block text-100 text-muted-foreground">{breakdown}</span>}
+                        </td>
+                        <td className="border-b p-3">{item.monthlyCuHours.toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -396,6 +479,7 @@ function CapacityPageForRun({ runId }: { runId: string }) {
         sourceRowsPerRun:
           current[workflowPath]?.sourceRowsPerRun ?? settings.sourceRowsPerRun,
         sparkVcores: current[workflowPath]?.sparkVcores ?? settings.sparkVcores,
+        notebookRuntimeSeconds: current[workflowPath]?.notebookRuntimeSeconds ?? null,
         ...patch,
       },
     }));

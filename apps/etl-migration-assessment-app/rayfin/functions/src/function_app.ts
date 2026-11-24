@@ -39,6 +39,7 @@ interface DeploymentSelectionInput {
   sourcePlatform: string;
   nativeId: string;
   recommendedTarget: string;
+  target?: DeploymentTarget;
 }
 
 interface DeploymentSelection {
@@ -455,7 +456,7 @@ function parseDeploymentSelections(value: string): DeploymentSelection[] {
     if (!isDeploymentSelectionInput(item)) {
       throw new UserThrownError("A selected workflow has invalid deployment metadata.");
     }
-    const target = targetForRecommendation(item.recommendedTarget);
+    const target = resolveSelectionTarget(item.recommendedTarget, item.target);
     return {
       workflowPath: item.workflowPath,
       artifactPath: artifactPathFor(
@@ -471,26 +472,44 @@ function parseDeploymentSelections(value: string): DeploymentSelection[] {
 function isDeploymentSelectionInput(value: unknown): value is DeploymentSelectionInput {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
+  const validOptionalTarget =
+    item.target === undefined ||
+    item.target === "notebook" ||
+    item.target === "dataflow" ||
+    item.target === "pipeline" ||
+    item.target === "bundle";
   return (
     typeof item.workflowPath === "string" &&
     typeof item.sourcePlatform === "string" &&
     typeof item.nativeId === "string" &&
-    typeof item.recommendedTarget === "string"
+    typeof item.recommendedTarget === "string" &&
+    validOptionalTarget
   );
 }
 
-function targetForRecommendation(value: string): DeploymentTarget {
-  const targets: Record<string, DeploymentTarget> = {
-    "Dataflow Gen2": "dataflow",
-    "Fabric Notebook": "notebook",
-    "Fabric Pipeline": "pipeline",
-    "Mixed Fabric solution": "bundle",
+function resolveSelectionTarget(
+  recommendedTarget: string,
+  requestedTarget?: DeploymentTarget,
+): DeploymentTarget {
+  const allowedByRecommendation: Record<string, readonly DeploymentTarget[]> = {
+    "Dataflow Gen2": ["dataflow"],
+    "Fabric Notebook": ["notebook"],
+    "Fabric Pipeline": ["pipeline"],
+    "Mixed Fabric solution": ["bundle", "dataflow", "notebook", "pipeline"],
   };
-  const target = targets[value];
-  if (!target) {
-    throw new UserThrownError(`Workflow target ${value || "<empty>"} is not dispatchable.`);
+  const allowed = allowedByRecommendation[recommendedTarget];
+  if (!allowed) {
+    throw new UserThrownError(`Workflow target ${recommendedTarget || "<empty>"} is not dispatchable.`);
   }
-  return target;
+  if (requestedTarget === undefined) {
+    return allowed[0];
+  }
+  if (!allowed.includes(requestedTarget)) {
+    throw new UserThrownError(
+      `Deployment target ${requestedTarget} is not allowed for ${recommendedTarget}.`,
+    );
+  }
+  return requestedTarget;
 }
 
 export function artifactPathFor(
@@ -732,6 +751,7 @@ async function githubRequest(
 ): Promise<Record<string, unknown>> {
   const response = await fetch(`https://api.github.com/repos/${repository}${path}`, {
     ...init,
+    signal: AbortSignal.timeout(20_000),
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${token}`,
@@ -758,6 +778,7 @@ async function gitlabRequest(
     `${new URL(origin).origin}/api/v4/projects/${encodeURIComponent(project)}${path}`,
     {
       ...init,
+      signal: AbortSignal.timeout(20_000),
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",

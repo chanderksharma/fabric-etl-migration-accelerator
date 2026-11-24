@@ -52,8 +52,15 @@ export function FabricDeploymentPage({
   const fabricPlatform = targetPlatforms.find(canGenerateFabric);
   const fabricCodegenAvailable = fabricPlatform !== undefined;
   // Providers that do not advertise target kinds keep every generation option.
+  const advertisedTargetKinds = useMemo(
+    () =>
+      fabricPlatform?.target_kinds?.filter(
+        (kind): kind is Target => kind === "notebook" || kind === "dataflow" || kind === "pipeline",
+      ),
+    [fabricPlatform],
+  );
   const offers = (kind: Target) =>
-    !fabricPlatform?.target_kinds?.length || fabricPlatform.target_kinds.includes(kind);
+    !advertisedTargetKinds?.length || advertisedTargetKinds.includes(kind);
   const [previewFilter, setPreviewFilter] = useState<"all" | "deployable" | "scaffold">("all");
   const [selectedWorkflowPath, setSelectedWorkflowPath] = useState<string>(
     () => preselectedWorkflowPath ?? "",
@@ -401,6 +408,7 @@ export function FabricDeploymentPage({
               candidates={candidates}
               runId={runId}
               request={request}
+              allowedTargetKinds={advertisedTargetKinds}
             />
           )}
         </div>
