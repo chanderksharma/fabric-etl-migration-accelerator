@@ -21,8 +21,8 @@ table WorkflowAssessment
 		formatString: #,##0
 		displayFolder: Portfolio
 
-	/// Number of workflows assigned to Wave 1 or Wave 2.
-	measure 'Quick-Win Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(WorkflowAssessment[MigrationWave] IN {"Wave 1", "Wave 2"}))
+	/// Number of workflows assigned to Wave 1 or Wave 2 (engine values Wave 1 and Pilot).
+	measure 'Quick-Win Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(WorkflowAssessment[MigrationWave] IN {"Wave 1", "Pilot"}))
 		formatString: #,##0
 		displayFolder: Migration Plan
 
@@ -51,12 +51,12 @@ table WorkflowAssessment
 		formatString: #,##0
 		displayFolder: Migration Plan
 
-	/// Number of workflows in Wave 2 (high-complexity controlled pilot; engine value Pilot).
+	/// Number of workflows in Wave 2 (medium-complexity controlled pilot; engine value Pilot).
 	measure 'Wave 2 Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(CONTAINSSTRING(LOWER(WorkflowAssessment[MigrationWave]), "pilot")))
 		formatString: #,##0
 		displayFolder: Migration Plan
 
-	/// Number of workflows in Wave 3 (medium-complexity scale-out; engine value Wave 2).
+	/// Number of workflows in Wave 3 (high-complexity & mixed scale-out; engine value Wave 2).
 	measure 'Wave 3 Assets' = CALCULATE([Assessed Assets], KEEPFILTERS(WorkflowAssessment[MigrationWave] = "Wave 2"))
 		formatString: #,##0
 		displayFolder: Migration Plan
