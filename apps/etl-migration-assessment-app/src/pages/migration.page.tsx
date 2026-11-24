@@ -49,7 +49,7 @@ export function MigrationPage() {
         metrics={[
           { rawName: "[Wave 1 Assets]", title: "Wave 1", subtitle: "Foundation & prerequisites" },
           { rawName: "[Wave 2 Assets]", title: "Wave 2", subtitle: "Controlled pilot" },
-          { rawName: "[Wave 3 Assets]", title: "Wave 3", subtitle: "Medium-complexity scale-out" },
+          { rawName: "[Wave 3 Assets]", title: "Wave 3", subtitle: "Complex & mixed scale-out" },
           { rawName: "[Wave 4 Assets]", title: "Wave 4", subtitle: "Manual engineering redesign" },
         ]}
       />

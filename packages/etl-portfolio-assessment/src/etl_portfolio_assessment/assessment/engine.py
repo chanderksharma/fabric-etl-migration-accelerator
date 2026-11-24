@@ -37,14 +37,14 @@ CLASSIFICATION_WEIGHTS: dict[str, int] = {
 }
 DEPENDENCY_WEIGHT = 2
 MEDIUM_BAND_FLOOR = 20
-HIGH_BAND_FLOOR = 40
-WAVE_BY_BAND: dict[str, str] = {"Low": "Wave 1", "Medium": "Wave 3", "High": "Wave 2"}
+HIGH_BAND_FLOOR = 60
+WAVE_BY_BAND: dict[str, str] = {"Low": "Wave 1", "Medium": "Wave 2", "High": "Wave 3"}
 MANUAL_REVIEW_WAVE = "Wave 4"
 
 # Bump the semantic version for any rule or logic change. The fingerprint covers the data
 # tables and constants above, so a forgotten bump still invalidates caches and fails the
 # golden test instead of reusing stale results.
-NEUTRAL_RULES_VERSION = "1.2.0"
+NEUTRAL_RULES_VERSION = "1.3.0"
 
 
 def _rules_fingerprint() -> str:

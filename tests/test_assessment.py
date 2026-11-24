@@ -139,4 +139,55 @@ def test_all_component_signals_recommend_mixed_solution(tmp_path: Path) -> None:
         "Fabric Notebook",
         "Fabric Pipeline",
     )
-    assert result.migration_wave == "Pilot"
+    assert result.migration_wave == "Wave 2"
+
+
+def test_wave_progression_orders_low_medium_high_mixed_and_redesign() -> None:
+    from etl_target_fabric.assessment.support_matrix import complexity_band, migration_wave
+
+    assert complexity_band(19) == "Low"
+    assert complexity_band(20) == "Medium"
+    assert complexity_band(59) == "Medium"
+    assert complexity_band(60) == "High"
+
+    assert migration_wave("Dataflow Gen2", "Low") == "Wave 1"
+    assert migration_wave("Dataflow Gen2", "Medium") == "Pilot"
+    assert migration_wave("Fabric Notebook", "Medium") == "Pilot"
+    assert migration_wave("Dataflow Gen2", "High") == "Wave 2"
+    assert migration_wave("Mixed Fabric solution", "Low") == "Wave 2"
+    assert migration_wave("Manual rework", "Low") == "Redesign"
+
+
+def test_confirm_assessment_recomputes_wave_when_target_narrows() -> None:
+    from etl_migration_core.contracts.spi import TargetEvaluation
+    from etl_target_fabric.assessment.schemas import WorkflowAssessmentResponse
+    from etl_target_fabric.evaluation.native_route import confirm_assessment
+
+    static = WorkflowAssessmentResponse(
+        path="orders.yxmd",
+        tool_count=10,
+        connection_count=9,
+        tools=[],
+        complexity_score=24,
+        complexity_band="Medium",
+        recommended_target="Mixed Fabric solution",
+        target_components=["Dataflow Gen2", "Fabric Notebook"],
+        recommendation_reason="Static mixed",
+        unsupported_tools=[],
+        migration_wave="Wave 2",
+        estimated_effort_days=1.5,
+        registry_version="2026.11.3",
+        rules_version="1.5.0",
+    )
+    evaluation = TargetEvaluation(
+        platform_id="fabric",
+        implemented=True,
+        recommended_target="Dataflow Gen2",
+        target_components=("Dataflow Gen2",),
+        recommendation_reason="Confirmed Dataflow Gen2",
+        estimated_effort_days=0.6,
+    )
+
+    confirmed = confirm_assessment(static, evaluation)
+    assert confirmed.recommended_target == "Dataflow Gen2"
+    assert confirmed.migration_wave == "Pilot"

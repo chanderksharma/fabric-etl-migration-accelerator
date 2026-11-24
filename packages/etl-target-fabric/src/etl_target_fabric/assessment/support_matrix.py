@@ -37,7 +37,7 @@ PIPELINE_TOOL_MARKERS = frozenset(
 )
 NEUTRAL_TOOL_MARKERS = frozenset({"toolcontainer", "comment", "explorerbox", "browse"})
 REGISTRY_VERSION = "2026.11.3"
-RULES_VERSION = "1.4.0"
+RULES_VERSION = "1.5.0"
 ANNOTATION_IDENTITIES = frozenset(
     {
         "AlteryxGuiToolkit.ToolContainer.ToolContainer",
@@ -48,7 +48,7 @@ ANNOTATION_IDENTITIES = frozenset(
     }
 )
 
-ASSESSMENT_RULES_VERSION = "1.4.1"
+ASSESSMENT_RULES_VERSION = "1.5.0"
 DATAFLOW_OPERATIONS = frozenset(
     {
         "aggregator",
@@ -168,9 +168,13 @@ def complexity_score(
     return weighted + connection_count + dependency_count * 2
 
 
+MEDIUM_BAND_FLOOR = 20
+HIGH_BAND_FLOOR = 60
+
+
 def complexity_band(score: int) -> str:
     """Map a Fabric complexity score to Low, Medium, or High."""
-    return "Low" if score < 20 else "Medium" if score < 40 else "High"
+    return "Low" if score < MEDIUM_BAND_FLOOR else "Medium" if score < HIGH_BAND_FLOOR else "High"
 
 
 def recommend_target(
@@ -209,9 +213,16 @@ def recommend_target(
 
 
 def migration_wave(target: str, band: str) -> str:
-    """Assign a static Fabric migration wave from target and complexity band."""
+    """Assign a static Fabric migration wave from target and complexity band.
+
+    Engine wave tokens map to presentation waves 1 through 4:
+      - ``Wave 1``   -> Wave 1 (Low complexity, single Fabric target)
+      - ``Pilot``    -> Wave 2 (Medium complexity, single Fabric target)
+      - ``Wave 2``   -> Wave 3 (High complexity or Mixed Fabric solution)
+      - ``Redesign`` -> Wave 4 (Manual rework)
+    """
     if target == "Manual rework":
         return "Redesign"
     if target == "Mixed Fabric solution" or band == "High":
-        return "Pilot"
-    return "Wave 2" if band == "Medium" else "Wave 1"
+        return "Wave 2"
+    return "Pilot" if band == "Medium" else "Wave 1"

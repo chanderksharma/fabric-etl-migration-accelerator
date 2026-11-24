@@ -146,9 +146,9 @@ def test_unknown_source_uses_generic_neutral_profile() -> None:
 def test_neutral_rules_fingerprint_is_a_golden_value() -> None:
     # A rule or table edit changes the fingerprint (and therefore every cache key).
     # Update the literal together with NEUTRAL_RULES_VERSION in the same change.
-    assert NEUTRAL_RULES_VERSION == "1.2.0"
-    assert NEUTRAL_RULES_FINGERPRINT == "b160788f085f"
-    assert f"1.2.0+{NEUTRAL_RULES_FINGERPRINT}" == NEUTRAL_ASSESSMENT_VERSION
+    assert NEUTRAL_RULES_VERSION == "1.3.0"
+    assert NEUTRAL_RULES_FINGERPRINT == "69606a6ef13f"
+    assert f"1.3.0+{NEUTRAL_RULES_FINGERPRINT}" == NEUTRAL_ASSESSMENT_VERSION
 
 
 @pytest.mark.parametrize(

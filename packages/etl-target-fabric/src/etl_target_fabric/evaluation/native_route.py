@@ -11,6 +11,7 @@ from etl_migration_core.contracts.ir import EtlAsset, EtlPackage
 from etl_migration_core.contracts.spi import TargetEvaluation
 from etl_migration_core.planning.effort import remaining_effort_days
 from etl_target_fabric.assessment.schemas import WorkflowAssessmentResponse
+from etl_target_fabric.assessment.support_matrix import migration_wave
 from etl_target_fabric.compilers.alteryx import Target, generate_candidate
 from etl_target_fabric.compilers.ir import compile_asset_targets
 
@@ -191,8 +192,13 @@ class _Routing(NamedTuple):
     migration_wave: str
 
 
-def _routing(evaluation: TargetEvaluation, *, effort_days: float, wave: str) -> _Routing:
-    """Take routing from the evaluation, keeping the assessed effort and wave when it has none."""
+def _routing(
+    evaluation: TargetEvaluation,
+    *,
+    effort_days: float,
+    band: str,
+) -> _Routing:
+    """Take routing from the evaluation and recompute wave from the confirmed target."""
     return _Routing(
         recommended_target=evaluation.recommended_target,
         target_components=evaluation.target_components,
@@ -202,7 +208,10 @@ def _routing(evaluation: TargetEvaluation, *, effort_days: float, wave: str) -> 
             if evaluation.estimated_effort_days is not None
             else effort_days
         ),
-        migration_wave=evaluation.migration_wave_override or wave,
+        migration_wave=(
+            evaluation.migration_wave_override
+            or migration_wave(evaluation.recommended_target, band)
+        ),
     )
 
 
@@ -224,7 +233,7 @@ def apply_alteryx_native_route(
     routing = _routing(
         evaluation,
         effort_days=assessment.estimated_effort_days,
-        wave=assessment.migration_wave,
+        band=assessment.complexity_band,
     )
     return replace(assessment, **routing._asdict())
 
@@ -243,7 +252,7 @@ def apply_native_route(
     routing = _routing(
         evaluation,
         effort_days=assessment.estimated_effort_days,
-        wave=assessment.migration_wave,
+        band=assessment.complexity_band,
     )
     return replace(assessment, **routing._asdict())
 
@@ -259,7 +268,7 @@ def confirm_assessment(
     routing = _routing(
         evaluation,
         effort_days=assessment.estimated_effort_days,
-        wave=assessment.migration_wave,
+        band=assessment.complexity_band,
     )
     return assessment.model_copy(
         update={**routing._asdict(), "target_components": list(routing.target_components)}
