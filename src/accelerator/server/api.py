@@ -3,10 +3,12 @@
 import asyncio
 import logging
 import os
+import re
 import secrets
 import shutil
 import tempfile
 import time
+import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import asynccontextmanager, suppress
@@ -17,21 +19,21 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from starlette.concurrency import run_in_threadpool
-from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from accelerator import __version__
+from accelerator.delivery.base import (
+    DeploymentConfigurationError,
+    DeploymentDispatchError,
+    DeploymentSelectionBase,
+)
 from accelerator.delivery.github import (
-    GitHubConfigurationError,
-    GitHubDeploymentError,
     GitHubDeploymentResult,
     GitHubDeploymentSelection,
     GitHubDeploymentService,
 )
 from accelerator.delivery.gitlab import (
-    GitLabConfigurationError,
-    GitLabDeploymentError,
     GitLabDeploymentResult,
     GitLabDeploymentSelection,
     GitLabDeploymentService,
@@ -57,11 +59,12 @@ from accelerator.server.schemas import (
     LocalSelection,
     PluginsResponse,
     PublicationReference,
+    RunListResponse,
     SourcesResponse,
     TargetsResponse,
 )
 from accelerator.server.uploads import BoundedUploadRoute, stage_uploads
-from accelerator.settings import Settings, configure_logging
+from accelerator.settings import Settings, bind_log_context, configure_logging
 from accelerator.targets import (
     TargetPlatformRegistry,
     UnknownTargetPlatformError,
@@ -89,25 +92,43 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 WORKER_RETRY_SECONDS = 5.0
+WORKER_IDLE_POLL_SECONDS = 2.0
+WORKER_ACTIVE_POLL_SECONDS = 0.15
+_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
+def _notify_worker() -> None:
+    """Wake the background worker loop immediately when new work is queued."""
+    wakeup = getattr(app.state, "worker_wakeup", None)
+    loop = getattr(app.state, "worker_loop", None)
+    if isinstance(wakeup, asyncio.Event) and isinstance(loop, asyncio.AbstractEventLoop):
+        with suppress(RuntimeError):
+            loop.call_soon_threadsafe(wakeup.set)
 
 
 @asynccontextmanager
 async def lifespan(api: FastAPI) -> AsyncIterator[None]:
-    configure_logging(Settings.from_environment())
+    settings = Settings.from_environment()
+    configure_logging(settings)
     if not hasattr(api.state, "run_service") or api.state.run_service.closed:
         api.state.run_service = _new_run_service()
-    executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="accelerator")
+    concurrency = settings.worker_concurrency
+    executor = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="accelerator")
+    wakeup = asyncio.Event()
+    api.state.worker_wakeup = wakeup
+    api.state.worker_loop = asyncio.get_running_loop()
     futures: dict[str, Future[None]] = {}
     retry_after: dict[str, float] = {}
 
     async def resume_pending() -> None:
         while True:
+            wakeup.clear()
             try:
                 service = api.state.run_service
                 for identity in await run_in_threadpool(service.pending):
                     if (
                         identity not in futures
-                        and len(futures) < 2
+                        and len(futures) < concurrency
                         and retry_after.get(identity, 0) <= time.monotonic()
                     ):
                         futures[identity] = executor.submit(service.execute, identity)
@@ -115,7 +136,7 @@ async def lifespan(api: FastAPI) -> AsyncIterator[None]:
                     key = f"job:{job_id}"
                     if (
                         key not in futures
-                        and len(futures) < 2
+                        and len(futures) < concurrency
                         and retry_after.get(key, 0) <= time.monotonic()
                     ):
                         futures[key] = executor.submit(service.execute_generation_job, job_id)
@@ -128,80 +149,197 @@ async def lifespan(api: FastAPI) -> AsyncIterator[None]:
             except Exception:
                 logger.exception("Run worker loop failed; retrying")
                 await asyncio.sleep(WORKER_RETRY_SECONDS)
-            await asyncio.sleep(0.2)
+                continue
+            wait_seconds = WORKER_ACTIVE_POLL_SECONDS if futures else WORKER_IDLE_POLL_SECONDS
+            with suppress(TimeoutError):
+                await asyncio.wait_for(wakeup.wait(), timeout=wait_seconds)
 
     worker = asyncio.create_task(resume_pending())
     try:
         yield
     finally:
+        api.state.worker_wakeup = None
+        api.state.worker_loop = None
         worker.cancel()
         with suppress(asyncio.CancelledError, Exception):
             await worker
         await run_in_threadpool(executor.shutdown, wait=True)
+        _shutdown_dialog_executor()
         api.state.run_service.close()
 
 
 app = FastAPI(title="Alteryx to Fabric Accelerator", version=__version__, lifespan=lifespan)
 app.router.route_class = BoundedUploadRoute
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 app.state.csrf_token = secrets.token_urlsafe(32)
 application = AssessmentApplication()
 DESKTOP_TOKEN_COOKIE = "accelerator-desktop-token"
+
+
+def _extract_host(host_header: str) -> str:
+    """Return the normalized hostname from an HTTP Host header, stripping any port."""
+    value = host_header.strip().casefold()
+    if value.startswith("["):
+        end = value.find("]")
+        return value[1:end] if end != -1 else value
+    return value.split(":", 1)[0]
+
+
+def _host_allowed(host: str, allowed_hosts: tuple[str, ...]) -> bool:
+    if not host:
+        return False
+    for pattern in allowed_hosts:
+        if pattern == "*":
+            return True
+        if pattern.startswith("*."):
+            suffix = pattern[1:]
+            if host.endswith(suffix) and len(host) > len(suffix):
+                return True
+        elif host == pattern:
+            return True
+    return False
+
+
+def _require_local_filesystem() -> None:
+    if not Settings.from_environment().allow_local_filesystem:
+        raise HTTPException(
+            status_code=403,
+            detail="Local filesystem access is disabled in server mode",
+        )
+
+
+def _request_id(request: Request) -> str:
+    supplied = request.headers.get("x-request-id", "").strip()
+    if supplied and _REQUEST_ID_PATTERN.fullmatch(supplied):
+        return supplied
+    return uuid.uuid4().hex
 
 
 @app.middleware("http")
 async def local_origin_guard(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
-    desktop_token = os.getenv("ACCELERATOR_DESKTOP_TOKEN", "").strip()
-    if desktop_token:
-        header_token = request.headers.get("x-accelerator-desktop-token", "")
-        cookie_token = request.cookies.get(DESKTOP_TOKEN_COOKIE, "")
-        query_token = request.query_params.get("desktop_token")
-        if query_token is not None:
-            if (
-                request.method != "GET"
-                or request.url.path != "/"
-                or not secrets.compare_digest(query_token.encode(), desktop_token.encode())
-            ):
-                return Response("Desktop session token is invalid", status_code=401)
-            bootstrap_response = RedirectResponse("/", status_code=307)
-            bootstrap_response.set_cookie(
-                DESKTOP_TOKEN_COOKIE,
-                desktop_token,
-                httponly=True,
-                samesite="strict",
-                path="/",
+    req_id = _request_id(request)
+    with bind_log_context(request_id=req_id):
+        try:
+            settings = Settings.from_environment()
+        except ValueError as error:
+            return Response(str(error), status_code=503, headers={"X-Request-ID": req_id})
+        host = _extract_host(request.headers.get("host", ""))
+        if not _host_allowed(host, settings.allowed_hosts):
+            return Response(
+                "Invalid host header", status_code=400, headers={"X-Request-ID": req_id}
             )
-            return bootstrap_response
-        if not (
-            secrets.compare_digest(header_token.encode(), desktop_token.encode())
-            or secrets.compare_digest(cookie_token.encode(), desktop_token.encode())
-        ):
-            return Response("Desktop session token is required", status_code=401)
-    origin = request.headers.get("origin")
-    if origin:
-        if origin != f"{request.url.scheme}://{request.headers.get('host')}":
-            return Response("Untrusted browser origin", status_code=403)
-        if request.method not in {"GET", "HEAD"} and not secrets.compare_digest(
-            request.headers.get("x-accelerator-token", "").encode(), app.state.csrf_token.encode()
-        ):
-            return Response("Browser session token is required", status_code=403)
-    response = await call_next(request)
-    if request.url.path.startswith("/api/runs"):
-        response.headers["Cache-Control"] = "no-store"
-    return response
+        desktop_token = settings.desktop_token or ""
+        if desktop_token:
+            header_token = request.headers.get("x-accelerator-desktop-token", "")
+            cookie_token = request.cookies.get(DESKTOP_TOKEN_COOKIE, "")
+            query_token = request.query_params.get("desktop_token")
+            if query_token is not None:
+                if (
+                    request.method != "GET"
+                    or request.url.path != "/"
+                    or not secrets.compare_digest(query_token.encode(), desktop_token.encode())
+                ):
+                    return Response(
+                        "Desktop session token is invalid",
+                        status_code=401,
+                        headers={"X-Request-ID": req_id},
+                    )
+                bootstrap_response = RedirectResponse("/", status_code=307)
+                bootstrap_response.set_cookie(
+                    DESKTOP_TOKEN_COOKIE,
+                    desktop_token,
+                    httponly=True,
+                    samesite="strict",
+                    path="/",
+                )
+                bootstrap_response.headers["X-Request-ID"] = req_id
+                return bootstrap_response
+            if not (
+                secrets.compare_digest(header_token.encode(), desktop_token.encode())
+                or secrets.compare_digest(cookie_token.encode(), desktop_token.encode())
+            ):
+                return Response(
+                    "Desktop session token is required",
+                    status_code=401,
+                    headers={"X-Request-ID": req_id},
+                )
+        if settings.deployment_mode == "server" and request.url.path.startswith("/api/"):
+            expected = settings.api_bearer_token
+            if not expected:
+                return Response(
+                    "Server API authentication is not configured",
+                    status_code=503,
+                    headers={"X-Request-ID": req_id},
+                )
+            auth_header = request.headers.get("authorization", "")
+            scheme, _, supplied = auth_header.partition(" ")
+            if scheme.casefold() != "bearer" or not secrets.compare_digest(
+                supplied.strip().encode(), expected.encode()
+            ):
+                return Response(
+                    "Bearer token is required",
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Bearer", "X-Request-ID": req_id},
+                )
+        origin = request.headers.get("origin")
+        if origin:
+            if origin != f"{request.url.scheme}://{request.headers.get('host')}":
+                return Response(
+                    "Untrusted browser origin",
+                    status_code=403,
+                    headers={"X-Request-ID": req_id},
+                )
+            if request.method not in {"GET", "HEAD"} and not secrets.compare_digest(
+                request.headers.get("x-accelerator-token", "").encode(),
+                app.state.csrf_token.encode(),
+            ):
+                return Response(
+                    "Browser session token is required",
+                    status_code=403,
+                    headers={"X-Request-ID": req_id},
+                )
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = req_id
+        if request.url.path.startswith("/api/runs"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
 
 @app.get("/health")
+@app.get("/livez")
 def health() -> dict[str, str]:
-    """Return process health."""
+    """Return process liveness status."""
     return {"status": "ok", "version": __version__}
+
+
+@app.get("/readyz")
+def readiness() -> dict[str, object]:
+    """Verify run-store reachability and plugin catalog health."""
+    try:
+        with run_service()._connection() as connection:
+            connection.execute("SELECT 1").fetchone()
+        catalog = plugin_host().catalog()
+    except Exception as error:
+        raise HTTPException(status_code=503, detail=f"Not ready: {error}") from error
+    if catalog.failed_count:
+        raise HTTPException(
+            status_code=503,
+            detail=f"{catalog.failed_count} plugin(s) failed to load",
+        )
+    return {
+        "status": "ready",
+        "version": __version__,
+        "sources": len(catalog.sources),
+        "targets": len(catalog.targets),
+        "failed_plugins": catalog.failed_count,
+    }
 
 
 @app.get("/api/intake/preview", response_model=DiscoverySummaryResponse)
 def preview(path: str = Query(min_length=1)) -> DiscoverySummaryResponse:
     """Preview a local file, ZIP, or folder before assessment."""
+    _require_local_filesystem()
     try:
         return application.preview(Path(path))
     except InputRejectedError as error:
@@ -252,7 +390,22 @@ async def upload_assessment(
         shutil.rmtree(sandbox, ignore_errors=False)
 
 
-_DIALOG_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="folder-dialog")
+_DIALOG_EXECUTOR: ThreadPoolExecutor | None = None
+
+
+def _dialog_executor() -> ThreadPoolExecutor:
+    global _DIALOG_EXECUTOR
+    if _DIALOG_EXECUTOR is None:
+        _DIALOG_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="folder-dialog")
+    return _DIALOG_EXECUTOR
+
+
+def _shutdown_dialog_executor() -> None:
+    global _DIALOG_EXECUTOR
+    executor = _DIALOG_EXECUTOR
+    _DIALOG_EXECUTOR = None
+    if executor is not None:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _pick_local_folder() -> str | None:
@@ -366,9 +519,10 @@ def get_target_platform(platform_id: str) -> TargetPlatformInfo:
 
 @app.post("/api/snapshots/browse-folder", response_model=FolderSelectionResponse)
 async def browse_local_folder() -> FolderSelectionResponse:
+    _require_local_filesystem()
     try:
         loop = asyncio.get_running_loop()
-        selected = await loop.run_in_executor(_DIALOG_EXECUTOR, _pick_local_folder)
+        selected = await loop.run_in_executor(_dialog_executor(), _pick_local_folder)
     except (ImportError, RuntimeError, OSError) as error:
         raise HTTPException(
             status_code=501,
@@ -379,6 +533,7 @@ async def browse_local_folder() -> FolderSelectionResponse:
 
 @app.post("/api/snapshots/local", response_model=SnapshotPreview)
 def local_snapshot(selection: LocalSelection) -> SnapshotPreview:
+    _require_local_filesystem()
     if selection.path.startswith(("\\\\", "//")):
         raise HTTPException(status_code=400, detail="UNC paths are not accepted")
     try:
@@ -404,14 +559,26 @@ async def uploaded_snapshot(
             raise HTTPException(status_code=400, detail=str(error)) from error
 
 
+@app.get("/api/runs", response_model=RunListResponse)
+def list_runs(
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> RunListResponse:
+    """List runs ordered newest-first without deserializing full assessment blobs."""
+    runs, total = run_service().list_runs(limit=limit, offset=offset)
+    return RunListResponse(total=total, limit=limit, offset=offset, runs=runs)
+
+
 @app.post("/api/runs", response_model=Run, status_code=202)
 def confirm_run(confirmation: Confirmation) -> Run:
     try:
-        return run_service().create_run(confirmation.snapshot_id)
+        created = run_service().create_run(confirmation.snapshot_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except (OSError, ValueError) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+    _notify_worker()
+    return created
 
 
 @app.get("/api/runs/{identity}", response_model=Run)
@@ -491,11 +658,13 @@ def cancel_run(identity: str) -> Run:
 def create_generation_job(identity: str, target: Target = "notebook") -> GenerationJob:
     get_run(identity, include_result=False)
     try:
-        return run_service().create_generation_job(identity, target)
+        job = run_service().create_generation_job(identity, target)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+    _notify_worker()
+    return job
 
 
 @app.get("/api/runs/{identity}/jobs", response_model=list[GenerationJob])
@@ -524,10 +693,14 @@ def workflow_candidates(
 
 
 @app.post("/api/runs/{identity}/generate", response_model=list[Candidate])
-def generate_run(identity: str, target: Target = "notebook") -> list[Candidate]:
+def generate_run(
+    identity: str,
+    target: Target = "notebook",
+    write_plan: bool = True,
+) -> list[Candidate]:
     get_run(identity)
     try:
-        return run_service().write_artifacts(identity, target).candidates
+        return run_service().write_artifacts(identity, target, write_plan=write_plan).candidates
     except (OSError, ValueError) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
 
@@ -692,14 +865,13 @@ def deployment_preview(identity: str, selection: DevSelection) -> DryRunResult:
     )
 
 
-@app.post(
-    "/api/runs/{identity}/deploy/github",
-    response_model=GitHubDeploymentResult,
-    status_code=202,
-)
-def deploy_with_github(
-    identity: str, selection: GitHubDeploymentSelection
-) -> GitHubDeploymentResult:
+def _dispatch_ci_deployment[ResultT: BaseModel](
+    identity: str,
+    selection: DeploymentSelectionBase,
+    dispatch_fn: Callable[
+        [DeploymentSelectionBase, str, str, PublicationDispatch | None], ResultT
+    ],
+) -> ResultT:
     selected_target, artifact_path, publication = _plan_deployment_dispatch(
         identity,
         selection.source_workflow,
@@ -708,22 +880,39 @@ def deploy_with_github(
         publication_digest=selection.publication_digest,
     )
     effective_selection = selection.model_copy(update={"target": selected_target})
-    try:
-        service = GitHubDeploymentService.from_environment()
-        return service.deploy(
-            selection=effective_selection,
-            workspace_id=(
-                os.getenv("FABRIC_WORKSPACE_ID")
-                or os.getenv("ACCELERATOR_DEV_WORKSPACE", "")
-                or ""
-            ).strip(),
+    workspace_id = Settings.from_environment().dev_workspace_id or ""
+    with bind_log_context(run_id=identity):
+        try:
+            return dispatch_fn(effective_selection, workspace_id, artifact_path, publication)
+        except DeploymentConfigurationError as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+        except DeploymentDispatchError as error:
+            raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.post(
+    "/api/runs/{identity}/deploy/github",
+    response_model=GitHubDeploymentResult,
+    status_code=202,
+)
+def deploy_with_github(
+    identity: str, selection: GitHubDeploymentSelection
+) -> GitHubDeploymentResult:
+    def _dispatch(
+        effective: DeploymentSelectionBase,
+        workspace_id: str,
+        artifact_path: str,
+        publication: PublicationDispatch | None,
+    ) -> GitHubDeploymentResult:
+        assert isinstance(effective, GitHubDeploymentSelection)
+        return GitHubDeploymentService.from_environment().deploy(
+            selection=effective,
+            workspace_id=workspace_id,
             artifact_path=artifact_path,
             publication=publication,
         )
-    except GitHubConfigurationError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
-    except GitHubDeploymentError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
+
+    return _dispatch_ci_deployment(identity, selection, _dispatch)
 
 
 @app.post(
@@ -735,30 +924,21 @@ def deploy_with_gitlab(
     identity: str,
     selection: GitLabDeploymentSelection,
 ) -> GitLabDeploymentResult:
-    selected_target, artifact_path, publication = _plan_deployment_dispatch(
-        identity,
-        selection.source_workflow,
-        selection.target,
-        isolate_local_artifacts=selection.isolate_local_artifacts,
-        publication_digest=selection.publication_digest,
-    )
-    effective_selection = selection.model_copy(update={"target": selected_target})
-    try:
-        service = GitLabDeploymentService.from_environment()
-        return service.deploy(
-            selection=effective_selection,
-            workspace_id=(
-                os.getenv("FABRIC_WORKSPACE_ID")
-                or os.getenv("ACCELERATOR_DEV_WORKSPACE", "")
-                or ""
-            ).strip(),
+    def _dispatch(
+        effective: DeploymentSelectionBase,
+        workspace_id: str,
+        artifact_path: str,
+        publication: PublicationDispatch | None,
+    ) -> GitLabDeploymentResult:
+        assert isinstance(effective, GitLabDeploymentSelection)
+        return GitLabDeploymentService.from_environment().deploy(
+            selection=effective,
+            workspace_id=workspace_id,
             artifact_path=artifact_path,
             publication=publication,
         )
-    except GitLabConfigurationError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
-    except GitLabDeploymentError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
+
+    return _dispatch_ci_deployment(identity, selection, _dispatch)
 
 
 def _plan_deployment_dispatch(

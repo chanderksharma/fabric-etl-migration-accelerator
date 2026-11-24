@@ -76,6 +76,68 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  scripts:
+    if: github.event_name != 'schedule'
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["self-hosted", "Windows", "X64"]') }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Validate PowerShell script syntax
+        shell: pwsh
+        run: |
+          $errors = @()
+          Get-ChildItem -Path scripts -Include *.ps1,*.psm1 -File | ForEach-Object {
+            $tokens = $null
+            $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors)
+            foreach ($err in $parseErrors) {
+              $errors += "$($_.Name):$($err.Extent.StartLineNumber): $($err.Message)"
+            }
+          }
+          if ($errors.Count -gt 0) {
+            throw ($errors -join "`n")
+          }
+      - name: Validate Node script syntax
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path scripts -Filter *.mjs -File | ForEach-Object {
+            node --check $_.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+  linux-container:
+    if: github.event_name != 'schedule'
+    runs-on: ${{ fromJSON(vars.LINUX_CI_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 30
+    env:
+      UV_PYTHON_DOWNLOADS: automatic
+      UV_PYTHON_PREFERENCE: only-managed
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --extra dev --locked
+      - run: uv run pytest --no-cov -k "not desktop"
+      - name: Build and smoke-test container image
+        run: |
+          docker build -t accelerator:ci .
+          cid=$(docker run -d -e ACCELERATOR_API_TOKEN=ci-smoke-token -p 18050:8050 accelerator:ci)
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18050/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$cid"
+          exit 1
+
   security-audit:
     runs-on: ${{ fromJSON(vars.CI_RUNNER_LABELS || '["self-hosted", "Windows", "X64"]') }}
     timeout-minutes: 30

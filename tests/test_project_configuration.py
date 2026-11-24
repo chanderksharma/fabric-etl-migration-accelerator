@@ -20,6 +20,11 @@ def test_active_project_targets_only_python_313() -> None:
     azure_ci = (ROOT / "azure-pipelines.yml").read_text(encoding="utf-8")
     assert 'versionSpec: "3.13"' in azure_ci
     assert "3.12" not in azure_ci
+    assert "uv run ruff check src packages tests examples" in azure_ci
 
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert "FROM python:3.13-slim" in dockerfile
+    assert "USER accelerator" in dockerfile
+    assert "ENV ACCELERATOR_MODE=server" in dockerfile
+    assert "HEALTHCHECK" in dockerfile
+

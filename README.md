@@ -28,7 +28,7 @@ Take these quick actions depending on your role:
 1. **Explore the Architecture & Capabilities**: Read [System Architecture](docs/Architecture/system-architecture.md), [ADR-001: Source Adapters & Canonical ETL IR](docs/Architecture/ADR-001-etl-source-adapters.md), [Building Source and Target Plugins](docs/Guides/building-plugins.md), and [Release Notes v1.0.0](docs/Release/release-notes.md).
 2. **Walk Through Every Feature**: Follow the [User Guide](docs/Guides/user-guide.md) and [Getting Started Guide](docs/Guides/getting-started.md) using the repository's built-in synthetic Alteryx (`alteryx-workflows/`) and Informatica (`tests/fixtures/`) estates.
 3. **Configure Fabric Dev CI/CD**: Follow [Fabric CI/CD Setup](docs/Guides/fabric-ci-cd-setup.md) to connect GitHub Actions or GitLab CI to a Microsoft Fabric `dev` workspace via Entra OIDC.
-4. **Contribute**: Review the [Developer Contribution Guide](docs/Guides/developer-contribution-guide.md) and [`CONTRIBUTING.md`](CONTRIBUTING.md) before proposing a source adapter, transformation mapping, UI improvement, or deployment change.
+4. **Contribute**: Review the [Developer Contribution Guide](docs/Guides/developer-contribution-guide.md) before proposing a source adapter, transformation mapping, UI improvement, or deployment change.
 
 ---
 
@@ -50,7 +50,6 @@ Use the [documentation landing page](index.md) for role-based reading paths.
 * [Developer Contribution Guide](docs/Guides/developer-contribution-guide.md)
 * [Building Source and Target Plugins](docs/Guides/building-plugins.md)
 * [PyPI Packages and Publishing](docs/Guides/pypi-packages.md)
-* [Contributing](CONTRIBUTING.md)
 * [Acceptance Scenarios](specs/features/accelerator.feature)
 
 #### Understand requirements and architecture
@@ -136,9 +135,9 @@ uv run tool generate <completed-run-id> --target all --output generated-fabric-w
 uv run tool gc --dry-run
 ```
 
-`assess` emits full assessment JSON and is static, so no compiler runs (`exit 1` if any workflow fails parsing; `exit 2` on input/configuration rejection). `targets` lists registered destination platforms (`fabric` ready plus fail-closed `databricks`, `synapse`, and `snowflake` placeholders). `plugins` lists installed source adapters, target providers, and per-plugin load results, and exits `1` if an installed plugin failed to load. `gc` applies the local retention policy to runs, snapshots, publications, and caches. `--target` accepts `dataflow`, `notebook`, `pipeline`, `both` (`dataflow` + `notebook`), or `all`. The CLI and API share `ACCELERATOR_STATE_DIR`, `ACCELERATOR_ARTIFACT_DIR`, `ACCELERATOR_PLUGIN_ALLOWLIST`, and `ACCELERATOR_LOG_LEVEL`; see [Environment Variables](docs/Guides/installation.md#environment-variables).
+`assess` emits full assessment JSON and is static, so no compiler runs (`exit 1` if any workflow fails parsing; `exit 2` on input/configuration rejection). `targets` lists registered destination platforms (`fabric` ready plus fail-closed `databricks`, `synapse`, and `snowflake` placeholders). `plugins` lists installed source adapters, target providers, and per-plugin load results, and exits `1` if an installed plugin failed to load. `gc` applies the local retention policy to runs, snapshots, publications, and caches. `--target` accepts `dataflow`, `notebook`, `pipeline`, `both` (`dataflow` + `notebook`), or `all`. The CLI and API share `ACCELERATOR_STATE_DIR`, `ACCELERATOR_ARTIFACT_DIR`, `ACCELERATOR_PLUGIN_ALLOWLIST`, `ACCELERATOR_LOG_LEVEL`, `ACCELERATOR_LOG_FORMAT`, `ACCELERATOR_MODE`, `ACCELERATOR_ALLOWED_HOSTS`, `ACCELERATOR_ALLOW_LOCAL_FILESYSTEM`, `ACCELERATOR_API_TOKEN`, and `ACCELERATOR_WORKER_CONCURRENCY`; see [Environment Variables](docs/Guides/installation.md#environment-variables).
 
-`POST /api/runs/{id}/targets/fabric/evaluate` confirms Fabric routing with the compilers, and `GET /api/runs/{id}` reports `routing_basis` (`static_mapping` or `compiler_confirmed`). `generate` and every route that builds an artifact tree confirm it first, and `tool generate` does too. `POST /api/runs/{id}/jobs` queues one target (`notebook`, `dataflow`, or `pipeline`) and caches candidates without writing files. It does not confirm routing, and it is not exposed in the portal or as a CLI command. Synchronous `POST /api/runs/{id}/generate` and `tool generate` still write artifacts. See the [User Guide](docs/Guides/user-guide.md#step-4-generate-artifacts-and-dispatch-cicd).
+`GET /api/runs?limit=50&offset=0` lists runs newest-first without deserializing full assessment payloads, and `GET /livez` / `GET /readyz` expose process liveness and SQLite + plugin readiness probes. `POST /api/runs/{id}/targets/fabric/evaluate` confirms Fabric routing with the compilers, and `GET /api/runs/{id}` reports `routing_basis` (`static_mapping` or `compiler_confirmed`). `generate` (which also accepts `write_plan=false` for single-target writes) and every route that builds an artifact tree confirm it first, and `tool generate` does too. `POST /api/runs/{id}/jobs` queues one target (`notebook`, `dataflow`, or `pipeline`) and caches candidates without writing files. It does not confirm routing, and it is not exposed in the portal or as a CLI command. Synchronous `POST /api/runs/{id}/generate` and `tool generate` still write artifacts. See the [User Guide](docs/Guides/user-guide.md#step-4-generate-artifacts-and-dispatch-cicd).
 
 ### Modular PyPI Packages & Stateless CLIs
 
@@ -150,14 +149,25 @@ The repository is structured as a `uv` workspace producing independent wheels wi
 
 See [PyPI Packages and Publishing Guide](docs/Guides/pypi-packages.md), [Building Source and Target Plugins](docs/Guides/building-plugins.md), and the [pluggable solution architecture diagram](docs/Architecture/arch-02-pluggable-solution-architecture.vsdx.fig.png).
 
-### Local Loopback Container
+### Container Runtime (Server Mode and Local Loopback)
+
+The multi-stage `Dockerfile` runs as non-root `USER accelerator`, includes a `/health` `HEALTHCHECK`, and defaults to hardened `server` mode (`ACCELERATOR_MODE=server`, `ACCELERATOR_ALLOW_LOCAL_FILESYSTEM=false`) where `/api/*` requires Bearer authentication:
 
 ```powershell
 docker build -t fabric-etl-accelerator:1.0.0 .
-docker run --rm -p 127.0.0.1:8050:8050 -v fabric-etl-state:/data fabric-etl-accelerator:1.0.0
+
+# Hardened server mode (API clients pass Authorization: Bearer <token>; local filesystem disabled)
+docker run --rm -p 127.0.0.1:8050:8050 -v fabric-etl-state:/data `
+  -e ACCELERATOR_API_TOKEN="<strong-random-token>" `
+  fabric-etl-accelerator:1.0.0
+
+# Local loopback browser UI mode
+docker run --rm -p 127.0.0.1:8050:8050 -v fabric-etl-state:/data `
+  -e ACCELERATOR_MODE=local `
+  fabric-etl-accelerator:1.0.0
 ```
 
-> **Important:** Bind the analyst service strictly to `127.0.0.1`. Host/origin validation and CSRF session tokens protect mutating endpoints; UNC paths, symlinks, and reparse points are rejected.
+> **Important:** In `server` mode, `/api/*` fails closed (`503`) unless `ACCELERATOR_API_TOKEN` is set, and `/health`, `/livez`, and `/readyz` remain reachable for probes. Set `ACCELERATOR_ALLOWED_HOSTS` when accessing the container through a non-localhost hostname. UNC paths, symlinks, and reparse points are always rejected.
 
 ### Fabric Workspace Deployment (FEMA)
 
@@ -242,7 +252,7 @@ See the [Fabric CI/CD Setup Guide](docs/Guides/fabric-ci-cd-setup.md) and [Deplo
 
 - **GitHub Actions** (`.github/workflows/`) and modular **GitLab CI** ([`.gitlab-ci.yml`](.gitlab-ci.yml) + `.gitlab/ci/`) support Development deployment, Deployment Pipeline provisioning, and governed Test/Production promotion. Both use protected environments, serialized Fabric operations, and the shared PowerShell deployment/ALM scripts.
 - **Microsoft Entra OIDC Federation**: Configure `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` with Workload Identity Federation (`id-token: write` / `AZURE_FEDERATED_TOKEN_FILE`); `AZURE_CLIENT_SECRET` is optional fallback only. Supply `FABRIC_WORKSPACE_ID` at dispatch time.
-- **Runner Policy**: Standard CI jobs ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) enforce Ruff, strict mypy, pytest (`>=80%` coverage), Web lint/tests/build, `pip-audit`, `npm audit`, CodeQL SAST, and an entry-point check that installs the example plugins as real distributions. Jobs default to `["self-hosted", "Windows", "X64"]` for Microsoft EMU compatibility and can target organization runner groups via `vars.CI_RUNNER_LABELS`. The deployment workflows read `vars.DEPLOY_RUNNER_LABELS` (same default) so the runners that hold Fabric credentials can be a separate, trusted pool.
+- **Runner Policy**: Standard CI jobs ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) enforce Ruff, strict mypy, pytest (`>=80%` coverage), isolated wheel checks, PowerShell/Node script syntax validation, Linux container build + `/health` smoke test, Web lint/tests/build, `pip-audit`, `npm audit`, CodeQL SAST, and an entry-point check that installs the example plugins as real distributions (`azure-pipelines.yml` mirrors Python/web/plugin/script/audit gates). Jobs default to `["self-hosted", "Windows", "X64"]` for Microsoft EMU compatibility and can target organization runner groups via `vars.CI_RUNNER_LABELS` (and `vars.LINUX_CI_RUNNER_LABELS` for `linux-container`). The deployment workflows read `vars.DEPLOY_RUNNER_LABELS` (same default) so the runners that hold Fabric credentials can be a separate, trusted pool.
 - **Dispatch-Only Backend Integration**: Configure `GITHUB_AUTH_MODE=github-app` (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_PATH`, `GITHUB_ALLOWED_REPOSITORIES`) or `GITLAB_BASE_URL` / `GITLAB_TOKEN` / `GITLAB_ALLOWED_PROJECTS`. Neither integration mutates repository files or reads external logs.
 - **Saved-Query Validation**: Because Fabric rejects SPN-triggered Dataflow refresh (`SPNBasedRefreshNotAllowed`), live runs verify definition readback and validate load-enabled queries via `executeQuery` when runtime-ready (or report `BindingsRequired`).
 
@@ -268,7 +278,7 @@ See the [Fabric CI/CD Setup Guide](docs/Guides/fabric-ci-cd-setup.md) and [Deplo
 
 This accelerator follows Microsoft **InnerSource** principles—contributions from field architects, data engineers, and delivery consultants across Microsoft are welcome (including new Alteryx tool compilers, Informatica transformation mappings, Fabric CI/CD enhancements, and documentation improvements).
 
-All contributions use an issue-first, pull-request-reviewed workflow with mandatory synthetic-only test fixtures (`>=80%` Python coverage, strict typing, zero customer data). Read [`CONTRIBUTING.md`](CONTRIBUTING.md) for repository content structure, stakeholder roles, required tooling, and step-by-step PR guidelines.
+All contributions use an issue-first, pull-request-reviewed workflow with mandatory synthetic-only test fixtures (`>=80%` Python coverage, strict typing, zero customer data). Read the [Developer Contribution Guide](docs/Guides/developer-contribution-guide.md) for repository content structure, required tooling, and step-by-step PR guidelines.
 
 ---
 
@@ -290,4 +300,4 @@ All contributions use an issue-first, pull-request-reviewed workflow with mandat
 ## Scope
 
 - **Visibility & Reuse Scope**: **Microsoft Internal Only** (`Internal Only = Yes` in Chrysalis). Available for internal consumption, adaptation, and InnerSource collaboration by authorized Microsoft employees within Microsoft EMU (`mcaps-microsoft`) and Chrysalis.
-- **External Distribution**: Must not be published externally or open-sourced without explicit Microsoft Legal and OSPO approval (`https://aka.ms/ospo`). See [`LICENSE`](LICENSE).
+- **External Distribution**: Must not be published externally or open-sourced without explicit Microsoft Legal and OSPO approval (`https://aka.ms/ospo`).

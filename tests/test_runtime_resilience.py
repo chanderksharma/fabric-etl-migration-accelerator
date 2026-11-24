@@ -621,3 +621,40 @@ def test_runs_persist_stage_timings_and_expose_them_without_the_result(tmp_path:
         status = service.get_run_status(run.id)
         assert status.timings == timings
         assert "result" not in status.model_dump()
+
+
+def test_single_workflow_reads_verify_only_the_requested_file(tmp_path: Path) -> None:
+    sample_dir = Path(__file__).parents[1] / "alteryx-workflows"
+    estate = tmp_path / "estate"
+    estate.mkdir()
+    (estate / "01.yxmd").write_bytes((sample_dir / "02_low_west_sample.yxmd").read_bytes())
+    (estate / "02.yxmd").write_bytes((sample_dir / "sample_alteryx_workflow.yxmd").read_bytes())
+
+    with RunService(tmp_path / "state") as service:
+        preview = service.preview(estate)
+        run = service.create_run(preview.snapshot_id)
+        service.execute(run.id)
+        assert service.get_run(run.id).status == "completed"
+
+        # Tamper with workflow 1 only; reading workflow 0 still succeeds, reading 1 fails.
+        Path(preview.workflows[1].source_path).write_text("tampered", encoding="utf-8")
+        assert service.workflow_candidates(run.id, 0, "dataflow")
+        assert service.evidence(run.id, workflow_index=0).workflows
+        with pytest.raises(ValueError, match="Confirmed snapshot changed"):
+            service.workflow_candidates(run.id, 1, "dataflow")
+        with pytest.raises(ValueError, match="Confirmed snapshot changed"):
+            service.evidence(run.id, workflow_index=1)
+
+
+def test_ci_dispatchers_implement_shared_protocol() -> None:
+    from accelerator.delivery.base import CiDeploymentDispatcher
+    from accelerator.delivery.github import GitHubDeploymentService
+    from accelerator.delivery.gitlab import GitLabDeploymentService
+
+    github = GitHubDeploymentService(user_token="tok")
+    gitlab = GitLabDeploymentService(token="tok", allowed_projects={"org/proj"})
+    assert isinstance(github, CiDeploymentDispatcher)
+    assert isinstance(gitlab, CiDeploymentDispatcher)
+    assert github.provider_id == "github"
+    assert gitlab.provider_id == "gitlab"
+

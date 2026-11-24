@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from etl_migration_core.contracts.ir import AssetType, SourcePlatform
+from etl_migration_core.planning.effort import assessment_effort_days
 from etl_migration_core.sources.alteryx import AlteryxSourceAdapter
 from etl_migration_core.sources.alteryx.graph import GRAPH_VERSION, WorkflowGraph
 from etl_migration_core.sources.alteryx.graph import WorkflowParseError as WorkflowParseError
-from etl_target_fabric.assessment.effort import assessment_effort_days
 from etl_target_fabric.assessment.support_matrix import (
     ANNOTATION_IDENTITIES as ANNOTATION_IDENTITIES,
 )
@@ -34,6 +34,12 @@ from etl_target_fabric.assessment.support_matrix import (
 )
 from etl_target_fabric.assessment.support_matrix import (
     alteryx_support_for as _support_for,
+)
+from etl_target_fabric.assessment.support_matrix import (
+    complexity_band,
+    complexity_score,
+    migration_wave,
+    recommend_target,
 )
 from etl_target_fabric.capacity.model import CapacityStaticProfile, build_capacity_profile
 
@@ -93,10 +99,17 @@ def assess_workflow(
         source in active_ids and target in active_ids for source, target, _ in graph.edges
     )
     unsupported = tuple(item.name for item in inventory if item.support == "manual")
-    score = _complexity_score(len(tool_names), connection_count, inventory)
-    band = "Low" if score < 20 else "Medium" if score < 40 else "High"
-    target, components, reason = _recommend_target(inventory, unsupported)
-    migration_wave = _migration_wave(target, band)
+    score = complexity_score(
+        [(item.support, item.count) for item in inventory],
+        connection_count,
+    )
+    band = complexity_band(score)
+    target, components, reason = recommend_target(
+        {item.support for item in inventory},
+        len(unsupported),
+        item_noun="tool",
+    )
+    wave = migration_wave(target, band)
     effort_days = _estimated_effort_days(inventory)
     return WorkflowAssessment(
         path=path.name,
@@ -109,7 +122,7 @@ def assess_workflow(
         target_components=components,
         recommendation_reason=reason,
         unsupported_tools=unsupported,
-        migration_wave=migration_wave,
+        migration_wave=wave,
         estimated_effort_days=effort_days,
         registry_version=REGISTRY_VERSION,
         rules_version=RULES_VERSION,
@@ -117,66 +130,6 @@ def assess_workflow(
         data_sources=graph.data_sources,
         capacity_profile=build_capacity_profile(path, graph=graph),
     )
-
-
-def _complexity_score(
-    tool_count: int,
-    connection_count: int,
-    inventory: tuple[ToolInventoryItem, ...],
-) -> int:
-    manual_count = sum(item.count for item in inventory if item.support == "manual")
-    notebook_count = sum(item.count for item in inventory if item.support == "notebook")
-    pipeline_count = sum(item.count for item in inventory if item.support == "pipeline")
-    neutral_count = sum(item.count for item in inventory if item.support == "neutral")
-    return (
-        tool_count
-        - neutral_count
-        + connection_count
-        + manual_count * 5
-        + notebook_count * 2
-        + pipeline_count
-    )
-
-
-def _recommend_target(
-    inventory: tuple[ToolInventoryItem, ...],
-    unsupported: tuple[str, ...],
-) -> tuple[str, tuple[str, ...], str]:
-    support_types = {item.support for item in inventory}
-    components = tuple(
-        component
-        for support, component in (
-            ("dataflow", "Dataflow Gen2"),
-            ("notebook", "Fabric Notebook"),
-            ("pipeline", "Fabric Pipeline"),
-        )
-        if support in support_types
-    )
-    if not components:
-        return (
-            "Manual rework",
-            (),
-            f"{len(unsupported)} tool type(s) have no deterministic mapping",
-        )
-    target = components[0] if len(components) == 1 else "Mixed Fabric solution"
-    reason = (
-        f"Deterministic mappings require {', '.join(components)}"
-        if len(components) > 1
-        else f"Detected tools map to {components[0]}"
-    )
-    if unsupported:
-        reason += f"; {len(unsupported)} unsupported tool type(s) require manual redesign"
-    return target, components, reason
-
-
-def _migration_wave(target: str, complexity_band: str) -> str:
-    if target == "Manual rework":
-        return "Redesign"
-    if target == "Mixed Fabric solution" or complexity_band == "High":
-        return "Pilot"
-    if complexity_band == "Medium":
-        return "Wave 2"
-    return "Wave 1"
 
 
 def _estimated_effort_days(

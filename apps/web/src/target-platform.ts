@@ -11,7 +11,7 @@ export type TargetPlatformInfo = {
   description: string;
 };
 
-export function isTargetPlatformInfo(value: unknown): value is TargetPlatformInfo {
+function isTargetPlatformInfo(value: unknown): value is TargetPlatformInfo {
   if (typeof value !== "object" || value === null) return false;
   const platform = value as Record<string, unknown>;
   return (

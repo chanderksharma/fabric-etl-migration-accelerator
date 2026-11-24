@@ -1,7 +1,7 @@
 ---
 title: System Architecture
 description: End-to-end accelerator architecture, pluggable packages, compiler boundaries, and Fabric ALM topology
-ms.date: 2026-11-22
+ms.date: 2026-11-24
 ---
 
 ## Overview
@@ -18,10 +18,10 @@ The codebase is organized as a `uv` workspace separating canonical ETL IR, targe
 
 | Package | PyPI distribution | Responsibilities |
 | :--- | :--- | :--- |
-| Core IR and SPI | `etl-migration-core` | Canonical `EtlPackage` IR, secure staging, source adapters, and `TargetPlatformRegistry` (with fail-closed placeholders for `databricks`, `synapse`, and `snowflake`) |
-| Portfolio Assessment | `etl-portfolio-assessment` | Target-neutral complexity, base effort, workload profile, redacted evidence, and stateless `etl-assess` CLI |
-| Microsoft Fabric Provider | `etl-target-fabric` | Static Fabric assessment (`assessment/`), compiler-grounded fit evaluation (`evaluation/`), F-SKU capacity model, Dataflow Gen2 / PySpark / Pipeline compilers, artifact writer, dry-run planner, and stateless `etl-fabric` CLI |
-| Application Shell | `fabric-etl-migration-accelerator` | FastAPI loopback API (`/api/targets`, `/api/runs`, generation jobs), SQLite WAL `RunService`, candidate cache, Typer CLI (`tool`), CI dispatchers, and Desktop shell |
+| Core IR and SPI | `etl-migration-core` | Canonical `EtlPackage` IR (including Alteryx `parsed_config`), secure staging & archive safety (`intake/archive.py`, `intake/schemas.py`), pluggable source discovery protocols (`SourceFileDiscoveryAdapter`, `SourceArchiveDiscoveryAdapter`, `SourceDirectoryDiscoveryAdapter`), built-in source adapters, and complete `TargetPlatformRegistry` SPI (`evaluate`, `capacity`, `codegen`, `validate`, `dry_run`, `deploy`) with fail-closed placeholders for `databricks`, `synapse`, and `snowflake` |
+| Portfolio Assessment | `etl-portfolio-assessment` | Target-neutral complexity, base effort, workload profile, per-file fault-isolated redacted evidence, and stateless `etl-assess` CLI |
+| Microsoft Fabric Provider | `etl-target-fabric` | Static Fabric assessment (`assessment/`), compiler-grounded fit evaluation (`evaluation/`), F-SKU capacity model (including Alteryx IR profiling), Dataflow Gen2 / PySpark / Pipeline compilers + deterministic `expr_ast.py` & `m_literals.py`, modular artifact writer & notebook encoder, dry-run planner (`FabricTargetDryRunPlanner`), and stateless `etl-fabric` CLI |
+| Application Shell | `fabric-etl-migration-accelerator` | FastAPI local/server API (`/livez`, `/readyz`, `/api/targets`, paginated `GET /api/runs`, generation jobs, `X-Request-ID`), SQLite WAL `RunStoreProtocol` + decomposed runtime collaborators (`SnapshotManager`, `CapacityService`, `PublicationService`, `TargetOrchestrator`), event-driven worker pool, unified `CiDeploymentDispatcher`, structured JSON logging, Typer CLI (`tool`), and Desktop shell |
 
 ## System Context
 
@@ -204,7 +204,7 @@ attribute.
 
 | Pillar | Architectural Control | Verification |
 | --- | --- | --- |
-| **Security** | `defusedxml` entity/depth caps, archive-bomb budgets, `127.0.0.1` loopback + CSRF token, Entra OIDC, CodeQL + `pip-audit`/`npm audit` | [`docs/Security/threat-model.md`](../Security/threat-model.md) |
-| **Reliability** | SQLite WAL, lease-epoch fencing for assessment runs and generation jobs, per-workflow generation fault isolation, idempotent Development deployment, conflict-aware Git synchronization | `tests/test_generation_hardening.py`, `tests/test_stage_separation.py`, `tests/test_delivery.py`, `tests/test_acceptance.py` |
-| **Operational Excellence** | Deterministic caching keyed by compiler and rules versions, a sample-estate golden digest, correlation IDs, manual environment approvals, adjacent-stage promotion, and stage-specific value sets | [`docs/Guides/developer-contribution-guide.md`](../Guides/developer-contribution-guide.md), [`docs/Guides/fabric-ci-cd-setup.md`](../Guides/fabric-ci-cd-setup.md) |
-| **Performance Efficiency** | Four bounded parallel file workers, SHA-256 deduplication, streaming archive inspection up to `2 GiB` | `tests/test_discovery.py`, `tests/test_assessment.py` |
+| **Security** | `defusedxml` across all XML parse paths, archive-bomb budgets, streaming `IdmcExportClient` guards, `server` mode Bearer auth + `ACCELERATOR_ALLOWED_HOSTS` + local-FS lockout, non-root container, `FabricApi.psm1` LRO origin check, Entra OIDC, CodeQL + `pip-audit`/`npm audit` | [`docs/Security/threat-model.md`](../Security/threat-model.md), `tests/test_api.py`, `tests/test_idmc_export_client.py`, `tests/test_acceptance.py` |
+| **Reliability** | SQLite WAL (`RunStoreProtocol`), lease-epoch fencing for assessment runs and generation jobs, event-driven worker wakeup, per-workflow assessment/evidence/generation fault isolation, idempotent Development deployment, conflict-aware Git synchronization | `tests/test_generation_hardening.py`, `tests/test_stage_separation.py`, `tests/test_delivery.py`, `tests/test_acceptance.py` |
+| **Operational Excellence** | Deterministic caching keyed by compiler and rules versions, a sample-estate golden digest, OpenAPI contract checks, `/livez` + `/readyz` probes, `X-Request-ID` & structured JSON logging, manual environment approvals, adjacent-stage promotion, and stage-specific value sets | [`docs/Guides/developer-contribution-guide.md`](../Guides/developer-contribution-guide.md), [`docs/Guides/fabric-ci-cd-setup.md`](../Guides/fabric-ci-cd-setup.md), `tests/test_openapi_contract.py` |
+| **Performance Efficiency** | Configurable worker concurrency (`ACCELERATOR_WORKER_CONCURRENCY`), parallel target SPI execution, per-item snapshot verification on single-workflow reads, optional `write_plan=false` single-target writes, SHA-256 deduplication, streaming archive inspection up to `2 GiB` | `tests/test_discovery.py`, `tests/test_assessment.py`, `tests/test_runtime_resilience.py`, `tests/test_phase2_architecture.py` |

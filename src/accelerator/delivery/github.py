@@ -2,60 +2,53 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import subprocess
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Literal, Self
-from urllib.error import HTTPError
+from typing import Any, Literal
 from urllib.parse import quote, urlparse
-from urllib.request import Request, urlopen
 
 import jwt
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
+from accelerator.delivery.base import (
+    REF_PATTERN as REF_PATTERN,
+)
+from accelerator.delivery.base import (
+    USER_AGENT,
+    DeploymentConfigurationError,
+    DeploymentDispatchError,
+    DeploymentSelectionBase,
+    format_fabric_target,
+    http_json_request,
+    validate_publication_dispatch,
+)
+from accelerator.delivery.base import (
+    DeploymentTarget as DeploymentTarget,
+)
 from accelerator.delivery.provenance import PublicationDispatch
 
 APPROVED_WORKFLOW_PATH = ".github/workflows/deploy-fabric-artifacts.yml"
 GITHUB_API_VERSION = "2022-11-28"
 REPOSITORY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
-DeploymentTarget = Literal["notebook", "dataflow", "pipeline", "bundle"]
 
 
-class GitHubConfigurationError(RuntimeError):
+class GitHubConfigurationError(DeploymentConfigurationError):
     """Raised when GitHub App configuration is incomplete."""
 
 
-class GitHubDeploymentError(RuntimeError):
+class GitHubDeploymentError(DeploymentDispatchError):
     """Raised when GitHub rejects deployment setup or dispatch."""
 
 
-class GitHubDeploymentSelection(BaseModel):
+class GitHubDeploymentSelection(DeploymentSelectionBase):
     """Validated request from the deployment UI."""
 
     repository_url: str = Field(min_length=1, max_length=240)
-    source_workflow: str = Field(min_length=1, max_length=500)
-    target: DeploymentTarget = "notebook"
     workflow_file: str = APPROVED_WORKFLOW_PATH
-    ref: str | None = Field(default=None, min_length=1, max_length=120)
-    expected_commit: str | None = Field(
-        default=None, min_length=40, max_length=40, pattern=r"^[0-9a-f]{40}$"
-    )
-    isolate_local_artifacts: bool = False
-    publication_digest: str | None = Field(
-        default=None, min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$"
-    )
-    conflict_behavior: Literal["Fail", "Skip", "Update"] = "Fail"
-
-    @model_validator(mode="after")
-    def validate_publication_revision(self) -> Self:
-        if self.publication_digest is not None and self.expected_commit is None:
-            raise ValueError("A publication digest requires an expected commit")
-        return self
 
     @field_validator("repository_url")
     @classmethod
@@ -68,15 +61,6 @@ class GitHubDeploymentSelection(BaseModel):
     def validate_workflow_file(cls, value: str) -> str:
         if value != APPROVED_WORKFLOW_PATH:
             raise ValueError(f"Only {APPROVED_WORKFLOW_PATH} is approved")
-        return value
-
-    @field_validator("ref")
-    @classmethod
-    def validate_ref(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if not REF_PATTERN.fullmatch(value) or ".." in value:
-            raise ValueError("Git ref contains unsupported characters")
         return value
 
 
@@ -106,6 +90,8 @@ def parse_github_repository(repository_url: str) -> str:
 class GitHubDeploymentService:
     """Create an approved workflow when absent and dispatch it."""
 
+    provider_id = "github"
+
     def __init__(
         self,
         *,
@@ -132,7 +118,8 @@ class GitHubDeploymentService:
         """Create a service from server-only environment variables."""
         auth_mode = os.getenv("GITHUB_AUTH_MODE", "github-app").strip().casefold()
         if auth_mode == "gh-cli":
-            candidate_root = Path(__file__).resolve().parents[3]
+            parents = Path(__file__).resolve().parents
+            candidate_root = parents[3] if len(parents) > 3 else Path.cwd()
             repository_root = (
                 candidate_root if (candidate_root / ".git").exists() else Path.cwd()
             )
@@ -245,26 +232,22 @@ class GitHubDeploymentService:
             "deployment_id": deployment_id,
             "FABRIC_WORKSPACE_ID": workspace_id,
             "artifact_root": "generated-fabric-workflows",
-            "target": (
-                "DataPipeline"
-                if selection.target == "pipeline"
-                else selection.target.title()
-            ),
+            "target": format_fabric_target(selection.target),
             "workflow_filter": artifact_path,
             "conflict_behavior": selection.conflict_behavior,
             "dry_run": False,
         }
         if selection.expected_commit is not None:
             inputs["expected_commit"] = selection.expected_commit
+        validate_publication_dispatch(
+            publication,
+            publication_digest=selection.publication_digest,
+            expected_commit=selection.expected_commit,
+            error_cls=GitHubDeploymentError,
+        )
         if publication is not None:
-            if selection.publication_digest is None or selection.expected_commit is None:
-                raise GitHubDeploymentError("Publication dispatch requires a digest and commit")
-            if not publication.artifact_root.endswith(f"/{selection.publication_digest}"):
-                raise GitHubDeploymentError("Publication path does not match the selected digest")
             inputs["artifact_root"] = publication.artifact_root
             inputs["publication_manifest_sha256"] = publication.manifest_sha256
-        elif selection.publication_digest is not None:
-            raise GitHubDeploymentError("Publication dispatch is missing verified provenance")
         self._request(
             "POST",
             f"/repos/{repository}/actions/workflows/{quote(workflow_name, safe='')}/dispatches",
@@ -301,31 +284,19 @@ class GitHubDeploymentService:
         token: str,
         body: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
-        data = json.dumps(body).encode("utf-8") if body is not None else None
-        request = Request(
-            f"{self.api_base}{path}",
-            data=data,
+        return http_json_request(
+            provider_label="GitHub",
+            api_base=self.api_base,
             method=method,
+            path=path,
             headers={
                 "Accept": "application/vnd.github+json",
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
-                "User-Agent": "fabric-etl-migration-accelerator",
+                "User-Agent": USER_AGENT,
                 "X-GitHub-Api-Version": GITHUB_API_VERSION,
             },
+            body=body,
+            allow_empty=True,
+            error_cls=GitHubDeploymentError,
         )
-        try:
-            with urlopen(request, timeout=20) as response:
-                payload = response.read()
-        except HTTPError as error:
-            payload = error.read()
-            message = payload.decode("utf-8", errors="replace")
-            raise GitHubDeploymentError(
-                f"GitHub API {method} {path} failed ({error.code}): {message}"
-            ) from error
-        if not payload:
-            return None
-        parsed = json.loads(payload)
-        if not isinstance(parsed, dict):
-            raise GitHubDeploymentError("GitHub API returned an unexpected response")
-        return parsed

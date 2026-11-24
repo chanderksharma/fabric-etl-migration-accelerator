@@ -9,6 +9,7 @@ from etl_migration_core.contracts.ir import SourcePlatform
 from etl_migration_core.intake.discovery import DiscoveryService
 from etl_migration_core.sources.alteryx import AlteryxSourceAdapter
 from etl_migration_core.sources.defaults import create_default_registry
+from etl_migration_core.sources.registry import SourceAdapterRegistry
 from etl_target_fabric.assessment.ir_assessment import assess_package
 from etl_target_fabric.assessment.portfolio import assessment_response
 from etl_target_fabric.assessment.schemas import (
@@ -32,25 +33,21 @@ from etl_target_fabric.evaluation.native_route import (
 class FabricAssessmentApplication:
     """Coordinate discovery for all product entry points."""
 
-    def __init__(self, discovery: DiscoveryService | None = None) -> None:
-        self._discovery = discovery or DiscoveryService()
-        self._source_registry = create_default_registry()
+    def __init__(
+        self,
+        discovery: DiscoveryService | None = None,
+        source_registry: SourceAdapterRegistry | None = None,
+    ) -> None:
+        if discovery is not None:
+            self._discovery = discovery
+            self._source_registry = source_registry or discovery.source_registry
+        else:
+            self._source_registry = source_registry or create_default_registry()
+            self._discovery = DiscoveryService(source_registry=self._source_registry)
 
     def preview(self, path: Path) -> DiscoverySummaryResponse:
         """Build a pre-run summary for an untrusted local path."""
-        summary = self._discovery.discover(path)
-        return DiscoverySummaryResponse(
-            input_path=summary.input_path,
-            input_kind=summary.input_kind,
-            workflow_count=summary.workflow_count,
-            skipped_count=summary.skipped_count,
-            total_size_bytes=summary.total_size_bytes,
-            workflows=[
-                WorkflowCandidateResponse.model_validate(candidate)
-                for candidate in summary.workflows
-            ],
-            skipped=[SkippedItemResponse.model_validate(item) for item in summary.skipped],
-        )
+        return DiscoverySummaryResponse.from_summary(self._discovery.discover(path))
 
     def assess(
         self,

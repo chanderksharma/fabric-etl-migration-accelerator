@@ -166,3 +166,23 @@ def test_operation_classification_golden_vectors(
     operation: str, has_issues: bool, expected: str
 ) -> None:
     assert classify_neutral_operation(operation, has_issues=has_issues) == expected
+
+
+def test_inspect_evidence_isolates_malformed_workflows(tmp_path: Path) -> None:
+    from etl_portfolio_assessment.service.application import PortfolioAssessmentApplication
+
+    sample = Path(__file__).parents[3] / "alteryx-workflows" / "02_low_west_sample.yxmd"
+    (tmp_path / "good.yxmd").write_bytes(sample.read_bytes())
+    (tmp_path / "broken.yxmd").write_text("<AlteryxDocument><broken", encoding="utf-8")
+
+    evidence = PortfolioAssessmentApplication().inspect_evidence(tmp_path)
+
+    assert len(evidence) == 2
+    parsed = [item for item in evidence if item.parse_status == "parsed"]
+    failed = [item for item in evidence if item.parse_status == "failed"]
+    assert len(parsed) == 1
+    assert parsed[0].workflow_path.startswith("good.yxmd")
+    assert len(failed) == 1
+    assert failed[0].workflow_path == "broken.yxmd"
+    assert failed[0].findings
+

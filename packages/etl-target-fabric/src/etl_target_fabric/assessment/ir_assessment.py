@@ -12,7 +12,7 @@ from etl_migration_core.contracts.ir import (
     NodeKind,
     SourcePlatform,
 )
-from etl_target_fabric.assessment.effort import assessment_effort_days
+from etl_migration_core.planning.effort import assessment_effort_days
 from etl_target_fabric.assessment.support_matrix import (
     ASSESSMENT_RULES_VERSION as ASSESSMENT_RULES_VERSION,
 )
@@ -27,6 +27,13 @@ from etl_target_fabric.assessment.support_matrix import (
 )
 from etl_target_fabric.assessment.support_matrix import (
     PIPELINE_OPERATIONS as PIPELINE_OPERATIONS,
+)
+from etl_target_fabric.assessment.support_matrix import (
+    alteryx_support_for,
+    complexity_band,
+    complexity_score,
+    migration_wave,
+    recommend_target,
 )
 from etl_target_fabric.assessment.support_matrix import (
     etl_support_for as _support_for,
@@ -83,13 +90,28 @@ def assess_package(package: EtlPackage) -> tuple[EtlAssessment, ...]:
 def _assess_asset(package: EtlPackage, asset: EtlAsset) -> EtlAssessment:
     if not isinstance(package.source_platform, SourcePlatform):
         raise ValueError(f"Fabric assessment does not support source {package.source_platform!r}")
-    operations = [
-        node.operation
+    active_nodes = [
+        node
         for graph in (*asset.mapping_graphs, asset.orchestration_graph)
         if graph is not None
         for node in graph.nodes
+        if not node.disabled
     ]
-    if not operations:
+    def _node_support(node_op: str, native_type: str | None, issues: tuple[str, ...]) -> str:
+        if issues:
+            return "manual"
+        if package.source_platform is SourcePlatform.ALTERYX and native_type:
+            return alteryx_support_for(native_type)
+        return _support_for(node_op)
+
+    counts: Counter[tuple[str, str]] = Counter(
+        (
+            node.operation,
+            _node_support(node.operation, node.native_type, node.issues),
+        )
+        for node in active_nodes
+    )
+    if not counts:
         synthetic = {
             AssetType.MAPPING_TASK: "mapping_task",
             AssetType.TASKFLOW: "taskflow",
@@ -97,27 +119,41 @@ def _assess_asset(package: EtlPackage, asset: EtlAsset) -> EtlAssessment:
             AssetType.WORKLET: "worklet",
         }.get(asset.asset_type)
         if synthetic:
-            operations.append(synthetic)
-    counts = Counter(operations)
+            counts[(synthetic, _support_for(synthetic))] += 1
     inventory = tuple(
         ComponentInventoryItem(
             operation=operation,
             count=count,
-            support=_support_for(operation),
+            support=support,
         )
-        for operation, count in sorted(counts.items())
+        for (operation, support), count in sorted(counts.items())
     )
     connection_count = sum(
-        len({(edge.source, edge.target) for edge in graph.edges})
+        len(
+            {
+                (edge.source, edge.target)
+                for edge in graph.edges
+                if edge.source in active_ids and edge.target in active_ids
+            }
+        )
         for graph in (*asset.mapping_graphs, asset.orchestration_graph)
         if graph is not None
+        for active_ids in ({node.native_id for node in graph.nodes if not node.disabled},)
     )
     unsupported = tuple(
-        item.operation for item in inventory if item.support == "manual"
+        dict.fromkeys(item.operation for item in inventory if item.support == "manual")
     )
-    score = _complexity_score(inventory, connection_count, len(asset.dependencies))
-    band = "Low" if score < 20 else "Medium" if score < 40 else "High"
-    target, components, reason = _recommend_target(inventory, unsupported)
+    score = complexity_score(
+        [(item.support, item.count) for item in inventory],
+        connection_count,
+        dependency_count=len(asset.dependencies),
+    )
+    band = complexity_band(score)
+    target, components, reason = recommend_target(
+        {item.support for item in inventory},
+        len(unsupported),
+        item_noun="component",
+    )
     dependencies = tuple(
         dict.fromkeys(
             dep.target_native_id
@@ -158,72 +194,12 @@ def _assess_asset(package: EtlPackage, asset: EtlAsset) -> EtlAssessment:
         target_components=components,
         recommendation_reason=reason,
         unsupported_components=unsupported,
-        migration_wave=_migration_wave(target, band),
+        migration_wave=migration_wave(target, band),
         estimated_effort_days=_estimated_effort(inventory),
         registry_version=REGISTRY_VERSIONS[package.source_platform],
         dependencies=dependencies,
         data_sources=data_sources,
     )
-
-
-def _complexity_score(
-    inventory: tuple[ComponentInventoryItem, ...],
-    connection_count: int,
-    dependency_count: int,
-) -> int:
-    weighted = sum(
-        item.count
-        * {
-            "neutral": 0,
-            "dataflow": 1,
-            "pipeline": 2,
-            "notebook": 3,
-            "manual": 6,
-        }[item.support]
-        for item in inventory
-    )
-    return weighted + connection_count + dependency_count * 2
-
-
-def _recommend_target(
-    inventory: tuple[ComponentInventoryItem, ...],
-    unsupported: tuple[str, ...],
-) -> tuple[str, tuple[str, ...], str]:
-    support = {item.support for item in inventory}
-    components = tuple(
-        name
-        for category, name in (
-            ("dataflow", "Dataflow Gen2"),
-            ("notebook", "Fabric Notebook"),
-            ("pipeline", "Fabric Pipeline"),
-        )
-        if category in support
-    )
-    if not components:
-        return (
-            "Manual rework",
-            (),
-            f"{len(unsupported)} component type(s) have no deterministic mapping",
-        )
-    target = components[0] if len(components) == 1 else "Mixed Fabric solution"
-    reason = (
-        f"Deterministic mappings require {', '.join(components)}"
-        if len(components) > 1
-        else f"Detected components map to {components[0]}"
-    )
-    if unsupported:
-        reason += (
-            f"; {len(unsupported)} unsupported component type(s) require manual redesign"
-        )
-    return target, components, reason
-
-
-def _migration_wave(target: str, band: str) -> str:
-    if target == "Manual rework":
-        return "Redesign"
-    if target == "Mixed Fabric solution" or band == "High":
-        return "Pilot"
-    return "Wave 2" if band == "Medium" else "Wave 1"
 
 
 def _estimated_effort(

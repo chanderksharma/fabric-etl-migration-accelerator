@@ -66,8 +66,6 @@
   items:
     - name: Developer Contribution Guide
       href: docs/Guides/developer-contribution-guide.md
-    - name: Contributing
-      href: CONTRIBUTING.md
     - name: Support
       href: SUPPORT.md
     - name: Third-Party OSS Notice

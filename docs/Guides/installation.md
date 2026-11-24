@@ -1,7 +1,7 @@
 ---
 title: Installation and Runtime Modes
 description: Install and run the accelerator locally, from the CLI, in a dev container, or in Docker
-ms.date: 2026-11-22
+ms.date: 2026-11-24
 ms.topic: how-to
 ---
 
@@ -477,16 +477,25 @@ PyWebView private mode prevents browser state from becoming a cross-launch
 authentication mechanism. This remains a single-user desktop boundary; it is
 not a multi-user hosted service.
 
-## Option 4: Local Loopback Container
+## Option 4: Container Runtime (Server Mode and Local Loopback)
 
-Build and run the multi-stage container image (`node:22-alpine` UI build + `python:3.13-slim` runtime), publishing **only** to the host loopback interface (`127.0.0.1`):
+Build and run the multi-stage container image (`node:22-alpine` UI build + `python:3.13-slim` runtime). The container runs as non-root `USER accelerator`, defines a `HEALTHCHECK` against `/health`, and defaults to hardened `server` mode (`ACCELERATOR_MODE=server`, `ACCELERATOR_ALLOW_LOCAL_FILESYSTEM=false`):
 
 ```powershell
 docker build -t fabric-etl-accelerator:1.0.0 .
-docker run --rm -p 127.0.0.1:8050:8050 -v fabric-etl-state:/data fabric-etl-accelerator:1.0.0
+
+# Hardened server mode (requires Authorization: Bearer <token> on /api/*; local filesystem disabled)
+docker run --rm -p 127.0.0.1:8050:8050 -v fabric-etl-state:/data `
+  -e ACCELERATOR_API_TOKEN="<strong-random-token>" `
+  fabric-etl-accelerator:1.0.0
+
+# Local loopback browser UI mode
+docker run --rm -p 127.0.0.1:8050:8050 -v fabric-etl-state:/data `
+  -e ACCELERATOR_MODE=local `
+  fabric-etl-accelerator:1.0.0
 ```
 
-> **Security Note:** Never publish port `8050` on `0.0.0.0` across an untrusted network. The analyst service is designed as a single-user local workstation boundary.
+> **Security Note:** In `server` mode, `/api/*` fails closed (`503`) if `ACCELERATOR_API_TOKEN` is unset, and `/api/intake/preview`, `/api/snapshots/local`, and `/api/snapshots/browse-folder` return `403`. Set `ACCELERATOR_ALLOWED_HOSTS` when accessing the container via a non-localhost hostname (exact hosts or `*.domain` wildcards). `/health`, `/livez`, and `/readyz` stay reachable without a Bearer token for container orchestration probes.
 
 ## Option 5: Development Container
 
@@ -512,6 +521,12 @@ override the variables.
 | `ACCELERATOR_ARTIFACT_DIR` | `generated-fabric-workflows` | Shared artifact output used by `tool generate` and synchronous `POST /api/runs/{id}/generate`. Generation jobs do not write this directory. |
 | `ACCELERATOR_PLUGIN_ALLOWLIST` | unset (load every installed plugin) | Comma-separated entry-point names allowed to load, for example `ssis,databricks`. Others are never imported and are reported as `skipped` by `GET /api/plugins`. It applies to the portal, the CLI, and the library and stateless-CLI registries alike. |
 | `ACCELERATOR_LOG_LEVEL` | `INFO` | Level for the `accelerator` and `etl_*` loggers. Logs go to standard error, including run stage timings. |
+| `ACCELERATOR_LOG_FORMAT` | `text` | Log output format: `text` or single-line structured `json` (including bound `request_id` and `run_id` correlation fields). |
+| `ACCELERATOR_WORKER_CONCURRENCY` | `2` | Number of background worker threads (`1`–`16`) for queued assessment runs and generation jobs. |
+| `ACCELERATOR_MODE` | `local` (`server` in Docker) | Runtime security posture: `local`, `desktop`, or `server`. In `server` mode, `/api/*` requires Bearer authentication and local filesystem routes are disabled by default. |
+| `ACCELERATOR_ALLOWED_HOSTS` | `127.0.0.1,localhost` | Comma-separated allowed HTTP `Host` values (supports exact hosts and `*.domain` wildcards). |
+| `ACCELERATOR_ALLOW_LOCAL_FILESYSTEM` | `true` (`false` in `server` mode) | Controls whether `/api/intake/preview`, `/api/snapshots/local`, and `/api/snapshots/browse-folder` are enabled. |
+| `ACCELERATOR_API_TOKEN` | unset | Bearer token required on `/api/*` in `server` mode (`Authorization: Bearer <token>`). Fails closed (`503`) if unset in `server` mode. |
 
 ### Local state and retention
 

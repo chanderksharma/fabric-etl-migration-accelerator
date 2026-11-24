@@ -9,12 +9,13 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
-from xml.etree.ElementTree import fromstring
+from xml.etree.ElementTree import Element
 
+from defusedxml import ElementTree
+from defusedxml.common import DefusedXmlException
 from pydantic import BaseModel, Field
 
 from etl_migration_core.contracts.ir import AssetType, SourcePlatform
-from etl_migration_core.m_literals import m_string, m_text_is_well_formed
 from etl_migration_core.sources.alteryx import AlteryxSourceAdapter
 from etl_migration_core.sources.alteryx.graph import (
     GRAPH_VERSION,
@@ -29,9 +30,23 @@ from etl_target_fabric.assessment.support_matrix import (
 from etl_target_fabric.assessment.support_matrix import (
     alteryx_support_for as _support_for,
 )
+from etl_target_fabric.compilers.m_literals import m_string, m_text_is_well_formed
 
 COMPILER_VERSION = "2.3.0"
 Target = Literal["notebook", "dataflow", "pipeline"]
+
+
+def fromstring(xml_text: str) -> Element:
+    """Parse an XML configuration fragment with defusedxml protections enabled."""
+    try:
+        return ElementTree.fromstring(
+            xml_text,
+            forbid_dtd=True,
+            forbid_entities=True,
+            forbid_external=True,
+        )
+    except (ElementTree.ParseError, DefusedXmlException) as error:
+        raise WorkflowParseError("Invalid or unsafe XML configuration fragment") from error
 
 
 class DataflowQueryGroup(BaseModel):

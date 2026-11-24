@@ -145,3 +145,62 @@ def test_idmc_assessment_covers_mapping_task_and_taskflow() -> None:
     assert taskflow.recommended_target == "Fabric Pipeline"
     assert taskflow.unsupported_components == ()
 
+
+def test_ir_assessment_skips_disabled_nodes_and_marks_issue_nodes_manual() -> None:
+    graph = EtlGraph(
+        kind=GraphKind.MAPPING,
+        nodes=(
+            EtlNode(
+                native_id="src",
+                name="Source",
+                operation="source",
+                kind=NodeKind.SOURCE,
+            ),
+            EtlNode(
+                native_id="flt",
+                name="FilterWithIssue",
+                operation="filter",
+                kind=NodeKind.TRANSFORMATION,
+                issues=("Unsupported filter predicate",),
+            ),
+            EtlNode(
+                native_id="disabled-custom",
+                name="DisabledCustom",
+                operation="custom_disabled_op",
+                kind=NodeKind.TRANSFORMATION,
+                disabled=True,
+            ),
+            EtlNode(
+                native_id="tgt",
+                name="Target",
+                operation="target",
+                kind=NodeKind.TARGET,
+            ),
+        ),
+        edges=(
+            EtlEdge(source="src", target="flt"),
+            EtlEdge(source="flt", target="tgt"),
+            EtlEdge(source="src", target="disabled-custom"),
+        ),
+    )
+    asset = EtlAsset(
+        native_id="m_parity",
+        name="m_parity",
+        asset_type=AssetType.MAPPING,
+        mapping_graphs=(graph,),
+    )
+    package = EtlPackage(
+        source_platform=SourcePlatform.INFORMATICA_POWERCENTER,
+        source_product="Informatica PowerCenter",
+        export_id="repo",
+        assets=(asset,),
+    )
+
+    assessment = assess_package(package)[0]
+
+    assert assessment.component_count == 3
+    assert assessment.connection_count == 2
+    assert assessment.unsupported_components == ("filter",)
+    assert "custom_disabled_op" not in {item.operation for item in assessment.inventory}
+
+

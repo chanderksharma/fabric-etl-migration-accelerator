@@ -7,10 +7,10 @@ import sqlite3
 import time
 import weakref
 from collections.abc import Callable, Iterator
-from contextlib import closing, contextmanager
+from contextlib import AbstractContextManager, closing, contextmanager
 from pathlib import Path
 from threading import RLock
-from typing import Literal
+from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -168,6 +168,34 @@ def _close_connections(idle: list[sqlite3.Connection]) -> None:
         connection.close()
 
 
+@runtime_checkable
+class RunStoreProtocol(Protocol):
+    """Storage boundary decoupling runtime orchestration from SQLite specifics."""
+
+    root: Path
+
+    @property
+    def closed(self) -> bool: ...
+
+    def close(self) -> None: ...
+
+    def connection(self) -> AbstractContextManager[sqlite3.Connection]: ...
+
+    def cache_get(self, table: CacheTable, key: str) -> str | None: ...
+
+    def cache_has(self, table: CacheTable, key: str) -> bool: ...
+
+    def cache_put(self, table: CacheTable, key: str, value: str) -> None: ...
+
+    def list_runs(
+        self, *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[sqlite3.Row], int]: ...
+
+    def collect_garbage(
+        self, *, max_age_days: float, max_cache_bytes: int, dry_run: bool = False
+    ) -> GarbageReport: ...
+
+
 class RunStore:
     """Thread-safe SQLite access with pooled connections and ordered schema migrations."""
 
@@ -267,6 +295,21 @@ class RunStore:
                     {column}=excluded.{column}, last_used=excluded.last_used""",
                 (key, value, time.time()),
             )
+
+    def list_runs(
+        self, *, limit: int = 50, offset: int = 0
+    ) -> tuple[list[sqlite3.Row], int]:
+        """Return lightweight run metadata rows ordered newest-first, plus total count."""
+        bounded_limit = max(1, min(limit, 200))
+        bounded_offset = max(0, offset)
+        with self.connection() as connection:
+            total = int(connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0])
+            rows = connection.execute(
+                """SELECT id, snapshot, status, processed, total, cache_hits, error, timings
+                FROM runs ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?""",
+                (bounded_limit, bounded_offset),
+            ).fetchall()
+        return rows, total
 
     def collect_garbage(
         self, *, max_age_days: float, max_cache_bytes: int, dry_run: bool = False

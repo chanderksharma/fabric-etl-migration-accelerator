@@ -135,3 +135,78 @@ def test_export_client_rejects_untrusted_url_and_invalid_package(tmp_path: Path)
             destination=tmp_path / "export.zip",
         )
 
+
+def test_export_client_rejects_invalid_job_id_and_private_hosts(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="local host"):
+        IdmcExportClient(
+            base_api_url="https://localhost/saas",
+            session_id="session-value",
+            transport=FakeTransport([]),
+        )
+    with pytest.raises(ValueError, match="private or loopback"):
+        IdmcExportClient(
+            base_api_url="https://169.254.169.254/saas",
+            session_id="session-value",
+            transport=FakeTransport([]),
+        )
+    with pytest.raises(ValueError, match="allowlist"):
+        IdmcExportClient(
+            base_api_url="https://dm.example.com/saas",
+            session_id="session-value",
+            transport=FakeTransport([]),
+            allowed_hosts=("allowed.informaticacloud.com",),
+        )
+
+    client = IdmcExportClient(
+        base_api_url="https://dm.example.com/saas",
+        session_id="session-value",
+        transport=FakeTransport([HttpResponse(200, {}, b'{"id":"../admin"}')]),
+        poll_interval_seconds=0,
+    )
+    with pytest.raises(IdmcExportError, match="job ID"):
+        client.export(object_ids=("asset-1",), destination=tmp_path / "export.zip")
+
+
+def test_export_client_rejects_oversized_and_zip_bomb_packages(tmp_path: Path) -> None:
+    oversized = _package_bytes()
+    client = IdmcExportClient(
+        base_api_url="https://dm.example.com/saas",
+        session_id="session-value",
+        transport=FakeTransport(
+            [
+                HttpResponse(200, {}, b'{"id":"job-size"}'),
+                HttpResponse(200, {}, b'{"status":{"state":"SUCCESSFUL"}}'),
+                HttpResponse(200, {"Content-Type": "application/zip"}, oversized),
+            ]
+        ),
+        poll_interval_seconds=0,
+        max_package_bytes=16,
+    )
+    destination = tmp_path / "oversized.zip"
+    with pytest.raises(IdmcExportError, match="size limit"):
+        client.export(object_ids=("asset-1",), destination=destination)
+    assert not destination.exists()
+
+    bomb_buffer = io.BytesIO()
+    with zipfile.ZipFile(bomb_buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("zeros.bin", b"\x00" * (2 * 1024 * 1024))
+    bomb_bytes = bomb_buffer.getvalue()
+    bomb_client = IdmcExportClient(
+        base_api_url="https://dm.example.com/saas",
+        session_id="session-value",
+        transport=FakeTransport(
+            [
+                HttpResponse(200, {}, b'{"id":"job-bomb"}'),
+                HttpResponse(200, {}, b'{"status":{"state":"SUCCESSFUL"}}'),
+                HttpResponse(200, {"Content-Type": "application/zip"}, bomb_bytes),
+            ]
+        ),
+        poll_interval_seconds=0,
+        max_uncompressed_bytes=1024 * 1024,
+    )
+    bomb_dest = tmp_path / "bomb.zip"
+    with pytest.raises(IdmcExportError, match="ZIP"):
+        bomb_client.export(object_ids=("asset-1",), destination=bomb_dest)
+    assert not bomb_dest.exists()
+
+

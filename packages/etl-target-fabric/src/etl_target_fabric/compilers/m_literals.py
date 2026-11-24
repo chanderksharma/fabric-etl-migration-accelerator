@@ -1,4 +1,4 @@
-"""Power Query M text literals shared by every compiler.
+"""Power Query M text literals shared by Microsoft Fabric compilers.
 
 ASCII identifiers stay byte-identical with a JSON string. Characters that JSON
 encodes differently — quotes, hashes, and line breaks — use M rules instead.

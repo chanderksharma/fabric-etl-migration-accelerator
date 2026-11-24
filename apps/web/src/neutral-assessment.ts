@@ -1,4 +1,4 @@
-export type NeutralComponent = {
+type NeutralComponent = {
   operation: string;
   count: number;
   classification: string;

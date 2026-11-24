@@ -20,18 +20,14 @@ from typing import Self
 from pydantic import TypeAdapter, ValidationError
 
 from accelerator.runtime.artifacts import project_candidate
+from accelerator.runtime.capacity import CapacityService
 from accelerator.runtime.identity import (
     assessment_cache_key,
     candidate_cache_key,
-    fabric_fit_key,
     ir_cache_key,
     neutral_cache_key,
 )
-from accelerator.runtime.identity import copy_with_sha256 as _copy_with_sha256
-from accelerator.runtime.identity import sha256_file as _sha256_file
-from accelerator.runtime.identity import snapshot_id as _snapshot_id
 from accelerator.runtime.models import (
-    TARGET_EVALUATION_LIST,
     ArtifactPublication,
     GenerationJob,
     Run,
@@ -39,16 +35,10 @@ from accelerator.runtime.models import (
     RunTargetEvaluation,
     SnapshotPreview,
 )
-from accelerator.runtime.publication import (
-    MANIFEST_NAME,
-    build_archive,
-    build_manifest,
-    check_tree,
-    manifest_bytes,
-    manifest_digest,
-    read_manifest,
-)
+from accelerator.runtime.publications import PublicationService
+from accelerator.runtime.snapshots import SnapshotManager
 from accelerator.runtime.store import GarbageReport, RunStore
+from accelerator.runtime.targets import FABRIC_PLATFORM_ID, TargetOrchestrator
 from accelerator.settings import Settings
 from etl_migration_core.contracts.ir import (
     IR_VERSION,
@@ -59,9 +49,9 @@ from etl_migration_core.contracts.ir import (
 from etl_migration_core.contracts.spi import (
     TargetCapacityResult,
     TargetGenerationResult,
-    TargetPlatformProvider,
 )
-from etl_migration_core.intake.discovery import DiscoveryService, hash_idmc_directory
+from etl_migration_core.intake.discovery import DiscoveryService
+from etl_migration_core.intake.schemas import WorkflowCandidateResponse
 from etl_migration_core.plugins import fault_detail
 from etl_migration_core.sources.alteryx import AlteryxSourceAdapter
 from etl_migration_core.sources.alteryx.graph import (
@@ -82,12 +72,6 @@ from etl_portfolio_assessment.service.schemas import (
     NeutralAssessmentResponse,
     NeutralEstateAssessmentResponse,
 )
-from etl_portfolio_assessment.service.schemas import (
-    SkippedItemResponse as NeutralSkippedItemResponse,
-)
-from etl_portfolio_assessment.service.schemas import (
-    WorkflowCandidateResponse as NeutralWorkflowCandidateResponse,
-)
 from etl_target_fabric.assessment.ir_assessment import (
     ASSESSMENT_RULES_VERSION,
     REGISTRY_VERSIONS,
@@ -96,9 +80,7 @@ from etl_target_fabric.assessment.ir_assessment import (
 from etl_target_fabric.assessment.portfolio import assessment_response
 from etl_target_fabric.assessment.schemas import (
     EstateAssessmentResponse,
-    SkippedItemResponse,
     WorkflowAssessmentResponse,
-    WorkflowCandidateResponse,
 )
 from etl_target_fabric.assessment.support_matrix import (
     alteryx_support_for,
@@ -109,12 +91,8 @@ from etl_target_fabric.assessment.workflow import (
 )
 from etl_target_fabric.capacity.model import (
     CapacityPortfolioEstimate,
-    CapacitySettings,
     CapacityUpdate,
-    CapacityWorkflowInput,
     build_informatica_capacity_profile,
-    capacity_csv,
-    estimate_capacity,
 )
 from etl_target_fabric.compilers.alteryx import (
     Candidate,
@@ -133,7 +111,6 @@ from etl_target_fabric.delivery.artifact_writer import (
     build_workflow_package,
     write_candidates,
 )
-from etl_target_fabric.evaluation import confirm_assessment
 from etl_target_fabric.provider import FabricTargetProvider
 
 ASSESSMENT_LIST = TypeAdapter(list[WorkflowAssessmentResponse])
@@ -143,7 +120,6 @@ LEASE_RENEWAL_INTERVAL_SECONDS = 60
 WORKER_POLL_SECONDS = 5
 MAX_RUN_ATTEMPTS = 5
 ALL_TARGETS: tuple[Target, ...] = ("dataflow", "notebook", "pipeline")
-FABRIC_PLATFORM_ID = "fabric"
 # Written when a run completes. Assessment never runs a compiler, so its Fabric routing is
 # the static support-matrix mapping until a stored Fabric evaluation confirms it.
 STATIC_ASSESSMENT_BASIS = "static_mapping"
@@ -226,6 +202,12 @@ class RunService:
         self._discovery = DiscoveryService(source_registry=self._source_registry)
         self._store = RunStore(root)
         self.database = self._store.database
+        self._snapshots = SnapshotManager(
+            root, self._store, self._discovery, self._source_registry
+        )
+        self._capacity = CapacityService(self._store)
+        self._publications = PublicationService(root)
+        self._targets = TargetOrchestrator(self._store, self._parse_item)
 
     @classmethod
     def from_settings(cls, settings: Settings) -> Self:
@@ -268,97 +250,10 @@ class RunService:
         )
 
     def preview(self, source: Path) -> SnapshotPreview:
-        started = time.perf_counter()
-        summary = self._discovery.discover(source)
-        snapshot_id = _snapshot_id(summary.workflows)
-        folder = self.root / "snapshots" / snapshot_id
-        folder.mkdir(parents=True, exist_ok=True)
-        files: list[WorkflowCandidateResponse] = []
-        for index, candidate in enumerate(summary.workflows):
-            destination = folder / f"{index}{candidate.extension}"
-            if not destination.exists():
-                with tempfile.TemporaryDirectory(dir=folder) as temporary:
-                    staging = Path(temporary) / "snapshot"
-                    with self._discovery.staged_workflow(candidate) as original:
-                        staged_sha256 = (
-                            hash_idmc_directory(original, destination=staging)[0]
-                            if original.is_dir()
-                            else _copy_with_sha256(original, staging)
-                        )
-                    if staged_sha256 != candidate.sha256:
-                        raise ValueError(
-                            "Source changed during preview; review the selection again"
-                        )
-                    try:
-                        staging.replace(destination)
-                    except OSError:
-                        if (
-                            not destination.exists()
-                            or _sha256_file(destination) != candidate.sha256
-                        ):
-                            raise
-            elif _sha256_file(destination) != candidate.sha256:
-                raise ValueError("Source changed during preview; review the selection again")
-            files.append(
-                WorkflowCandidateResponse.model_validate(
-                    replace(
-                        candidate, source_path=str(destination), archive_path=None, archive_chain=()
-                    )
-                )
-            )
-        preview = SnapshotPreview(
-            input_path=summary.input_path,
-            input_kind=summary.input_kind,
-            workflow_count=summary.workflow_count,
-            skipped_count=summary.skipped_count,
-            total_size_bytes=summary.total_size_bytes,
-            skipped=[SkippedItemResponse.model_validate(item) for item in summary.skipped],
-            workflows=files,
-            snapshot_id=snapshot_id,
-        )
-        with self._connection() as connection:
-            connection.execute(
-                """INSERT INTO snapshots (id, preview, created_at) VALUES (?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    preview=excluded.preview, created_at=excluded.created_at""",
-                (snapshot_id, preview.model_dump_json(), time.time()),
-            )
-        logger.info(
-            "Snapshot %s: %d workflows, %d skipped, %.0f ms",
-            snapshot_id[:12],
-            preview.workflow_count,
-            preview.skipped_count,
-            (time.perf_counter() - started) * 1000,
-        )
-        return preview
+        return self._snapshots.preview(source)
 
-    def _snapshot(self, snapshot_id: str) -> SnapshotPreview:
-        with self._connection() as connection:
-            row = connection.execute(
-                "SELECT preview FROM snapshots WHERE id=?", (snapshot_id,)
-            ).fetchone()
-        if row is None:
-            raise KeyError("Snapshot not found; review the selection again")
-        preview = SnapshotPreview.model_validate_json(row["preview"])
-        if _snapshot_id(preview.workflows) != snapshot_id:
-            raise ValueError("Snapshot engine versions changed; review the selection again")
-        for item in preview.workflows:
-            path = Path(item.source_path)
-            if _sha256_file(path) != item.sha256:
-                raise ValueError("Confirmed snapshot changed; review the selection again")
-            if not isinstance(item.source_platform, SourcePlatform):
-                detected = self._source_registry.detect(path, item.display_path)
-                if (
-                    detected.adapter.adapter_id != item.adapter_id
-                    or detected.match.platform != item.source_platform
-                    or detected.adapter.adapter_version != item.adapter_version
-                    or not all((item.parser_version, item.registry_version, item.rules_version))
-                    or detected.adapter.parser_version != item.parser_version
-                    or detected.adapter.registry_version != item.registry_version
-                    or detected.adapter.rules_version != item.rules_version
-                ):
-                    raise ValueError("Confirmed source adapter changed; review the selection again")
-        return preview
+    def _snapshot(self, snapshot_id: str, *, verify_files: bool = True) -> SnapshotPreview:
+        return self._snapshots.load(snapshot_id, verify_files=verify_files)
 
     def create_run(self, snapshot_id: str) -> Run:
         preview = self._snapshot(snapshot_id)
@@ -423,46 +318,10 @@ class RunService:
             return run
         return run.model_copy(update={"result": confirmed, "routing_basis": "compiler_confirmed"})
 
-    def _current_fabric_fit(self, identity: str) -> list[RunTargetEvaluation] | None:
-        """Return the Fabric evaluation, or None if absent or computed with other versions."""
-        with self._connection() as connection:
-            row = connection.execute(
-                "SELECT evaluations_json FROM target_evaluations WHERE run_id=? AND platform_id=?",
-                (identity, FABRIC_PLATFORM_ID),
-            ).fetchone()
-        if row is None:
-            return None
-        try:
-            evaluations = TARGET_EVALUATION_LIST.validate_json(row["evaluations_json"])
-        except ValidationError:
-            return None
-        key = fabric_fit_key(FabricTargetProvider.provider_version)
-        if any(item.evaluation_key != key for item in evaluations):
-            return None
-        return evaluations
-
     def _confirmed_result(
         self, identity: str, result: EstateAssessmentResponse
     ) -> EstateAssessmentResponse | None:
-        """Apply a stored Fabric evaluation to a static result, or None if it does not cover it."""
-        evaluations = self._current_fabric_fit(identity)
-        if evaluations is None:
-            return None
-        by_path = {
-            item.assessment_path: item.evaluation
-            for item in evaluations
-            if item.assessment_path is not None
-        }
-        if any(assessment.path not in by_path for assessment in result.assessments):
-            return None
-        return result.model_copy(
-            update={
-                "assessments": [
-                    confirm_assessment(assessment, by_path[assessment.path])
-                    for assessment in result.assessments
-                ]
-            }
-        )
+        return self._targets.confirmed_result(identity, result)
 
     def ensure_fabric_fit(self, identity: str) -> Run:
         """Return the run with Fabric routing confirmed, evaluating it first when needed.
@@ -497,6 +356,24 @@ class RunService:
             error=run.error,
             timings=run.timings,
         )
+
+    def list_runs(self, *, limit: int = 50, offset: int = 0) -> tuple[list[RunStatus], int]:
+        """Return paginated lightweight run statuses ordered newest-first."""
+        rows, total = self._store.list_runs(limit=limit, offset=offset)
+        runs = [
+            RunStatus(
+                id=row["id"],
+                snapshot_id=row["snapshot"],
+                status=row["status"],
+                processed=row["processed"],
+                total=row["total"],
+                cache_hits=row["cache_hits"],
+                error=row["error"],
+                timings=json.loads(row["timings"]) if row["timings"] else None,
+            )
+            for row in rows
+        ]
+        return runs, total
 
     def pending(self) -> list[str]:
         with self._connection() as connection:
@@ -704,100 +581,17 @@ class RunService:
 
     def get_capacity(self, identity: str) -> CapacityPortfolioEstimate:
         """Return the deterministic capacity estimate for a completed run."""
-        run = self.get_run(identity)
-        return self._estimate_capacity_for_run(identity, run)
-
-    def _estimate_capacity_for_run(
-        self, identity: str, run: Run
-    ) -> CapacityPortfolioEstimate:
-        if run.status != "completed" or run.result is None:
-            raise ValueError("Complete an assessment before estimating capacity")
-        defaults = {
-            assessment.path: CapacityWorkflowInput(workflow_path=assessment.path)
-            for assessment in run.result.assessments
-            if assessment.capacity_profile is not None
-        }
-        with self._connection() as connection:
-            settings_row = connection.execute(
-                "SELECT settings_json FROM capacity_settings WHERE run_id=?",
-                (identity,),
-            ).fetchone()
-            input_rows = connection.execute(
-                "SELECT workflow_path,input_json FROM capacity_inputs WHERE run_id=?",
-                (identity,),
-            ).fetchall()
-            if settings_row is None:
-                settings = CapacitySettings()
-                connection.execute(
-                    "INSERT INTO capacity_settings VALUES (?,?)",
-                    (identity, settings.model_dump_json()),
-                )
-            else:
-                settings = CapacitySettings.model_validate_json(settings_row["settings_json"])
-            persisted = {
-                row["workflow_path"]: CapacityWorkflowInput.model_validate_json(row["input_json"])
-                for row in input_rows
-            }
-            missing_rows = [
-                (identity, workflow_path, workflow_input.model_dump_json())
-                for workflow_path, workflow_input in defaults.items()
-                if workflow_path not in persisted
-            ]
-            if missing_rows:
-                connection.executemany(
-                    "INSERT INTO capacity_inputs VALUES (?,?,?)",
-                    missing_rows,
-                )
-        return estimate_capacity(
-            run.result.assessments,
-            {
-                path: persisted.get(path, workflow_input)
-                for path, workflow_input in defaults.items()
-            },
-            settings,
-        )
+        return self._capacity.estimate_for_run(identity, self.get_run(identity))
 
     def update_capacity(
         self, identity: str, update: CapacityUpdate
     ) -> CapacityPortfolioEstimate:
         """Persist mutable capacity inputs and return the recomputed estimate."""
-        run = self.get_run(identity)
-        if run.status != "completed" or run.result is None:
-            raise ValueError("Complete an assessment before estimating capacity")
-        known_paths = {
-            assessment.path
-            for assessment in run.result.assessments
-            if assessment.capacity_profile is not None
-        }
-        unknown = sorted(
-            workflow.workflow_path
-            for workflow in update.inputs
-            if workflow.workflow_path not in known_paths
-        )
-        if unknown:
-            raise KeyError(f"Unknown capacity workflow: {unknown[0]}")
-        with self._connection() as connection:
-            if update.settings is not None:
-                connection.execute(
-                    """INSERT INTO capacity_settings VALUES (?,?)
-                    ON CONFLICT(run_id) DO UPDATE SET settings_json=excluded.settings_json""",
-                    (identity, update.settings.model_dump_json()),
-                )
-            if update.inputs:
-                connection.executemany(
-                    """INSERT INTO capacity_inputs VALUES (?,?,?)
-                    ON CONFLICT(run_id,workflow_path)
-                    DO UPDATE SET input_json=excluded.input_json""",
-                    [
-                        (identity, workflow.workflow_path, workflow.model_dump_json())
-                        for workflow in update.inputs
-                    ],
-                )
-        return self._estimate_capacity_for_run(identity, run)
+        return self._capacity.update(identity, self.get_run(identity), update)
 
     def export_capacity_csv(self, identity: str) -> str:
         """Export the current capacity estimate as CSV."""
-        return capacity_csv(self.get_capacity(identity))
+        return self._capacity.to_csv(self.get_capacity(identity))
 
     def _parse_item(self, item: WorkflowCandidateResponse) -> EtlPackage:
         key = ir_cache_key(self._source_registry, item)
@@ -1042,14 +836,16 @@ class RunService:
     def workflow_candidates(
         self, identity: str, workflow_index: int, target: Target
     ) -> list[Candidate]:
-        """Return one workflow's candidates from the cache, without writing an artifact tree."""
+        """Return one workflow's candidates from the cache, verifying only that file."""
         run = self.get_run(identity, include_result=False)
         if run.status != "completed":
             raise ValueError("Complete an assessment before generating candidates")
-        snapshot = self._snapshot(run.snapshot_id)
+        snapshot = self._snapshot(run.snapshot_id, verify_files=False)
         if not 0 <= workflow_index < len(snapshot.workflows):
             raise KeyError("Workflow index not found")
-        narrowed = snapshot.model_copy(update={"workflows": [snapshot.workflows[workflow_index]]})
+        selected = snapshot.workflows[workflow_index]
+        self._snapshots.verify_item(selected)
+        narrowed = snapshot.model_copy(update={"workflows": [selected]})
         return self._generate_targets(narrowed, (target,))[target]
 
     def create_generation_job(self, identity: str, target: Target) -> GenerationJob:
@@ -1178,119 +974,12 @@ class RunService:
     def evaluate_target(
         self, identity: str, platform_id: str, registry: TargetPlatformRegistry
     ) -> list[RunTargetEvaluation]:
-        """Evaluate confirmed source assets with a registered target provider.
-
-        This is the target-fit stage that follows portfolio assessment. For Fabric on
-        built-in sources it confirms every static assessment with the compilers and
-        stores the result for ``get_run`` to apply. It always reads the stored static
-        assessment, never the confirmed view, so repeating it gives the same answer.
-        """
+        """Evaluate confirmed source assets with a registered target provider."""
         run, basis = self._read_run(identity, include_result=True)
-        if run.status != "completed":
-            raise ValueError("Complete an assessment before evaluating a target")
-        provider = registry.require_implemented(platform_id, capability="evaluate")
-        confirms = (
-            provider.platform_id.strip().casefold() == FABRIC_PLATFORM_ID
-            and basis is not None
-            and run.result is not None
+        snapshot = self._snapshot(run.snapshot_id)
+        return self._targets.evaluate_target(
+            identity, run, basis, snapshot, platform_id, registry
         )
-        static = (
-            {item.path: item for item in run.result.assessments}
-            if confirms and run.result is not None
-            else {}
-        )
-        key = fabric_fit_key(provider.provider_version) if confirms else None
-        evaluations: list[RunTargetEvaluation] = []
-        for item in self._snapshot(run.snapshot_id).workflows:
-            evaluations.extend(self._evaluate_item(item, provider, registry, static, key))
-        with self._connection() as connection:
-            connection.execute(
-                """INSERT INTO target_evaluations
-                (run_id, platform_id, provider_version, evaluations_json)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(run_id, platform_id) DO UPDATE SET
-                    provider_version=excluded.provider_version,
-                    evaluations_json=excluded.evaluations_json""",
-                (
-                    identity,
-                    provider.platform_id.strip().casefold(),
-                    provider.provider_version,
-                    TARGET_EVALUATION_LIST.dump_json(evaluations).decode("utf-8"),
-                ),
-            )
-        return evaluations
-
-    def _evaluate_item(
-        self,
-        item: WorkflowCandidateResponse,
-        provider: TargetPlatformProvider,
-        registry: TargetPlatformRegistry,
-        static: dict[str, WorkflowAssessmentResponse],
-        key: str | None,
-    ) -> list[RunTargetEvaluation]:
-        """Evaluate the assets of one workflow.
-
-        With ``key`` set, this confirms the stored static assessments of a built-in
-        source: Alteryx through the provider's staged-path evaluator, because Alteryx
-        generation reads the legacy workflow graph, and other sources through canonical IR.
-        Without it, assets are evaluated generically from canonical IR.
-        """
-        built_in = isinstance(item.source_platform, SourcePlatform)
-        try:
-            package = self._parse_item(item)
-        except (WorkflowParseError, ValueError):
-            if key is not None and built_in:
-                return []  # Assessment already failed this workflow; there is nothing to confirm.
-            raise
-        alteryx = item.source_platform is SourcePlatform.ALTERYX
-        assets = package.assets[:1] if key is not None and alteryx else package.assets
-        records: list[RunTargetEvaluation] = []
-        for asset in assets:
-            assessed: WorkflowAssessmentResponse | None = None
-            assessment_path: str | None = None
-            if key is not None and built_in:
-                asset_path = "/".join(part for part in (asset.folder, asset.name) if part)
-                assessment_path = (
-                    item.display_path
-                    if alteryx or not asset_path
-                    else f"{item.display_path}!{asset_path}"
-                )
-                assessed = static.get(assessment_path)
-                if assessed is None:
-                    continue
-            if assessed is not None and alteryx:
-                evaluation = registry.evaluate_alteryx_path(
-                    provider.platform_id,
-                    Path(item.source_path),
-                    unsupported_tools=assessed.unsupported_tools,
-                    default_target=assessed.recommended_target,
-                    default_components=assessed.target_components,
-                    default_reason=assessed.recommendation_reason,
-                )
-            else:
-                evaluation = registry.evaluate_asset(
-                    provider.platform_id,
-                    package,
-                    asset,
-                    base_reason=(
-                        assessed.recommendation_reason
-                        if assessed is not None
-                        else f"Evaluated {asset.name}"
-                    ),
-                )
-            records.append(
-                RunTargetEvaluation(
-                    source_path=item.display_path,
-                    asset_id=asset.native_id,
-                    asset_name=asset.name,
-                    ir_version=package.ir_version,
-                    provider_version=provider.provider_version,
-                    evaluation=evaluation,
-                    assessment_path=assessment_path if assessed is not None else None,
-                    evaluation_key=key if assessed is not None else None,
-                )
-            )
-        return records
 
     def generate_for_target(
         self,
@@ -1303,18 +992,9 @@ class RunService:
         run = self.get_run(identity, include_result=False)
         if run.status != "completed":
             raise ValueError("Complete an assessment before generating target previews")
-        results: list[TargetGenerationResult] = []
-        for item in self._snapshot(run.snapshot_id).workflows:
-            package = self._parse_item(item)
-            results.append(
-                registry.generate_package(
-                    platform_id,
-                    package,
-                    target_kind=target_kind,
-                    display_path=item.display_path,
-                )
-            )
-        return results
+        return self._targets.generate_for_target(
+            self._snapshot(run.snapshot_id), platform_id, target_kind, registry
+        )
 
     def estimate_target_capacity(
         self,
@@ -1326,11 +1006,9 @@ class RunService:
         run = self.get_run(identity, include_result=False)
         if run.status != "completed":
             raise ValueError("Complete an assessment before estimating target capacity")
-        results: list[TargetCapacityResult] = []
-        for item in self._snapshot(run.snapshot_id).workflows:
-            package = self._parse_item(item)
-            results.append(registry.estimate_capacity(platform_id, package))
-        return results
+        return self._targets.estimate_capacity(
+            self._snapshot(run.snapshot_id), platform_id, registry
+        )
 
     def assess_neutral(self, identity: str) -> NeutralEstateAssessmentResponse:
         """Assess the confirmed run snapshot without target-specific routing."""
@@ -1370,14 +1048,7 @@ class RunService:
     ) -> list[RunTargetEvaluation]:
         """Return the last completed evaluation for one run and target."""
         self.get_run(identity, include_result=False)
-        with self._connection() as connection:
-            row = connection.execute(
-                "SELECT evaluations_json FROM target_evaluations WHERE run_id=? AND platform_id=?",
-                (identity, platform_id.strip().casefold()),
-            ).fetchone()
-        if row is None:
-            raise KeyError("No saved evaluation exists for this run and target")
-        return TARGET_EVALUATION_LIST.validate_json(row["evaluations_json"])
+        return self._targets.get_evaluations(identity, platform_id)
 
     def export_csv(self, identity: str) -> str:
         run = self.get_run(identity)
@@ -1432,9 +1103,11 @@ class RunService:
                 workflow=workflow,
             )
 
-    def write_artifacts(self, identity: str, target: Target) -> ArtifactWriteResult:
-        """Persist both targets together below generated-fabric-workflows/<workflow>."""
-        return self._write_artifacts(identity, (target,))[target]
+    def write_artifacts(
+        self, identity: str, target: Target, *, write_plan: bool = True
+    ) -> ArtifactWriteResult:
+        """Persist target definitions below generated-fabric-workflows/<workflow>."""
+        return self._write_artifacts(identity, (target,), write_plan=write_plan)[target]
 
     def write_all_artifacts(self, identity: str) -> dict[Target, ArtifactWriteResult]:
         """Persist each target while sharing generated candidates across plans."""
@@ -1454,80 +1127,32 @@ class RunService:
 
     def publish_artifacts(self, identity: str) -> ArtifactPublication:
         """Publish all targets atomically to a run-scoped content-addressed directory."""
-        if not re.fullmatch(r"[a-f0-9]{32}", identity):
-            raise ValueError("Run ID must be a 32-character lowercase hexadecimal value")
         run = self.get_run(identity, include_result=False)
         if run.status != "completed":
             raise ValueError("Complete an assessment before publishing artifacts")
-        publications = self.root / "publications"
-        parent = publications / identity
-        for directory in (publications, parent):
-            if directory.is_symlink() or directory.is_junction():
-                raise ValueError("Artifact publication contains a linked path")
-            directory.mkdir(exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix=".staging-", dir=parent) as temporary:
-            staging = Path(temporary) / "contents"
-            self._write_artifacts(
+        return self._publications.publish(
+            identity,
+            stage_artifacts=lambda staging: self._write_artifacts(
                 identity, ("dataflow", "notebook", "pipeline"), artifact_root=staging
-            )
-            manifest = build_manifest(staging, identity)
-            digest = manifest_digest(manifest)
-            (staging / MANIFEST_NAME).write_bytes(manifest_bytes(manifest))
-            destination = parent / digest
-            try:
-                staging.rename(destination)
-            except OSError:
-                if not destination.is_dir():
-                    raise
-                check_tree(destination, manifest)
-            return ArtifactPublication(run_id=identity, digest=digest, root=destination.resolve())
+            ),
+        )
 
     def verify_publication(self, identity: str, digest: str) -> ArtifactPublication:
         """Verify a local publication's manifest and every listed artifact."""
-        if not re.fullmatch(r"[a-f0-9]{32}", identity):
-            raise ValueError("Run ID must be a 32-character lowercase hexadecimal value")
-        if not re.fullmatch(r"[a-f0-9]{64}", digest):
-            raise ValueError(
-                "Publication digest must be a 64-character lowercase hexadecimal value"
-            )
         self.get_run(identity, include_result=False)
-        publications = self.root / "publications"
-        parent = publications / identity
-        root = parent / digest
-        if any(path.is_symlink() or path.is_junction() for path in (publications, parent, root)):
-            raise ValueError("Artifact publication contains a linked path")
-        manifest = read_manifest(root)
-        if manifest.get("run_id") != identity or manifest_digest(manifest) != digest:
-            raise ValueError("Artifact publication manifest does not match its identity")
-        check_tree(root, manifest)
-        return ArtifactPublication(run_id=identity, digest=digest, root=root.resolve())
+        return self._publications.verify(identity, digest)
 
     def verify_staged_publication(
         self, identity: str, digest: str, staged_root: Path
     ) -> str:
         """Check regenerated artifacts against a publication and return its manifest byte hash."""
-        publication = self.verify_publication(identity, digest)
-        staged = build_manifest(staged_root, identity)
-        if manifest_digest(staged) != digest:
-            raise ValueError("Current artifacts do not match the selected publication")
-        try:
-            content = (publication.root / MANIFEST_NAME).read_bytes()
-            recorded = json.loads(content)
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError("Artifact publication manifest is unavailable or invalid") from error
-        if not isinstance(recorded, dict) or manifest_digest(recorded) != digest:
-            raise ValueError("Artifact publication manifest does not match its identity")
-        check_tree(publication.root, recorded)
-        return hashlib.sha256(content).hexdigest()
+        self.get_run(identity, include_result=False)
+        return self._publications.verify_staged(identity, digest, staged_root)
 
     def publication_package(self, identity: str, digest: str) -> bytes:
         """Package only verified publication manifest entries in a deterministic ZIP."""
-        publication = self.verify_publication(identity, digest)
-        manifest = build_manifest(publication.root, identity)
-        check_tree(publication.root, manifest)
-        if manifest_digest(manifest) != digest:
-            raise ValueError("Artifact publication has changed while packaging")
-        return build_archive(publication.root, manifest)
+        self.get_run(identity, include_result=False)
+        return self._publications.package(identity, digest)
 
     def _write_artifacts(
         self,
@@ -1560,7 +1185,7 @@ class RunService:
         run = self.get_run(identity, include_result=False)
         if run.status != "completed":
             raise ValueError("Complete the assessment before inspecting evidence")
-        snapshot = self._snapshot(run.snapshot_id)
+        snapshot = self._snapshot(run.snapshot_id, verify_files=False)
         if workflow_index is not None and not 0 <= workflow_index < len(snapshot.workflows):
             raise KeyError("Workflow index not found")
         indices = (
@@ -1575,6 +1200,7 @@ class RunService:
             if nodes >= 10_000:
                 break
             item = snapshot.workflows[index]
+            self._snapshots.verify_item(item)
             if item.source_platform is SourcePlatform.ALTERYX:
                 asset_evidence = [
                     workflow_evidence(
@@ -1629,14 +1255,8 @@ def _neutral_estate(
         failed_count=len(failures),
         assessments=assessments,
         failures=failures,
-        workflows=[
-            NeutralWorkflowCandidateResponse.model_validate(item.model_dump())
-            for item in snapshot.workflows
-        ],
-        skipped=[
-            NeutralSkippedItemResponse.model_validate(item.model_dump())
-            for item in snapshot.skipped
-        ],
+        workflows=list(snapshot.workflows),
+        skipped=list(snapshot.skipped),
     )
 
 

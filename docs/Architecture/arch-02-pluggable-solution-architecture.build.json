@@ -13,7 +13,7 @@
   "problems": [],
   "alt_text": {
     "short": "Diagram that shows pluggable & Extensible ETL Migration Solution Architecture.",
-    "long": "Consumer & Serving Layer: React Portfolio & Desktop UI, Fabric App & Power BI, VS Code Developer Extension, Typer CLI & Artifact Downloads. Orchestration & Runtimes: FastAPI & SQLite WAL RunService, Fabric Runtime 2.0 Notebook, Pluggable Stage Orchestrator, Stateless Stdio JSON-RPC Worker. Target Platform Providers: Microsoft Fabric Provider, Databricks (Placeholder), Azure Synapse (Placeholder), Snowflake (Placeholder). Portfolio Assessment: Source-Neutral Assessment Engine, Effort & Redacted Evidence, Target-Neutral Workload Profile. Canonical IR & Source SPI: Secure Discovery & Staging, Pure Canonical ETL IR & SPI, Built-In Source Adapters, Future Source Plugins. Legacy ETL Source Estates: Alteryx Designer, Informatica PowerCenter, Informatica IDMC, Future ETL Platforms. Delivery & Secretless CI/CD: Microsoft Entra OIDC Federation. Extensibility & Contract SPI: Target & Source Registry SPI, Versioned IR & Provider ABI, Fail-Closed Scaffolds & Parity. PyPI Packaging & Chrysalis SDL: uv Workspace PyPI Packages, Chrysalis SDL & Zero-Exec Guard. Flows: z_estates to z_ir_sources (Ingest); z_ir_sources to z_assessment (Canonical IR); z_assessment to z_targets (Evaluate & compile); z_targets to z_hosts (Envelopes & receipts); z_hosts to z_consumers (Results & IDE UX); z_hosts to z_delivery_cicd (Deploy dispatch); z_spi_gov to z_targets (Plugin SPI); z_pkg_sdl to z_ir_sources (PyPI & SDL).",
+    "long": "Consumer & Serving Layer: React Portfolio & Desktop UI, Fabric App & Power BI, VS Code Developer Extension, Typer CLI & Artifact Downloads. Orchestration & Runtimes: FastAPI & RunStoreProtocol, Fabric Runtime 2.0 Notebook, Decomposed Runtime Services, Stateless JSON CLIs. Target Platform Providers: Microsoft Fabric Provider, Databricks (Placeholder), Azure Synapse (Placeholder), Snowflake (Placeholder). Portfolio Assessment: Source-Neutral Assessment Engine, Effort & Redacted Evidence, Target-Neutral Workload Profile. Canonical IR & Source SPI: Secure Discovery & Staging, Pure Canonical ETL IR & SPI, Built-In Source Adapters, External Source Plugins. Legacy ETL Source Estates: Alteryx Designer, Informatica PowerCenter, Informatica IDMC, Future ETL Platforms. Delivery & Secretless CI/CD: Entra OIDC & FabricApi Security. Extensibility & Contract SPI: Target & Source Registry SPI, Versioned IR & Provider ABI, Fail-Closed Scaffolds & Parity. PyPI Packaging & Security SDL: uv Workspace PyPI Packages, SDL, Non-Root Docker & CI. Flows: z_estates to z_ir_sources (Ingest); z_ir_sources to z_assessment (Canonical IR); z_assessment to z_targets (Evaluate & compile); z_targets to z_hosts (Envelopes & receipts); z_hosts to z_consumers (Results & UI/CLI); z_hosts to z_delivery_cicd (Deploy dispatch); z_spi_gov to z_targets (Plugin SPI); z_pkg_sdl to z_ir_sources (PyPI & SDL).",
     "zones": [
       "Consumer & Serving Layer",
       "Orchestration & Runtimes",
@@ -24,7 +24,7 @@
       "Cross-Cutting Control & Extension Plane",
       "Delivery & Secretless CI/CD",
       "Extensibility & Contract SPI",
-      "PyPI Packaging & Chrysalis SDL"
+      "PyPI Packaging & Security SDL"
     ],
     "cards": 31
   },
@@ -55,15 +55,15 @@
       "moved_shape": "z_ir_sources",
       "begin_end_before": [
         7.0938,
-        1.6597,
+        1.6946,
         7.0938,
-        2.2431
+        2.278
       ],
       "begin_end_after": [
         7.0938,
-        1.6597,
+        1.6946,
         7.4938,
-        1.9431
+        1.978
       ],
       "rerouted_local_points": [
         [

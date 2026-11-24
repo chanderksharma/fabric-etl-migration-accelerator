@@ -1,7 +1,7 @@
 ---
 title: Building Source and Target Plugins
 description: Developer guide for extending etl-migration-core with custom source adapters, target platform providers, and stateless IDE integrations
-ms.date: 2026-11-22
+ms.date: 2026-11-24
 ms.topic: how-to
 ---
 
@@ -99,18 +99,22 @@ When installed alongside `etl-migration-core`, `create_target_registry()` automa
 
 Use `TargetPlatformRegistry.evaluate_asset` to check the advertised evaluation
 capability and IR compatibility before calling the evaluator. Providers can also
-implement the optional `@runtime_checkable` protocols `TargetCodeGeneratorProvider`
-and `TargetCapacityProvider` from
-`etl_migration_core.contracts.spi`, and declare SemVer minor compatibility ranges
-such as `"1.*"` or `"^1.0.0"` via `supported_ir_versions`. A provider that implements
-`TargetCodeGeneratorProvider` must also publish the kinds its generator accepts in
-`TargetPlatformInfo.target_kinds` (for Fabric: `dataflow`, `notebook`, `pipeline`); the
-registry rejects metadata that disagrees with the generator, and the portal offers only
-the advertised kinds. There is no deployment SPI: CI dispatch is Fabric-specific today
-and is not a pluggable capability. Use
+implement the optional `@runtime_checkable` capability protocols in
+`etl_migration_core.contracts.spi`:
+
+* `TargetCodeGeneratorProvider` (`capability="codegen"`) — must publish supported kinds in `TargetPlatformInfo.target_kinds` (for Fabric: `dataflow`, `notebook`, `pipeline`); the registry rejects metadata that disagrees with the generator.
+* `TargetCapacityProvider` (`capability="capacity"`) — invoked via `TargetPlatformRegistry.estimate_capacity` and `GET /api/runs/{run_id}/targets/{platform_id}/capacity`.
+* `TargetValidatorProvider` (`capability="validate"`) — invoked via `TargetPlatformRegistry.validate_artifacts`.
+* `TargetDryRunProvider` (`capability="dry_run"`) — invoked via `TargetPlatformRegistry.plan_dry_run` (implemented by `FabricTargetProvider.dry_run_planner()`).
+* `TargetDeploymentProvider` (`capability="deploy"`) — invoked via `TargetPlatformRegistry.build_deployment_spec` to produce target-neutral CI/CD dispatch inputs (`TargetDeploymentSpec`). Live GitHub/GitLab dispatch in the local app remains wired to Fabric workflows today.
+
+Providers can declare SemVer minor compatibility ranges such as `"1.*"` or
+`"^1.0.0"` via `supported_ir_versions`. Use
 `assert_source_adapter_conformance` and `assert_target_provider_conformance` in
 `etl_migration_core.contracts.testing` to validate metadata consistency, determinism,
-stream probing, and unsupported-IR rejection in plugin test suites. For completed local runs,
+stream probing, advertised capability protocols (`evaluate`, `capacity`, `codegen`,
+`validate`, `dry_run`, `deploy`), and unsupported-IR rejection in plugin test suites.
+For completed local runs,
 `POST /api/runs/{run_id}/targets/{platform_id}/evaluate` evaluates each confirmed
 canonical asset and returns separate results. For a plugin target the stored
 assessment is not changed. The one exception is Fabric on built-in sources:
@@ -121,12 +125,10 @@ target, wave, and effort fields and reports `routing_basis: compiler_confirmed`
 `GET /api/runs/{run_id}/targets/{platform_id}/capacity` invoke registered `codegen`
 and `capacity` providers.
 Results are saved per run and platform, with the most recent evaluation replacing the
-previous one. The endpoint does not enable target-specific generation or deployment
-in the portal. The local runtime can project a Fabric `Candidate` into
+previous one. The local runtime can project a Fabric `Candidate` into
 `ArtifactSet` (`etl_migration_core.contracts.artifacts`). That projection
 carries identity, validation state, and diagnostics, and leaves `files`
-empty. It is not a package format, and it does not connect a plugin generator
-to the portal. `write_candidates` remains the Fabric disk writer. Generation
+empty. `write_candidates` remains the Fabric disk writer. Generation
 jobs use the same compiler path and also do not write files. See
 [System Architecture](../Architecture/system-architecture.md#local-generation-runtime). Provider metadata must match its declared version, IR versions,
 implementation status, and capabilities. These fields are checked both when listing
@@ -147,8 +149,10 @@ rather than canonical IR; a new target should implement `evaluate_asset`.
 Completed runs save a neutral baseline alongside the existing Fabric-focused assessment.
 Retrieve it with `GET /api/runs/{run_id}/neutral-assessment`. To generate or refresh
 the baseline for an older completed run, use `POST` on the same path. The portal
-shows external-source runs in a separate neutral workspace, with evaluation for
-registered target providers that advertise the `evaluate` capability.
+shows external-source runs in a target-neutral workspace (`NeutralWorkspace.tsx`) that
+dynamically enables evaluation (`evaluate`), target capacity (`capacity`), and
+code-generation preview (`codegen` with advertised `target_kinds`) for any registered
+target provider.
 
 ## Adding a source adapter plugin
 
@@ -162,13 +166,20 @@ External source packages must declare `EXTENSIBLE_SOURCE_IR_VERSION` (`1.1.0`)
 or a later compatible version; existing built-in packages remain on IR `1.0.0`.
 Target providers must explicitly advertise support for each IR version they accept.
 Duplicate source adapter entry points are rejected. Existing Fabric evaluation and compilation
-reject sources they have not certified. Adapters can declare
-`supported_extensions` as lowercase extensions such as `(".dtsx",)` to enable
-local-file and ZIP member discovery and target-neutral run assessment for extensions
-not reserved by built-in intake. Each extension must be a dot followed by 1 to 16
+reject sources they have not certified. Adapters can implement optional discovery
+protocols in `etl_migration_core.sources.base`:
+
+* `SourceFileDiscoveryAdapter` (`supported_extensions`, e.g. `(".dtsx",)`) for loose-file and ZIP-member discovery.
+* `SourceArchiveDiscoveryAdapter` (`archive_extensions`, e.g. `(".yxzp",)`) for ZIP-based archive formats.
+* `SourceDirectoryDiscoveryAdapter` (`matches_directory(root)`) for self-contained multi-file export folders.
+* `SourceStreamProbeAdapter` (`probe_bytes(content, display_path)`) for in-memory archive member probing.
+
+Each extension must be a dot followed by 1 to 16
 lowercase letters, digits, hyphens, or underscores; registration rejects anything else,
 including uppercase such as `".DTSX"`. New plugin file formats must use an external source identifier;
-they cannot claim a built-in source identity through extension discovery.
+they cannot claim a built-in source identity through extension discovery. Raise
+`SourceParseError` (or `ValueError`) for recognized-but-invalid files so per-file fault
+isolation records them cleanly.
 External snapshots record the selected adapter identity and its adapter, parser,
 registry, and rules versions. Changing any of these requires a new preview. Older
 external snapshots without component versions also require a new preview. Plugin

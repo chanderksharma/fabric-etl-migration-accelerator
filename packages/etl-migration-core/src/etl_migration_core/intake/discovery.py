@@ -15,6 +15,14 @@ from pathlib import Path, PurePosixPath
 from typing import IO
 
 from etl_migration_core.contracts.ir import SourcePlatform
+from etl_migration_core.intake.archive import (
+    InputRejectedError,
+    hash_directory,
+    hash_idmc_directory,
+    validate_archive_entries,
+    validate_member_path,
+)
+from etl_migration_core.intake.archive import is_link as _is_link
 from etl_migration_core.intake.domain import (
     SUPPORTED_EXTENSIONS,
     DiscoveryLimits,
@@ -35,16 +43,6 @@ IDMC_ADAPTER_ID = "informatica-idmc"
 ALTERYX_ADAPTER_ID = "alteryx"
 
 
-class InputRejectedError(ValueError):
-    """Raised when an untrusted input violates a security boundary."""
-
-    def __init__(self, path: str, reason: SkipReason, detail: str) -> None:
-        super().__init__(detail)
-        self.path = path
-        self.reason = reason
-        self.detail = detail
-
-
 class DiscoveryService:
     """Discover unique workflows without executing their content.
 
@@ -57,12 +55,20 @@ class DiscoveryService:
         limits: DiscoveryLimits | None = None,
         source_registry: SourceAdapterRegistry | None = None,
     ) -> None:
-        # Imported here because the built-in adapters import archive helpers from this module.
+        # Imported lazily so importing etl_migration_core.sources.defaults before
+        # etl_migration_core.intake never triggers a package-init cycle.
         from etl_migration_core.sources.defaults import with_builtin_adapters
 
         self._limits = limits or DiscoveryLimits()
         self._source_registry = with_builtin_adapters(source_registry)
         self._claimed_extensions = self._source_registry.file_extensions()
+        self._adapter_archive_extensions = self._source_registry.archive_extensions()
+        self._archive_extensions = frozenset({".zip", *self._adapter_archive_extensions})
+
+    @property
+    def source_registry(self) -> SourceAdapterRegistry:
+        """Return the effective source adapter registry used by discovery."""
+        return self._source_registry
 
     def _adapter(self, adapter_id: str) -> SourceAdapter:
         adapter = self._source_registry.get(adapter_id)
@@ -136,11 +142,21 @@ class DiscoveryService:
         seen_hashes: dict[str, str] = {}
         budget = [0, 0, 0]
 
-        if input_kind is InputKind.ZIP or path.suffix.casefold() == ".yxzp":
+        if (
+            input_kind is InputKind.ZIP
+            or path.suffix.casefold() in self._adapter_archive_extensions
+        ):
             self._discover_zip(path, candidates, skipped, seen_hashes, budget)
         elif input_kind is InputKind.FOLDER:
-            if (path / "manifest.json").is_file() and (path / "Explore").is_dir():
-                self._discover_idmc_directory(path, candidates, skipped, seen_hashes)
+            matched_directory_adapter = self._source_registry.match_directory(path)
+            if matched_directory_adapter is not None:
+                self._discover_package_directory(
+                    path,
+                    matched_directory_adapter,
+                    candidates,
+                    skipped,
+                    seen_hashes,
+                )
             else:
                 self._discover_folder(path, candidates, skipped, seen_hashes, budget)
         else:
@@ -202,7 +218,7 @@ class DiscoveryService:
                 if linked:
                     skipped.append(SkippedItem(str(path), SkipReason.SYMBOLIC_LINK, "Link skipped"))
                     continue
-                if path.suffix.casefold() in {".zip", ".yxzp"}:
+                if path.suffix.casefold() in self._archive_extensions:
                     self._discover_zip(path, candidates, skipped, seen_hashes, budget)
                     continue
                 self._discover_file(path, candidates, skipped, seen_hashes, relative_to=root)
@@ -387,14 +403,15 @@ class DiscoveryService:
             )
         )
 
-    def _discover_idmc_directory(
+    def _discover_package_directory(
         self,
         root: Path,
+        adapter: SourceAdapter,
         candidates: list[WorkflowCandidate],
         skipped: list[SkippedItem],
         seen_hashes: dict[str, str],
     ) -> None:
-        value, size = hash_idmc_directory(root, limits=self._limits)
+        value, size = hash_directory(root, limits=self._limits)
         duplicate = seen_hashes.get(value)
         if duplicate is not None:
             skipped.append(
@@ -406,14 +423,15 @@ class DiscoveryService:
             )
             return
         seen_hashes[value] = root.name
+        extension = ".idmc" if adapter.adapter_id == IDMC_ADAPTER_ID else f".{adapter.platform}"
         candidates.append(
             self._candidate(
                 source_path=str(root),
                 display_path=root.name,
-                extension=".idmc",
+                extension=extension,
                 size_bytes=size,
                 sha256=value,
-                builtin_adapter_id=IDMC_ADAPTER_ID,
+                builtin_adapter_id=adapter.adapter_id,
                 asset_type="export_package",
             )
         )
@@ -455,7 +473,7 @@ class DiscoveryService:
                 raise InputRejectedError(
                     entry.filename, SkipReason.ARCHIVE_SIZE_LIMIT, "Aggregate expansion limit"
                 )
-            if safe_path.suffix.casefold() == ".yxzp" and not chain:
+            if safe_path.suffix.casefold() in self._adapter_archive_extensions and not chain:
                 with package.open(entry) as stream:
                     content = self._read_member(stream, entry, budget)
                 with zipfile.ZipFile(io.BytesIO(content)) as nested:
@@ -471,7 +489,9 @@ class DiscoveryService:
                 continue
             extension = safe_path.suffix.casefold()
             claimed = extension in self._claimed_extensions and extension != ".zip"
-            if (extension not in SUPPORTED_EXTENSIONS and not claimed) or extension == ".yxzp":
+            if (
+                extension not in SUPPORTED_EXTENSIONS and not claimed
+            ) or extension in self._adapter_archive_extensions:
                 skipped.append(
                     SkippedItem(
                         entry.filename,
@@ -609,81 +629,6 @@ class DiscoveryService:
                 shutil.rmtree(sandbox, ignore_errors=False)
 
 
-def validate_archive_entries(
-    archive: Path,
-    entries: list[zipfile.ZipInfo],
-    limits: DiscoveryLimits,
-) -> set[str]:
-    """Validate ZIP entry counts, paths, compression ratios, and expansion limits."""
-    if len(entries) > limits.max_archive_entries:
-        raise InputRejectedError(
-            str(archive),
-            SkipReason.ARCHIVE_ENTRY_LIMIT,
-            f"{len(entries)} entries exceeds {limits.max_archive_entries}",
-        )
-    expanded_size = sum(entry.file_size for entry in entries)
-    if expanded_size > limits.max_archive_uncompressed_bytes:
-        raise InputRejectedError(
-            str(archive),
-            SkipReason.ARCHIVE_SIZE_LIMIT,
-            f"{expanded_size} bytes exceeds {limits.max_archive_uncompressed_bytes}",
-        )
-    names: set[str] = set()
-    for entry in entries:
-        validate_member_path(archive, entry.filename)
-        normalized = str(PurePosixPath(entry.filename.replace("\\", "/"))).casefold()
-        if (
-            normalized in names
-            or entry.flag_bits & 1
-            or stat.S_ISLNK(entry.external_attr >> 16)
-        ):
-            raise InputRejectedError(
-                entry.filename,
-                SkipReason.INVALID_ARCHIVE,
-                "Colliding, encrypted, or linked archive entry",
-            )
-        names.add(normalized)
-        compressed = max(entry.compress_size, 1)
-        ratio = entry.file_size / compressed
-        if ratio > limits.max_compression_ratio:
-            raise InputRejectedError(
-                entry.filename,
-                SkipReason.ARCHIVE_RATIO_LIMIT,
-                f"Compression ratio {ratio:.1f} exceeds {limits.max_compression_ratio}",
-            )
-    return names
-
-
-def validate_member_path(archive: Path, member_name: str) -> PurePosixPath:
-    normalized = PurePosixPath(member_name.replace("\\", "/"))
-    if (
-        not normalized.parts
-        or normalized.is_absolute()
-        or ".." in normalized.parts
-        or any(
-            ":" in part
-            or part.endswith((".", " "))
-            or "\x00" in part
-            or part.split(".", 1)[0].upper()
-            in {
-                "CON",
-                "PRN",
-                "AUX",
-                "NUL",
-                *(f"COM{index}" for index in range(1, 10)),
-                *(f"LPT{index}" for index in range(1, 10)),
-            }
-            for part in normalized.parts
-        )
-    ):
-        raise InputRejectedError(
-            f"{archive}!{member_name}",
-            SkipReason.ARCHIVE_PATH_TRAVERSAL,
-            "Archive member escapes the extraction sandbox",
-        )
-    return normalized
-
-
 def _looks_like_idmc_package(package: zipfile.ZipFile) -> bool:
     names = {
         PurePosixPath(entry.filename.replace("\\", "/")).as_posix().rstrip("/")
@@ -694,83 +639,19 @@ def _looks_like_idmc_package(package: zipfile.ZipFile) -> bool:
     )
 
 
-def _is_link(path: Path) -> bool:
-    if path.is_symlink():
-        return True
-    if not path.exists():
-        return False
-    return bool(getattr(path.stat(follow_symlinks=False), "st_file_attributes", 0) & 0x400)
-
-
-def hash_idmc_directory(
-    root: Path, *, limits: DiscoveryLimits | None = None, destination: Path | None = None
-) -> tuple[str, int]:
-    """Hash and optionally copy a bounded IDMC directory without following links."""
-    bounds = limits or DiscoveryLimits()
-    files: list[Path] = []
-    directories: list[Path] = []
-
-    def unreadable(error: OSError) -> None:
-        raise InputRejectedError(
-            str(error.filename or root), SkipReason.UNREADABLE_INPUT, type(error).__name__
-        ) from error
-
-    if _is_link(root) or not root.is_dir():
-        raise InputRejectedError(str(root), SkipReason.SYMBOLIC_LINK, "Invalid directory root")
-    for current, child_dirs, child_files in os.walk(root, followlinks=False, onerror=unreadable):
-        base = Path(current)
-        for name in (*child_dirs, *child_files):
-            path = base / name
-            if _is_link(path):
-                raise InputRejectedError(str(path), SkipReason.SYMBOLIC_LINK, "Link not accepted")
-        directories.extend(base / name for name in child_dirs)
-        files.extend(base / name for name in child_files)
-        if len(files) + len(directories) > bounds.max_archive_entries:
-            raise InputRejectedError(
-                str(root), SkipReason.ARCHIVE_ENTRY_LIMIT, "IDMC directory exceeds entry limit"
-            )
-    if destination is not None:
-        destination.mkdir(parents=True, exist_ok=False)
-        for directory in directories:
-            (destination / directory.relative_to(root)).mkdir(parents=True, exist_ok=True)
-    digest = hashlib.sha256()
-    size = 0
-    for path in sorted(files, key=lambda item: str(item.relative_to(root)).casefold()):
-        if _is_link(path) or not path.is_file():
-            raise InputRejectedError(str(path), SkipReason.SYMBOLIC_LINK, "Invalid directory entry")
-        relative = path.relative_to(root)
-        digest.update(relative.as_posix().encode("utf-8"))
-        with path.open("rb") as source, ExitStack() as stack:
-            output = (
-                stack.enter_context((destination / relative).open("wb"))
-                if destination is not None
-                else None
-            )
-            file_size = 0
-            while chunk := source.read(1024 * 1024):
-                size += len(chunk)
-                file_size += len(chunk)
-                if size > bounds.max_archive_uncompressed_bytes:
-                    raise InputRejectedError(
-                        str(root),
-                        SkipReason.ARCHIVE_SIZE_LIMIT,
-                        "IDMC directory exceeds size limit",
-                    )
-                if file_size > bounds.max_file_bytes:
-                    raise InputRejectedError(
-                        str(path),
-                        SkipReason.FILE_TOO_LARGE,
-                        "IDMC directory file exceeds size limit",
-                    )
-                digest.update(chunk)
-                if output is not None:
-                    output.write(chunk)
-    return digest.hexdigest(), size
-
-
 def _hash_stream(stream: IO[bytes]) -> str:
     digest = hashlib.sha256()
     with stream:
         while chunk := stream.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+__all__ = [
+    "DiscoveryService",
+    "InputRejectedError",
+    "hash_directory",
+    "hash_idmc_directory",
+    "validate_archive_entries",
+    "validate_member_path",
+]

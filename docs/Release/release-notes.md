@@ -1,7 +1,7 @@
 ---
 title: Release Notes v1.0.0
-description: v1.0.0 capabilities plus the unreleased modernization foundation follow-up
-ms.date: 2026-11-22
+description: v1.0.0 capabilities plus unreleased modernization foundation and final-refactoring updates
+ms.date: 2026-11-24
 ms.topic: reference
 ---
 
@@ -68,4 +68,27 @@ They are not part of the v1.0.0 release above, and they are not a new version ta
 - **CI/CD dispatch** now always shows the provider-specific **Trigger GitHub Actions** or **Trigger GitLab CI** button. A readiness checklist explains every unmet prerequisite instead of silently disabling **Preview manifest** and hiding the trigger. The trigger remains disabled until manifest validation and explicit review confirmation succeed.
 - Added `scripts/Deploy-FabricAssessmentStack.ps1` for environments where the three decoupled wheels are already built. It validates the wheel set and deploys only the Lakehouse, Runtime 2.0 Environment, assessment Notebook, eight Delta tables, Direct Lake Semantic Model, and Power BI Report. It deliberately skips wheel building and the Fabric Analyst App.
 
-Plugin target generation and deployment remain unwired. A compiler split, process-pool parallelism, out-of-process plugins, authenticated server mode, and a new database remain deferred. The fit and generation stages each still run the compilers, and Alteryx fit and generation still read the legacy workflow graph. GitHub Actions and a live Fabric deployment were not run for this follow-up. A local portal check covered health, assessment with no compiler activity, the fit stage, synchronous generate, one notebook generation job, publication download, malformed-workflow isolation, and the Fabric Deployment flow in a browser, including a capacity figure that changed from 68.6 to 65.7 CU-hours on confirmation.
+Plugin target deployment dispatch to live CI remains Fabric-wired. A full Alteryx-to-IR compiler unification, process-pool parallelism, out-of-process plugins, Entra OIDC RBAC, and a PostgreSQL backend remain deferred.
+
+## Unreleased refactoring & hardening (`feature/final-refactoring`)
+
+These changes build on the foundation follow-up above on `feature/final-refactoring`:
+
+- **Server-mode & container hardening**: Added `ACCELERATOR_MODE` (`local` | `desktop` | `server`), dynamic `ACCELERATOR_ALLOWED_HOSTS` (with `*.domain` wildcards), `ACCELERATOR_ALLOW_LOCAL_FILESYSTEM`, and fail-closed `ACCELERATOR_API_TOKEN` Bearer auth in `server` mode. Hardened `Dockerfile` with non-root `USER accelerator`, `HEALTHCHECK` against `/health`, and secure `server` defaults.
+- **Input, XML & Fabric REST hardening**:
+  - `IdmcExportClient` now streams downloads to temporary files with bounded chunk reads, on-disk zip-bomb checks (entry count, uncompressed ceiling, compression ratio), validated/URL-encoded `job_id`, and loopback/private IP blocking.
+  - Replaced stdlib `xml.etree.ElementTree.fromstring` in `compilers/alteryx.py` and `capacity/model.py` with `defusedxml`.
+  - Hardened `scripts/FabricApi.psm1` to enforce `https://api.fabric.microsoft.com` origin checks on HTTP 202 LRO `Location` polling headers, validate `x-ms-operation-id`, enforce `TimeoutSec = 60`, cap `Retry-After` at `60 s`, and truncate error bodies.
+- **Assessment parity & core boundary cleanup**:
+  - `ir_assessment.py` now excludes `node.disabled` nodes/edges and classifies `node.issues` as `"manual"` (`ASSESSMENT_RULES_VERSION = "1.4.1"`, golden digest refreshed).
+  - Moved `m_literals.py` from `etl-migration-core` to `etl-target-fabric/compilers/m_literals.py`; consolidated shared discovery schemas into `etl-migration-core/intake/schemas.py` and archive helpers into `intake/archive.py`; added pluggable `SourceArchiveDiscoveryAdapter`, `SourceDirectoryDiscoveryAdapter`, and `SourceParseError`; widened `NeutralWorkloadProfile.profile_kind`.
+  - Fixed `FabricAssessmentApplication` to reuse an injected `DiscoveryService` registry and added per-file fault isolation to `PortfolioAssessmentApplication.inspect_evidence`.
+- **Runtime decomposition, observability & storage boundary**:
+  - Extracted `SnapshotManager` (with per-item verification on single-workflow `workflow_candidates` and `evidence` reads), `CapacityService`, `PublicationService`, and parallel `TargetOrchestrator` from `RunService`.
+  - Added `RunStoreProtocol`, paginated `GET /api/runs?limit=&offset=`, `GET /livez`, `GET /readyz`, `X-Request-ID` propagation, structured JSON logging (`ACCELERATOR_LOG_FORMAT=json`), event-driven worker wakeups with `ACCELERATOR_WORKER_CONCURRENCY`, optional `write_plan=false` on `/generate`, and unified `CiDeploymentDispatcher` (`delivery/base.py`).
+- **Enriched Alteryx IR, Expression AST & complete Target SPI**:
+  - `AlteryxSourceAdapter` now populates structured `EtlNode.properties["parsed_config"]`; added `build_alteryx_ir_capacity_profile` and wired `FabricTargetCapacityEstimator` to model Alteryx IR packages directly.
+  - Added deterministic shared `etl_target_fabric/compilers/expr_ast.py` and extracted `delivery/notebook_encoder.py`.
+  - Completed Target SPI protocols (`TargetValidatorProvider`, `TargetDryRunProvider`, `TargetDeploymentProvider`), implemented `FabricTargetProvider.dry_run_planner()`, added capability-driven codegen previews to `NeutralWorkspace.tsx`, and added `tests/test_openapi_contract.py`.
+- **CI parity & dependency cleanup**: Updated `azure-pipelines.yml` to lint `src packages tests examples` and run isolated wheels, plugin entry points, script syntax checks, and `pip-audit`/`npm audit`; added `scripts` and `linux-container` jobs to `.github/workflows/ci.yml`; removed unused dev dependencies (`ipykernel`, `ipywidgets`, `tqdm`) reducing `uv.lock` from 98 to 66 packages, plus dead files/helpers (`desktop/entry.py`, `etl_target_fabric/assessment/effort.py`, `_node_name`, `_current_fabric_fit`).
+- **Verification**: `464 passed` Python tests (`87.33%` coverage), `ruff` + `mypy --strict` 0 issues across 143 files, `83 passed` React tests (`apps/web`), isolated wheel + plugin entry-point E2E (`synthetic-ssis` → `synthetic-databricks`), live server + multi-source (Alteryx + PowerCenter + IDMC) + publication E2E, and PowerShell `Deploy-FabricArtifacts.ps1 -DryRun` + `Assert-DeploymentPublication.ps1` interop verified.

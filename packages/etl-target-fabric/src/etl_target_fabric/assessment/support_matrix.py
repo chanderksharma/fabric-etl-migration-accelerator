@@ -48,7 +48,7 @@ ANNOTATION_IDENTITIES = frozenset(
     }
 )
 
-ASSESSMENT_RULES_VERSION = "1.4.0"
+ASSESSMENT_RULES_VERSION = "1.4.1"
 DATAFLOW_OPERATIONS = frozenset(
     {
         "aggregator",
@@ -146,3 +146,72 @@ def etl_support_for(operation: str) -> str:
     if normalized in DATAFLOW_OPERATIONS:
         return "dataflow"
     return "manual"
+
+
+_SUPPORT_WEIGHTS: dict[str, int] = {
+    "neutral": 0,
+    "dataflow": 1,
+    "pipeline": 2,
+    "notebook": 3,
+    "manual": 6,
+}
+
+
+def complexity_score(
+    counts_by_support: list[tuple[str, int]],
+    connection_count: int,
+    *,
+    dependency_count: int = 0,
+) -> int:
+    """Compute the deterministic Fabric complexity score from support-weighted counts."""
+    weighted = sum(count * _SUPPORT_WEIGHTS[support] for support, count in counts_by_support)
+    return weighted + connection_count + dependency_count * 2
+
+
+def complexity_band(score: int) -> str:
+    """Map a Fabric complexity score to Low, Medium, or High."""
+    return "Low" if score < 20 else "Medium" if score < 40 else "High"
+
+
+def recommend_target(
+    support_types: set[str],
+    unsupported_count: int,
+    *,
+    item_noun: str,
+) -> tuple[str, tuple[str, ...], str]:
+    """Select the static Fabric target, components, and explanation from support categories."""
+    components = tuple(
+        name
+        for category, name in (
+            ("dataflow", "Dataflow Gen2"),
+            ("notebook", "Fabric Notebook"),
+            ("pipeline", "Fabric Pipeline"),
+        )
+        if category in support_types
+    )
+    if not components:
+        return (
+            "Manual rework",
+            (),
+            f"{unsupported_count} {item_noun} type(s) have no deterministic mapping",
+        )
+    target = components[0] if len(components) == 1 else "Mixed Fabric solution"
+    reason = (
+        f"Deterministic mappings require {', '.join(components)}"
+        if len(components) > 1
+        else f"Detected {item_noun}s map to {components[0]}"
+    )
+    if unsupported_count:
+        reason += (
+            f"; {unsupported_count} unsupported {item_noun} type(s) require manual redesign"
+        )
+    return target, components, reason
+
+
+def migration_wave(target: str, band: str) -> str:
+    """Assign a static Fabric migration wave from target and complexity band."""
+    if target == "Manual rework":
+        return "Redesign"
+    if target == "Mixed Fabric solution" or band == "High":
+        return "Pilot"
+    return "Wave 2" if band == "Medium" else "Wave 1"

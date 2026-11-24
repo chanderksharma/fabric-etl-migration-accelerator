@@ -956,3 +956,103 @@ test("uses local folder picker without browser upload input when available and f
   });
   expect(inputClickSpy).toHaveBeenCalledTimes(1);
 });
+
+test("NeutralWorkspace renders capability-driven codegen previews for codegen-capable targets", async () => {
+  const { NeutralWorkspace } = await import("./NeutralWorkspace");
+  const request = vi.fn(async (path: string) => {
+    if (path === "/api/targets") {
+      return {
+        ok: true,
+        json: async () => ({
+          targets: [
+            {
+              platform_id: "databricks",
+              display_name: "Databricks Plugin",
+              provider_version: "1.0.0",
+              supported_ir_versions: ["1.0.0", "1.1.0"],
+              implemented: true,
+              status: "ready",
+              capabilities: ["evaluate", "codegen"],
+              target_kinds: ["lakeflow", "notebook"],
+              description: "Plugin target",
+            },
+          ],
+        }),
+      } as Response;
+    }
+    if (path.endsWith("/evaluate")) {
+      const err = Object.assign(new Error("Not found"), { status: 404 });
+      throw err;
+    }
+    if (path.includes("/generate?target_kind=lakeflow")) {
+      return {
+        ok: true,
+        json: async () => [
+          {
+            platform_id: "databricks",
+            provider_version: "1.0.0",
+            target_kind: "lakeflow",
+            artifacts: [
+              {
+                workflow: "pkg.dtsx!Orders",
+                target_kind: "lakeflow",
+                validation_state: "scaffold",
+                translation_mode: "scaffold",
+                deployable: false,
+                files: { "lakeflow-source": "# synthetic scaffold" },
+                diagnostics: ["Manual review required"],
+                required_bindings: ["source_table"],
+              },
+            ],
+          },
+        ],
+      } as Response;
+    }
+    throw new Error(`Unexpected path: ${path}`);
+  });
+
+  render(
+    <NeutralWorkspace
+      run={{
+        id: "r1",
+        status: "completed",
+        processed: 1,
+        total: 1,
+        cache_hits: 0,
+        error: null,
+        result: null,
+      }}
+      runId="r1"
+      assessment={{
+        workflow_count: 1,
+        failed_count: 0,
+        assessments: [
+          {
+            path: "pkg.dtsx!Orders",
+            name: "Orders",
+            source_platform: "ssis",
+            source_product: "Synthetic SSIS",
+            component_count: 1,
+            connection_count: 0,
+            inventory: [{ operation: "ssis_task", count: 1, classification: "manual" }],
+            complexity_score: 6,
+            complexity_band: "Low",
+            intrinsic_effort_days: 1.5,
+            unknown_components: ["ssis_task"],
+          },
+        ],
+        failures: [],
+      }}
+      error={null}
+      request={request}
+      cancel={async () => {}}
+      startNew={() => {}}
+    />,
+  );
+
+  const generateButton = await screen.findByRole("button", { name: "Generate target preview" });
+  fireEvent.click(generateButton);
+  expect(await screen.findByText("# synthetic scaffold")).toBeInTheDocument();
+  expect(screen.getByText("Manual review required")).toBeInTheDocument();
+});
+

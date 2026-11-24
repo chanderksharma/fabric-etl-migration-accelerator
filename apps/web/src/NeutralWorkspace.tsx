@@ -31,6 +31,24 @@ type TargetCapacityOutput = {
   }>;
 };
 
+type TargetArtifactOutput = {
+  workflow: string;
+  target_kind: string;
+  validation_state: string;
+  translation_mode: string;
+  deployable: boolean;
+  files: Record<string, string>;
+  diagnostics: string[];
+  required_bindings: string[];
+};
+
+type TargetGenerationOutput = {
+  platform_id: string;
+  provider_version: string;
+  target_kind: string;
+  artifacts: TargetArtifactOutput[];
+};
+
 function parseEvaluations(value: unknown): Evaluation[] {
   if (!Array.isArray(value) || !value.every((item: unknown) => {
     if (typeof item !== "object" || item === null) return false;
@@ -67,6 +85,10 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
   const [capacityResults, setCapacityResults] = useState<TargetCapacityOutput[] | null>(null);
   const [capacityError, setCapacityError] = useState<string | null>(null);
   const [estimatingCapacity, setEstimatingCapacity] = useState(false);
+  const [selectedKind, setSelectedKind] = useState("");
+  const [generationResults, setGenerationResults] = useState<TargetGenerationOutput[] | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generatingPreview, setGeneratingPreview] = useState(false);
   const [search, setSearch] = useState("");
   const [onlyManual, setOnlyManual] = useState(false);
   const evaluationEpoch = useRef(0);
@@ -81,13 +103,18 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
     void request("/api/targets")
       .then(async response => {
         const available = parseTargetCatalog(await response.json()).filter(
-          target => target.implemented && target.status === "ready" &&
-            target.capabilities.includes("evaluate"),
+          target => target.implemented && target.status === "ready" && (
+            target.capabilities.includes("evaluate") ||
+            target.capabilities.includes("codegen") ||
+            target.capabilities.includes("capacity")
+          ),
         );
         if (active) {
           setTargets(available);
-          setSelected(available[0]?.platform_id ?? "");
-          setLoadingSaved(available.length > 0);
+          const first = available[0];
+          setSelected(first?.platform_id ?? "");
+          setSelectedKind(first?.target_kinds?.[0] ?? "");
+          setLoadingSaved(Boolean(first?.capabilities.includes("evaluate")));
           setCatalogError(null);
           setCatalogLoading(false);
         }
@@ -123,7 +150,13 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
   }, [assessment, request, runId, selected]);
 
   const selectedTargetInfo = targets.find(item => item.platform_id === selected);
+  const supportsEvaluate = Boolean(selectedTargetInfo?.capabilities.includes("evaluate"));
   const supportsCapacity = Boolean(selectedTargetInfo?.capabilities.includes("capacity"));
+  const targetKinds = selectedTargetInfo?.target_kinds ?? [];
+  const supportsCodegen = Boolean(
+    selectedTargetInfo?.capabilities.includes("codegen") && targetKinds.length > 0,
+  );
+  const effectiveKind = targetKinds.includes(selectedKind) ? selectedKind : (targetKinds[0] ?? "");
 
   const portfolioMetrics = useMemo(() => {
     const items = assessment?.assessments ?? [];
@@ -185,6 +218,27 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
       setCapacityError(caught instanceof Error ? caught.message : "Target capacity failed");
     } finally {
       setEstimatingCapacity(false);
+    }
+  }
+
+  async function generatePreview() {
+    if (!runId || !selected || !supportsCodegen || !effectiveKind || generatingPreview) return;
+    setGeneratingPreview(true);
+    setGenerationError(null);
+    setGenerationResults(null);
+    try {
+      const response = await request(
+        `/api/runs/${runId}/targets/${encodeURIComponent(selected)}/generate` +
+        `?target_kind=${encodeURIComponent(effectiveKind)}`,
+        {method: "POST"},
+      );
+      const payload: unknown = await response.json();
+      if (!Array.isArray(payload)) throw new Error("Invalid target generation response");
+      setGenerationResults(payload as TargetGenerationOutput[]);
+    } catch (caught) {
+      setGenerationError(caught instanceof Error ? caught.message : "Target generation failed");
+    } finally {
+      setGeneratingPreview(false);
     }
   }
 
@@ -273,26 +327,51 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
           {targets.length > 0 && <>
             <label htmlFor="neutral-target">Target platform</label>{" "}
             <select id="neutral-target" value={selected} disabled={evaluating} onChange={event => {
-              setSelected(event.target.value);
-              setLoadingSaved(true);
+              const nextId = event.target.value;
+              const nextTarget = targets.find(item => item.platform_id === nextId);
+              setSelected(nextId);
+              setSelectedKind(nextTarget?.target_kinds?.[0] ?? "");
+              setLoadingSaved(Boolean(nextTarget?.capabilities.includes("evaluate")));
               setEvaluations(null);
               setEvaluationError(null);
               setCapacityResults(null);
               setCapacityError(null);
+              setGenerationResults(null);
+              setGenerationError(null);
             }}>{targets.map(target => <option key={target.platform_id} value={target.platform_id}>
               {target.display_name}
             </option>)}</select>{" "}
-            <button type="button" className="primary-button" onClick={() => void evaluate()}
+            {supportsEvaluate && <button type="button" className="primary-button" onClick={() => void evaluate()}
               disabled={!selected || evaluating || loadingSaved || assessment.assessments.length === 0}>
               {evaluating ? "Evaluating..." : loadingSaved ? "Loading evaluation..." : "Evaluate target"}
-            </button>{" "}
+            </button>}{" "}
             {supportsCapacity && <button type="button" className="secondary-button" onClick={() => void estimateCapacity()}
               disabled={estimatingCapacity || assessment.assessments.length === 0}>
               {estimatingCapacity ? "Estimating..." : "Estimate target capacity"}
-            </button>}
+            </button>}{" "}
+            {supportsCodegen && <>
+              <label htmlFor="neutral-target-kind">Target kind</label>{" "}
+              <select
+                id="neutral-target-kind"
+                value={effectiveKind}
+                disabled={generatingPreview}
+                onChange={event => {
+                  setSelectedKind(event.target.value);
+                  setGenerationResults(null);
+                  setGenerationError(null);
+                }}
+              >
+                {targetKinds.map(kind => <option key={kind} value={kind}>{kind}</option>)}
+              </select>{" "}
+              <button type="button" className="secondary-button" onClick={() => void generatePreview()}
+                disabled={generatingPreview || !effectiveKind || assessment.assessments.length === 0}>
+                {generatingPreview ? "Generating..." : "Generate target preview"}
+              </button>
+            </>}
           </>}
           {evaluationError && <p className="errorMessage" role="alert">{evaluationError}</p>}
           {capacityError && <p className="errorMessage" role="alert">{capacityError}</p>}
+          {generationError && <p className="errorMessage" role="alert">{generationError}</p>}
           {evaluations?.length === 0 && <p>No target evaluations were returned.</p>}
           {evaluations?.map(item => <article key={`${item.source_path}:${item.asset_id}`}>
             <h3>{item.asset_name}: {item.evaluation.recommended_target}</h3>
@@ -307,6 +386,15 @@ export function NeutralWorkspace({run, runId, assessment, error, request, cancel
               {rec.scenario}: {rec.recommended_tier} ({rec.required_units} {rec.unit_label})
             </p>)}
           </article>)}
+          {generationResults?.flatMap((batch, batchIndex) =>
+            batch.artifacts.map(artifact => <article key={`${batchIndex}:${artifact.workflow}:${artifact.target_kind}`}>
+              <h3>{artifact.workflow} ({artifact.target_kind})</h3>
+              <p>State: {artifact.validation_state} · Mode: {artifact.translation_mode} · Deployable: {artifact.deployable ? "Yes" : "No"}</p>
+              {artifact.diagnostics.map(diag => <p key={diag}>{diag}</p>)}
+              {artifact.required_bindings.length > 0 && <p>Required bindings: {artifact.required_bindings.join(", ")}</p>}
+              {Object.entries(artifact.files).map(([name, content]) => <pre key={name}><code>{content}</code></pre>)}
+            </article>)
+          )}
         </section>
       </>}
     </div></main>

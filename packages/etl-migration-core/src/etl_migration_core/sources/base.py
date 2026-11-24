@@ -10,6 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from etl_migration_core.contracts.ir import EtlPackage, SourcePlatformId
 
 
+class SourceParseError(ValueError):
+    """Raised when a staged source item cannot be safely parsed."""
+
+
 class SourceMatch(BaseModel):
     """Bounded adapter detection result for one staged source item."""
 
@@ -69,6 +73,23 @@ class SourceFileDiscoveryAdapter(Protocol):
     @property
     def supported_extensions(self) -> tuple[str, ...]:
         """Return lowercase extensions accepted by the adapter."""
+
+
+@runtime_checkable
+class SourceArchiveDiscoveryAdapter(Protocol):
+    """Optional archive-extension declaration for ZIP-based package formats."""
+
+    @property
+    def archive_extensions(self) -> tuple[str, ...]:
+        """Return lowercase archive extensions (e.g. ``('.yxzp',)``) to scan as ZIPs."""
+
+
+@runtime_checkable
+class SourceDirectoryDiscoveryAdapter(Protocol):
+    """Optional directory-package recognition (e.g. multi-file export trees)."""
+
+    def matches_directory(self, root: Path) -> bool:
+        """Return True when ``root`` is a self-contained export directory for this adapter."""
 
 
 @runtime_checkable

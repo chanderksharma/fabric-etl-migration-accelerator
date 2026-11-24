@@ -148,13 +148,51 @@ class TargetCapacityResult(BaseModel):
     recommendations: tuple[TargetCapacityRecommendation, ...] = ()
 
 
+class TargetValidationResult(BaseModel):
+    """Target-neutral validation outcome returned by a TargetValidator plugin."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    platform_id: str = Field(min_length=1, max_length=64)
+    provider_version: str = Field(min_length=1, max_length=64)
+    valid: bool
+    diagnostics: tuple[str, ...] = ()
+    structured_diagnostics: tuple[Diagnostic, ...] = ()
+
+
+class TargetDryRunResult(BaseModel):
+    """Target-neutral dry-run deployment plan returned by a TargetDryRunPlanner plugin."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    platform_id: str = Field(min_length=1, max_length=64)
+    provider_version: str = Field(min_length=1, max_length=64)
+    allowed: bool = False
+    destination: str
+    blockers: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+    planned_mutations: tuple[str, ...] = ()
+
+
+class TargetDeploymentSpec(BaseModel):
+    """Target-neutral CI/CD dispatch inputs produced by a TargetDeploymentAdapter."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    platform_id: str = Field(min_length=1, max_length=64)
+    provider_version: str = Field(min_length=1, max_length=64)
+    target_kind: str = Field(min_length=1, max_length=64)
+    artifact_path: str = Field(min_length=1, max_length=1024)
+    inputs: dict[str, str] = Field(default_factory=dict)
+
+
 class NeutralWorkloadProfile(BaseModel):
     """Target-agnostic static workload counts extracted from source ETL graphs."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     source_platform: SourcePlatformId
-    profile_kind: Literal["alteryx", "informatica", "generic"]
+    profile_kind: str = Field(pattern=r"^[a-z][a-z0-9._-]{0,63}$")
     counts: dict[str, int]
     total_steps: int = 0
     heavy_steps: int = 0
@@ -259,3 +297,61 @@ class TargetCapacityProvider(Protocol):
     """Optional provider extension exposing a TargetCapacityEstimator."""
 
     def capacity_estimator(self) -> TargetCapacityEstimator | None: ...
+
+
+@runtime_checkable
+class TargetValidator(Protocol):
+    """Optional capability protocol for target-specific generated artifact validation."""
+
+    def validate_artifacts(
+        self,
+        artifacts: Sequence[TargetArtifact],
+    ) -> TargetValidationResult: ...
+
+
+@runtime_checkable
+class TargetValidatorProvider(Protocol):
+    """Optional provider extension exposing a TargetValidator."""
+
+    def validator(self) -> TargetValidator | None: ...
+
+
+@runtime_checkable
+class TargetDryRunPlanner(Protocol):
+    """Optional capability protocol for pure, network-free deployment dry-run planning."""
+
+    def plan_dry_run(
+        self,
+        artifacts: Sequence[TargetArtifact],
+        *,
+        approved_destination: str | None,
+        requested_destination: str,
+    ) -> TargetDryRunResult: ...
+
+
+@runtime_checkable
+class TargetDryRunProvider(Protocol):
+    """Optional provider extension exposing a TargetDryRunPlanner."""
+
+    def dry_run_planner(self) -> TargetDryRunPlanner | None: ...
+
+
+@runtime_checkable
+class TargetDeploymentAdapter(Protocol):
+    """Optional capability protocol mapping target artifacts to CI/CD dispatch inputs."""
+
+    def build_deployment_spec(
+        self,
+        *,
+        target_kind: str,
+        destination: str,
+        artifact_path: str,
+        conflict_behavior: str,
+    ) -> TargetDeploymentSpec: ...
+
+
+@runtime_checkable
+class TargetDeploymentProvider(Protocol):
+    """Optional provider extension exposing a TargetDeploymentAdapter."""
+
+    def deployment_adapter(self) -> TargetDeploymentAdapter | None: ...

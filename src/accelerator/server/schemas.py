@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from accelerator.runtime.models import RunStatus
 from etl_migration_core.contracts.spi import Diagnostic
 from etl_migration_core.host import SourceDescriptor, TargetDescriptor
 from etl_migration_core.plugins import PluginLoadResult
@@ -47,3 +48,10 @@ class PluginsResponse(BaseModel):
 class TargetsResponse(BaseModel):
     targets: list[TargetDescriptor]
     faults: list[TargetProviderFault]
+
+
+class RunListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    runs: list[RunStatus]

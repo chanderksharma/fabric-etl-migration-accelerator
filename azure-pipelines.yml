@@ -20,21 +20,60 @@ steps:
       versionSpec: "3.13"
 
   - powershell: |
-      python -m pip install uv
+      python -m pip install "uv>=0.7,<1"
       uv sync --extra dev --locked
-      uv run ruff check src tests
+      uv run ruff check src packages tests examples
       uv run mypy
       uv run pytest --cov-fail-under=80
-    displayName: Validate Python
+      uv build --all-packages --wheel
+      uv run --isolated --no-project --with dist/etl_migration_core-*.whl --with dist/etl_portfolio_assessment-*.whl python -c "import sys; from pathlib import Path; from etl_portfolio_assessment.service.application import PortfolioAssessmentApplication; res = PortfolioAssessmentApplication().assess_neutral(Path('alteryx-workflows')); assert res.workflow_count > 0 and 'fastapi' not in sys.modules"
+      uv run --isolated --no-project --with dist/etl_migration_core-*.whl --with dist/etl_target_fabric-*.whl python -c "import sys; from etl_migration_core.targets import create_target_registry; reg = create_target_registry(); assert reg.require_implemented('fabric', capability='codegen').platform_id == 'fabric'; assert 'fastapi' not in sys.modules"
+    displayName: Validate Python and isolated library wheels
+
+  - powershell: |
+      $env:ACCELERATOR_REQUIRE_INSTALLED_PLUGINS = "1"
+      uv pip install --no-deps ./examples/plugins/synthetic-ssis ./examples/plugins/synthetic-databricks
+      uv run --no-sync pytest tests/test_installed_plugins.py --no-cov
+      uv run --no-sync tool plugins
+    displayName: Validate installed plugin entry points
+
+  - powershell: |
+      $errors = @()
+      Get-ChildItem -Path scripts -Include *.ps1,*.psm1 -File | ForEach-Object {
+        $tokens = $null
+        $parseErrors = $null
+        [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors)
+        foreach ($err in $parseErrors) {
+          $errors += "$($_.Name):$($err.Extent.StartLineNumber): $($err.Message)"
+        }
+      }
+      if ($errors.Count -gt 0) {
+        throw ($errors -join "`n")
+      }
+    displayName: Validate PowerShell script syntax
 
   - task: NodeTool@0
     inputs:
       versionSpec: "22.x"
 
   - powershell: |
+      Get-ChildItem -Path scripts -Filter *.mjs -File | ForEach-Object {
+        node --check $_.FullName
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      }
+    displayName: Validate Node script syntax
+
+  - powershell: |
       npm ci
       npm run lint
       npm test
       npm run build
+      npm audit --audit-level=high
     workingDirectory: apps/web
-    displayName: Validate web application
+    displayName: Validate web application and audit dependencies
+
+  - powershell: |
+      $auditFile = Join-Path $env:AGENT_TEMPDIRECTORY "audit-requirements.txt"
+      uv export --locked --all-extras --no-emit-workspace --format requirements-txt --output-file $auditFile
+      uvx pip-audit --strict --disable-pip -r $auditFile
+    displayName: Audit locked Python dependencies

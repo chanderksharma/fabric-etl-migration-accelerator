@@ -11,6 +11,7 @@ from etl_migration_core.contracts.spi import (
     TargetCapability,
     TargetCapacityRecommendation,
     TargetCapacityResult,
+    TargetDryRunResult,
     TargetEvaluation,
     TargetGenerationResult,
     TargetPlatformInfo,
@@ -20,6 +21,7 @@ from etl_target_fabric.capacity.model import (
     CAPACITY_MODEL_VERSION,
     CapacitySettings,
     CapacityWorkflowInput,
+    build_alteryx_ir_capacity_profile,
     build_informatica_capacity_profile,
     estimate_capacity,
 )
@@ -28,6 +30,7 @@ from etl_target_fabric.compilers.ir import (
     CompilationTarget,
     compile_asset,
 )
+from etl_target_fabric.delivery.deployer import plan_target_dry_run
 from etl_target_fabric.evaluation.native_route import (
     evaluate_alteryx_native_route,
     evaluate_etl_native_route,
@@ -141,7 +144,11 @@ class FabricTargetCapacityEstimator:
             assessment_response(
                 package.export_id,
                 evaluate_item,
-                capacity_profile=build_informatica_capacity_profile(package, asset),
+                capacity_profile=(
+                    build_alteryx_ir_capacity_profile(asset)
+                    if package.source_platform is SourcePlatform.ALTERYX
+                    else build_informatica_capacity_profile(package, asset)
+                ),
             )
             for asset, evaluate_item in zip(
                 package.assets, assess_package(package), strict=True
@@ -178,6 +185,23 @@ class FabricTargetCapacityEstimator:
         )
 
 
+class FabricTargetDryRunPlanner:
+    """TargetDryRunPlanner implementation for Microsoft Fabric workspaces."""
+
+    def plan_dry_run(
+        self,
+        artifacts: Sequence[TargetArtifact],
+        *,
+        approved_destination: str | None,
+        requested_destination: str,
+    ) -> TargetDryRunResult:
+        return plan_target_dry_run(
+            artifacts,
+            approved_destination=approved_destination,
+            requested_destination=requested_destination,
+        )
+
+
 class FabricTargetProvider:
     """Microsoft Fabric target platform provider plugin."""
 
@@ -201,6 +225,7 @@ class FabricTargetProvider:
         self._evaluator = FabricTargetEvaluator()
         self._code_generator = FabricTargetCodeGenerator()
         self._capacity_estimator = FabricTargetCapacityEstimator()
+        self._dry_run_planner = FabricTargetDryRunPlanner()
 
     def info(self) -> TargetPlatformInfo:
         return TargetPlatformInfo(
@@ -223,3 +248,6 @@ class FabricTargetProvider:
 
     def capacity_estimator(self) -> FabricTargetCapacityEstimator:
         return self._capacity_estimator
+
+    def dry_run_planner(self) -> FabricTargetDryRunPlanner:
+        return self._dry_run_planner

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from etl_migration_core.contracts.ir import EtlAsset, EtlPackage
 from etl_migration_core.contracts.spi import TargetEvaluation
-from etl_target_fabric.assessment.effort import remaining_effort_days
+from etl_migration_core.planning.effort import remaining_effort_days
 from etl_target_fabric.assessment.schemas import WorkflowAssessmentResponse
 from etl_target_fabric.compilers.alteryx import Target, generate_candidate
 from etl_target_fabric.compilers.ir import compile_asset_targets

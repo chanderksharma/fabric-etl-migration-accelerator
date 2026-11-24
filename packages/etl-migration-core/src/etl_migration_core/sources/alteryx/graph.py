@@ -12,13 +12,14 @@ from xml.etree.ElementTree import Element, tostring
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 
+from etl_migration_core.sources.base import SourceParseError
 from etl_migration_core.sources.io import SourceChangedError, SourceTooLargeError, read_bounded
 
 GRAPH_VERSION = "1.4.0"
 MAX_WORKFLOW_BYTES = 100 * 1024 * 1024
 
 
-class WorkflowParseError(ValueError):
+class WorkflowParseError(SourceParseError):
     """A workflow does not meet the safe XML graph contract."""
 
 

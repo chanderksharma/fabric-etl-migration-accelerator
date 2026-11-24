@@ -8,8 +8,9 @@ import re
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Literal, Protocol
-from xml.etree import ElementTree as StandardElementTree
 
+from defusedxml import ElementTree as SafeElementTree
+from defusedxml.common import DefusedXmlException
 from pydantic import BaseModel, Field, model_validator
 
 from etl_migration_core.contracts.ir import (
@@ -63,9 +64,8 @@ COUNT_KEYS = (
     "database",
     "other",
 )
-WEIGHTS = {
-    key: value
-    for key, value in zip(
+WEIGHTS = dict(
+    zip(
         COUNT_KEYS,
         (
             0.90,
@@ -96,7 +96,7 @@ WEIGHTS = {
         ),
         strict=True,
     )
-}
+)
 INFORMATICA_COUNT_KEYS = (
     "source",
     "folder",
@@ -115,9 +115,8 @@ INFORMATICA_COUNT_KEYS = (
     "database",
     "other",
 )
-INFORMATICA_WEIGHTS = {
-    key: value
-    for key, value in zip(
+INFORMATICA_WEIGHTS = dict(
+    zip(
         INFORMATICA_COUNT_KEYS,
         (
             0.90,
@@ -139,7 +138,7 @@ INFORMATICA_WEIGHTS = {
         ),
         strict=True,
     )
-}
+)
 
 
 class CapacityStaticProfile(BaseModel):
@@ -380,6 +379,45 @@ def build_capacity_profile(
         pipeline_steps=pipeline_steps,
         total_steps=total_steps,
     )
+
+
+def build_alteryx_ir_capacity_profile(asset: EtlAsset) -> CapacityStaticProfile:
+    """Classify Alteryx canonical IR nodes without re-reading or re-parsing XML from disk."""
+    graph_nodes = tuple(
+        GraphNode(
+            id=node.native_id,
+            plugin=node.native_type or "",
+            name=node.operation,
+            configuration={
+                key: value
+                for key, value in node.properties.items()
+                if isinstance(value, str) and key not in {"macro", "engine_entry"}
+            },
+            disabled=node.disabled,
+            engine_entry=(
+                str(node.properties["engine_entry"])
+                if isinstance(node.properties.get("engine_entry"), str)
+                else ""
+            ),
+            macro=(
+                str(node.properties["macro"])
+                if isinstance(node.properties.get("macro"), str)
+                else ""
+            ),
+            issues=node.issues,
+            label=node.label,
+        )
+        for graph in asset.mapping_graphs
+        for node in graph.nodes
+    )
+    synthetic = WorkflowGraph(
+        nodes=graph_nodes,
+        edges=(),
+        dependencies=(),
+        data_sources=(),
+        sha256="",
+    )
+    return build_capacity_profile(Path(asset.name), graph=synthetic)
 
 
 def build_informatica_capacity_profile(
@@ -1036,8 +1074,13 @@ def _configuration_text(node: GraphNode, key: str) -> str:
     if not xml:
         return ""
     try:
-        root = StandardElementTree.fromstring(xml)
-    except StandardElementTree.ParseError:
+        root = SafeElementTree.fromstring(
+            xml,
+            forbid_dtd=True,
+            forbid_entities=True,
+            forbid_external=True,
+        )
+    except (SafeElementTree.ParseError, DefusedXmlException):
         return ""
     return "".join(root.itertext()).strip()
 

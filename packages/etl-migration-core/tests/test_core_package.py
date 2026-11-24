@@ -91,3 +91,81 @@ def test_read_bounded_fails_closed_for_oversized_and_growing_files(
     monkeypatch.setattr(Path, "stat", lambda _self, **_kwargs: Stat())
     with pytest.raises(SourceChangedError, match="changed while it was being read"):
         read_bounded(source, 100)
+
+
+def test_pluggable_directory_discovery_and_generic_workload_profile_kind(tmp_path: Path) -> None:
+    from etl_migration_core.contracts.ir import EtlPackage
+    from etl_migration_core.contracts.spi import NeutralWorkloadProfile
+    from etl_migration_core.sources.base import SourceMatch
+    from etl_migration_core.sources.registry import SourceAdapterRegistry
+
+    class CustomDirAdapter:
+        adapter_id = "custom-dir"
+        platform = "custom_etl"
+        product = "Custom ETL"
+        adapter_version = "1.0.0"
+        parser_version = "1.0.0"
+        registry_version = "1.0.0"
+        rules_version = "1.0.0"
+
+        def matches_directory(self, root: Path) -> bool:
+            return (root / "project.custom").is_file()
+
+        def probe(self, path: Path, display_path: str) -> SourceMatch | None:
+            if not self.matches_directory(path):
+                return None
+            return SourceMatch(
+                adapter_id=self.adapter_id,
+                platform=self.platform,
+                product=self.product,
+                asset_type="export_package",
+                confidence=100,
+                display_path=display_path,
+            )
+
+        def parse(self, path: Path, match: SourceMatch) -> EtlPackage:
+            return EtlPackage(
+                ir_version=EXTENSIBLE_SOURCE_IR_VERSION,
+                source_platform=self.platform,
+                source_product=self.product,
+                export_id=match.display_path,
+                assets=(),
+            )
+
+    folder = tmp_path / "custom_project"
+    folder.mkdir()
+    (folder / "project.custom").write_text("ok", encoding="utf-8")
+
+    registry = SourceAdapterRegistry((CustomDirAdapter(),))
+    summary = DiscoveryService(source_registry=registry).discover(folder)
+    assert summary.workflow_count == 1
+    assert summary.workflows[0].adapter_id == "custom-dir"
+    assert summary.workflows[0].source_platform == "custom_etl"
+
+    profile = NeutralWorkloadProfile(
+        source_platform="custom_etl",
+        profile_kind="custom_etl",
+        counts={"sources": 1},
+    )
+    assert profile.profile_kind == "custom_etl"
+
+
+def test_sources_defaults_imports_cleanly_in_fresh_interpreter() -> None:
+    import subprocess
+    import sys
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from etl_migration_core.sources.defaults import create_default_registry; "
+            "assert len(create_default_registry(load_entry_points=False).adapters) >= 3",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+

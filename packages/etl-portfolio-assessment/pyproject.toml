@@ -9,6 +9,7 @@ description = "Target-neutral ETL portfolio assessment, complexity scoring, effo
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+  "defusedxml>=0.7.1,<1",
   "etl-migration-core>=1.0.0,<2",
 ]
 classifiers = [

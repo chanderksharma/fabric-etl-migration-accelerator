@@ -19,7 +19,7 @@ artifacts for Microsoft Fabric.
 | Assess an estate | [Getting Started](docs/Guides/getting-started.md) | [User Guide](docs/Guides/user-guide.md), [Installation and Runtime Modes](docs/Guides/installation.md) |
 | Plan capacity | [Fabric Capacity Planning](docs/Guides/capacity-planning.md) | [User Guide](docs/Guides/user-guide.md) |
 | Generate and deploy artifacts | [User Guide](docs/Guides/user-guide.md) | [System Architecture](docs/Architecture/system-architecture.md), [Fabric CI/CD Setup](docs/Guides/fabric-ci-cd-setup.md), [Deployment Strategy](docs/Release/deployment-strategy.md) |
-| Fix a bug or add a feature | [Developer Contribution Guide](docs/Guides/developer-contribution-guide.md) | [Contributing](CONTRIBUTING.md) |
+| Fix a bug or add a feature | [Developer Contribution Guide](docs/Guides/developer-contribution-guide.md) | [Building Source and Target Plugins](docs/Guides/building-plugins.md) |
 | Add a source or target provider | [Building Source and Target Plugins](docs/Guides/building-plugins.md) | [System Architecture](docs/Architecture/system-architecture.md), [ADR-001](docs/Architecture/ADR-001-etl-source-adapters.md) |
 | Troubleshoot a local or Fabric run | [Troubleshooting](docs/Guides/troubleshooting.md) | [Installation and Runtime Modes](docs/Guides/installation.md) |
 | Understand business scope | [Business Requirements Document](docs/brds/fabric-etl-migration-accelerator-brd.md) | [Pluggable Architecture Business Requirements](docs/Planning/pluggable-architecture-business-requirements.md) |
@@ -40,7 +40,6 @@ artifacts for Microsoft Fabric.
 * [Developer Contribution Guide](docs/Guides/developer-contribution-guide.md)
 * [Building Source and Target Plugins](docs/Guides/building-plugins.md)
 * [PyPI Packages and Publishing](docs/Guides/pypi-packages.md)
-* [Contributing](CONTRIBUTING.md)
 
 ## Product and architecture
 

@@ -6,12 +6,16 @@ from pathlib import Path
 
 from etl_migration_core.contracts.ir import EtlPackage
 from etl_migration_core.intake.discovery import DiscoveryService
-from etl_migration_core.sources.alteryx.graph import WorkflowParseError
+from etl_migration_core.sources.base import SourceParseError
 from etl_migration_core.sources.defaults import create_default_registry
 from etl_migration_core.sources.registry import SourceAdapterRegistry
 from etl_portfolio_assessment.assessment.engine import assess_package_neutral
 from etl_portfolio_assessment.assessment.workload_profile import extract_workload_profile
-from etl_portfolio_assessment.evidence.extractor import WorkflowEvidence, etl_asset_evidence
+from etl_portfolio_assessment.evidence.extractor import (
+    WorkflowEvidence,
+    etl_asset_evidence,
+    safe_text,
+)
 from etl_portfolio_assessment.service.schemas import (
     DiscoverySummaryResponse,
     NeutralAssessmentResponse,
@@ -35,19 +39,7 @@ class PortfolioAssessmentApplication:
 
     def preview(self, path: Path) -> DiscoverySummaryResponse:
         """Build a pre-run discovery summary for an untrusted local path."""
-        summary = self._discovery.discover(path)
-        return DiscoverySummaryResponse(
-            input_path=summary.input_path,
-            input_kind=summary.input_kind,
-            workflow_count=summary.workflow_count,
-            skipped_count=summary.skipped_count,
-            total_size_bytes=summary.total_size_bytes,
-            workflows=[
-                WorkflowCandidateResponse.model_validate(candidate)
-                for candidate in summary.workflows
-            ],
-            skipped=[SkippedItemResponse.model_validate(item) for item in summary.skipped],
-        )
+        return DiscoverySummaryResponse.from_summary(self._discovery.discover(path))
 
     def assess_neutral(self, path: Path) -> NeutralEstateAssessmentResponse:
         """Assess discovered assets purely by source semantics without target bias."""
@@ -68,7 +60,7 @@ class PortfolioAssessmentApplication:
                     assessments.extend(
                         neutral_assessment_responses(package, candidate.display_path)
                     )
-            except WorkflowParseError as error:
+            except SourceParseError as error:
                 failures.append(str(error))
             except ValueError as error:
                 failures.append(f"{candidate.display_path}: {error}")
@@ -85,22 +77,33 @@ class PortfolioAssessmentApplication:
         )
 
     def inspect_evidence(self, path: Path) -> list[WorkflowEvidence]:
-        """Extract redacted graph evidence from discovered assets."""
+        """Extract redacted graph evidence with per-file fault isolation."""
         summary = self._discovery.discover(path)
         items: list[WorkflowEvidence] = []
         for index, candidate in enumerate(summary.workflows):
-            with self._discovery.staged_workflow(candidate) as workflow_path:
-                detected = self._source_registry.detect(
-                    workflow_path,
-                    candidate.display_path,
-                )
-                package = self._source_registry.parse(
-                    workflow_path,
-                    detected.match,
-                )
-                items.extend(
-                    etl_asset_evidence(package, asset, candidate.display_path, index)
-                    for asset in package.assets
+            try:
+                with self._discovery.staged_workflow(candidate) as workflow_path:
+                    detected = self._source_registry.detect(
+                        workflow_path,
+                        candidate.display_path,
+                    )
+                    package = self._source_registry.parse(
+                        workflow_path,
+                        detected.match,
+                    )
+                    items.extend(
+                        etl_asset_evidence(package, asset, candidate.display_path, index)
+                        for asset in package.assets
+                    )
+            except (SourceParseError, ValueError) as error:
+                items.append(
+                    WorkflowEvidence(
+                        workflow_index=index,
+                        workflow_path=candidate.display_path,
+                        source_sha256=candidate.sha256,
+                        parse_status="failed",
+                        findings=[safe_text(str(error))],
+                    )
                 )
         return items
 

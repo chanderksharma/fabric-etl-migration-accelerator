@@ -53,7 +53,7 @@ export function supportDetail(value: string) {
   };
 }
 
-export function nodeCategory(node: EvidenceNode) {
+function nodeCategory(node: EvidenceNode) {
   const operation = node.name.toLowerCase();
   if (node.support === "neutral") return "Annotation";
   if (/(input|textinput|download)/.test(operation)) return "Input";

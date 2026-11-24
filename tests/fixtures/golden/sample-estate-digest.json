@@ -748,7 +748,7 @@
     },
     {
       "path": "informatica-powercenter/wf_orders/dataflow-manifest.json",
-      "sha256": "9871393787d0ff46c11e47f1bd1d75c029bbfb5cddc8c00b24293d272a83dd85"
+      "sha256": "301a65598acd481f28fdf35ea48de7c50842503589a15b4da21c1d84dab0ba22"
     },
     {
       "path": "informatica-powercenter/wf_orders/dataflow-mashup.pq",
@@ -772,7 +772,7 @@
     },
     {
       "path": "informatica-powercenter/wf_orders/notebook-manifest.json",
-      "sha256": "068f821bcfc40dc7523f5f16a2ec43a07a21a2ede478a6e5a2a79eec3580b526"
+      "sha256": "20dc6474af50231cc54b083ba5b07b0bd94fed222c2fb668e0b7a471ec79d629"
     },
     {
       "path": "informatica-powercenter/wf_orders/notebook.platform.json",
@@ -784,7 +784,7 @@
     },
     {
       "path": "informatica-powercenter/wf_orders/pipeline-manifest.json",
-      "sha256": "a93676c88c6ab4fbdf8c7ef1999d0f47b063d70f120ddd5b6f00b732377752df"
+      "sha256": "53ccf2a97ace3d2363fd5c17e9dbad9b6b9a6cd0246275dd3476291bf8982049"
     },
     {
       "path": "informatica-powercenter/wf_orders/README.md",
@@ -796,7 +796,7 @@
     },
     {
       "path": "informatica-powercenter/wf_STG_Ledger_Validation/dataflow-manifest.json",
-      "sha256": "4ee4df9d165aeb217c247f9fbc60c2d7f813ac71d3c8db048ea7d14c225f0735"
+      "sha256": "6d7b9ac506e9e9411b0581ec955f0cba24705683769a6b457aa796133fc33b0c"
     },
     {
       "path": "informatica-powercenter/wf_STG_Ledger_Validation/dataflow-mashup.pq",
@@ -820,7 +820,7 @@
     },
     {
       "path": "informatica-powercenter/wf_STG_Ledger_Validation/notebook-manifest.json",
-      "sha256": "dcf7c67d4f412449c8c47e96fbbb524cdbfb8ac810b84f7fb6fc6e2d4d84718e"
+      "sha256": "4c1e73842fd1f2575c755543fc607feaa0862a119cb4eb12a7000397d08cfb95"
     },
     {
       "path": "informatica-powercenter/wf_STG_Ledger_Validation/notebook.platform.json",
@@ -832,7 +832,7 @@
     },
     {
       "path": "informatica-powercenter/wf_STG_Ledger_Validation/pipeline-manifest.json",
-      "sha256": "b87a4a0bbc742f078071906c9eed75f8b17679ba093cf32d69c2244fdfd9ed4d"
+      "sha256": "4f0d75c7bcb78a26efa0eb8372fb5d39417da7fa38a86e2cbbc1a9c8f6b9cdd5"
     },
     {
       "path": "informatica-powercenter/wf_STG_Ledger_Validation/README.md",

@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting
-description: Common issues and resolutions for intake, plugins, generation jobs, and Fabric CI/CD
-ms.date: 2026-11-22
+description: Common issues and resolutions for intake, plugins, generation jobs, server mode, and Fabric CI/CD
+ms.date: 2026-11-24
 ms.topic: troubleshooting
 ---
 
@@ -52,3 +52,7 @@ Common issues and resolutions across local intake, code generation, and Microsof
 | GitHub Actions run fails immediately with *hosted runners are disabled* | Microsoft EMU disables default GitHub-hosted runners unless org runner groups are assigned | Register a self-hosted Windows X64 runner (`[self-hosted, Windows, X64]`) with PowerShell 7, or set repository/org variable `CI_RUNNER_LABELS` (CI and package jobs) and `DEPLOY_RUNNER_LABELS` (deployment, pipeline-provisioning, and ALM promotion workflows) to your organization runner group JSON array. |
 | `Missing environment variables: AZURE_CLIENT_ID, AZURE_TENANT_ID` | `dev` environment variables/secrets not configured | Configure Entra OIDC federation (`id-token: write` + federated credential on the Entra app) with `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` in the `dev` environment (or supply `AZURE_CLIENT_SECRET` fallback). |
 | `409 Conflict` when viewing workflow evidence | Local source file was modified after snapshot confirmation | Create a new preview snapshot and run a fresh assessment. |
+| `503 Server API authentication is not configured` (or `401 Bearer token is required`) in Docker | The container defaults to `ACCELERATOR_MODE=server`, which requires Bearer auth on `/api/*` | Pass `-e ACCELERATOR_API_TOKEN="<strong-token>"` and send `Authorization: Bearer <token>`, or pass `-e ACCELERATOR_MODE=local` for local loopback browser sessions. |
+| `403 Local filesystem access is disabled in server mode` | `ACCELERATOR_ALLOW_LOCAL_FILESYSTEM` defaults to `false` in `server` mode | Use multipart upload (`/api/snapshots/upload`) in `server` mode, or run with `ACCELERATOR_MODE=local` on a workstation. |
+| `400 Invalid host header` when calling a container or ingress URL | Request `Host` is not listed in `ACCELERATOR_ALLOWED_HOSTS` (default `127.0.0.1,localhost`) | Set `ACCELERATOR_ALLOWED_HOSTS` to include the expected hostname or `*.domain` wildcard. |
+| `GET /readyz` returns `503` | SQLite run store is unreachable or one or more installed plugins failed to load | Inspect `GET /api/plugins` (or `uv run tool plugins`) and check `ACCELERATOR_STATE_DIR` permissions. Set `ACCELERATOR_LOG_FORMAT=json` and trace by `X-Request-ID`. |

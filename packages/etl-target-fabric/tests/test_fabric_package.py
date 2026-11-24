@@ -174,3 +174,52 @@ def test_fabric_provider_conformance_and_asset_identity_migration(tmp_path: Path
         )
     )
     assert platform_json["config"]["logicalId"] == plan[0]["stable_logical_id"]
+
+
+def test_alteryx_compiler_and_capacity_reject_dtd_xml_fragments(tmp_path: Path) -> None:
+    from etl_migration_core.sources.alteryx.graph import GraphNode, WorkflowGraph
+    from etl_target_fabric.capacity.model import build_capacity_profile
+
+    dtd_xml = '<!DOCTYPE foo [<!ENTITY xxe "boom">]><File>&xxe;</File>'
+    graph = WorkflowGraph(
+        nodes=(
+            GraphNode(
+                id="1",
+                plugin="AlteryxBasePluginsGui.DbFileInput.DbFileInput",
+                name="DbFileInput",
+                configuration={"File": dtd_xml},
+                disabled=False,
+            ),
+            GraphNode(
+                id="2",
+                plugin="AlteryxBasePluginsGui.AlteryxSelect.AlteryxSelect",
+                name="AlteryxSelect",
+                configuration={"SelectFields": dtd_xml},
+                disabled=False,
+            ),
+        ),
+        edges=(("1", "2", ""),),
+        dependencies=(),
+        data_sources=(),
+        sha256="a" * 64,
+    )
+    dummy = tmp_path / "dummy.yxmd"
+    dummy.write_text("<AlteryxDocument />", encoding="utf-8")
+
+    profile = build_capacity_profile(dummy, graph=graph)
+    assert profile.total_steps == 2
+
+    candidate = generate_candidate(dummy, "notebook", graph=graph)
+    assert candidate.validation_state == "blocked"
+    assert not candidate.deployable
+
+
+def test_fabric_assessment_application_reuses_injected_discovery_registry() -> None:
+    from etl_migration_core.intake.discovery import DiscoveryService
+    from etl_target_fabric.application import FabricAssessmentApplication
+
+    registry = create_default_registry(load_entry_points=False)
+    discovery = DiscoveryService(source_registry=registry)
+    app = FabricAssessmentApplication(discovery=discovery)
+    assert app._source_registry is discovery.source_registry
+

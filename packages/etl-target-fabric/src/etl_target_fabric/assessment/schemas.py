@@ -2,53 +2,17 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from etl_migration_core.contracts.ir import AssetType, SourcePlatform, SourcePlatformId
-from etl_migration_core.intake.domain import InputKind, SkipReason
+from etl_migration_core.contracts.ir import AssetType, SourcePlatform
+from etl_migration_core.intake.schemas import (
+    DiscoverySummaryResponse as DiscoverySummaryResponse,
+)
+from etl_migration_core.intake.schemas import (
+    SkippedItemResponse as SkippedItemResponse,
+)
+from etl_migration_core.intake.schemas import (
+    WorkflowCandidateResponse as WorkflowCandidateResponse,
+)
 from etl_target_fabric.capacity.model import CapacityStaticProfile
-
-
-class WorkflowCandidateResponse(BaseModel):
-    """Serializable workflow candidate."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    source_path: str
-    display_path: str
-    extension: str
-    size_bytes: int
-    sha256: str
-    archive_path: str | None
-    archive_chain: list[str] = []
-    source_platform: SourcePlatformId = SourcePlatform.ALTERYX
-    source_product: str = "Alteryx Designer"
-    asset_type: str = "workflow"
-    adapter_id: str = "alteryx"
-    adapter_version: str = "1.0.0"
-    parser_version: str | None = None
-    registry_version: str | None = None
-    rules_version: str | None = None
-
-
-class SkippedItemResponse(BaseModel):
-    """Serializable skipped item."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    path: str
-    reason: SkipReason
-    detail: str
-
-
-class DiscoverySummaryResponse(BaseModel):
-    """Serializable pre-run discovery summary."""
-
-    input_path: str
-    input_kind: InputKind
-    workflow_count: int
-    skipped_count: int
-    total_size_bytes: int
-    workflows: list[WorkflowCandidateResponse]
-    skipped: list[SkippedItemResponse]
 
 
 class ToolInventoryResponse(BaseModel):

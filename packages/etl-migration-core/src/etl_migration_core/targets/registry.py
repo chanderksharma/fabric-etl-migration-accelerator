@@ -12,13 +12,20 @@ from pydantic import BaseModel, ConfigDict
 from etl_migration_core.contracts.ir import EtlAsset, EtlPackage, is_ir_compatible
 from etl_migration_core.contracts.spi import (
     AlteryxPathTargetEvaluator,
+    TargetArtifact,
     TargetCapacityProvider,
     TargetCapacityResult,
     TargetCodeGeneratorProvider,
+    TargetDeploymentProvider,
+    TargetDeploymentSpec,
+    TargetDryRunProvider,
+    TargetDryRunResult,
     TargetEvaluation,
     TargetGenerationResult,
     TargetPlatformInfo,
     TargetPlatformProvider,
+    TargetValidationResult,
+    TargetValidatorProvider,
     UnsupportedTargetCapabilityError,
 )
 from etl_migration_core.plugins import (
@@ -359,6 +366,94 @@ class TargetPlatformRegistry:
         if result.platform_id.strip().casefold() != provider.platform_id.strip().casefold():
             raise ValueError("Target capacity estimator returned a different platform identity")
         return result
+
+    def validate_artifacts(
+        self,
+        platform_id: str,
+        artifacts: Sequence[TargetArtifact],
+    ) -> TargetValidationResult:
+        """Validate generated target artifacts via TargetValidatorProvider."""
+        provider = self.require_implemented(platform_id, capability="validate")
+        with _guard(provider, "validation"):
+            validator = (
+                provider.validator()
+                if isinstance(provider, TargetValidatorProvider)
+                else None
+            )
+            if validator is None:
+                raise UnsupportedTargetCapabilityError(
+                    provider.platform_id,
+                    f"Target platform '{provider.platform_id}' advertises validate "
+                    "but does not provide a validator.",
+                )
+            result = validator.validate_artifacts(artifacts)
+        if result.platform_id.strip().casefold() != provider.platform_id.strip().casefold():
+            raise ValueError("Target validator returned a different platform identity")
+        return result
+
+    def plan_dry_run(
+        self,
+        platform_id: str,
+        artifacts: Sequence[TargetArtifact],
+        *,
+        approved_destination: str | None,
+        requested_destination: str,
+    ) -> TargetDryRunResult:
+        """Plan a network-free deployment dry run via TargetDryRunProvider."""
+        provider = self.require_implemented(platform_id, capability="dry_run")
+        with _guard(provider, "dry-run planning"):
+            planner = (
+                provider.dry_run_planner()
+                if isinstance(provider, TargetDryRunProvider)
+                else None
+            )
+            if planner is None:
+                raise UnsupportedTargetCapabilityError(
+                    provider.platform_id,
+                    f"Target platform '{provider.platform_id}' advertises dry_run "
+                    "but does not provide a dry-run planner.",
+                )
+            result = planner.plan_dry_run(
+                artifacts,
+                approved_destination=approved_destination,
+                requested_destination=requested_destination,
+            )
+        if result.platform_id.strip().casefold() != provider.platform_id.strip().casefold():
+            raise ValueError("Target dry-run planner returned a different platform identity")
+        return result
+
+    def build_deployment_spec(
+        self,
+        platform_id: str,
+        *,
+        target_kind: str,
+        destination: str,
+        artifact_path: str,
+        conflict_behavior: str = "Fail",
+    ) -> TargetDeploymentSpec:
+        """Build CI/CD deployment dispatch inputs via TargetDeploymentProvider."""
+        provider = self.require_implemented(platform_id, capability="deploy")
+        with _guard(provider, "deployment planning"):
+            adapter = (
+                provider.deployment_adapter()
+                if isinstance(provider, TargetDeploymentProvider)
+                else None
+            )
+            if adapter is None:
+                raise UnsupportedTargetCapabilityError(
+                    provider.platform_id,
+                    f"Target platform '{provider.platform_id}' advertises deploy "
+                    "but does not provide a deployment adapter.",
+                )
+            spec = adapter.build_deployment_spec(
+                target_kind=target_kind,
+                destination=destination,
+                artifact_path=artifact_path,
+                conflict_behavior=conflict_behavior,
+            )
+        if spec.platform_id.strip().casefold() != provider.platform_id.strip().casefold():
+            raise ValueError("Target deployment adapter returned a different platform identity")
+        return spec
 
     def list_providers(self) -> tuple[TargetPlatformInfo, ...]:
         """Return serializable capability metadata for every registered target."""

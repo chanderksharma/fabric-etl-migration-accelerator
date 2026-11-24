@@ -114,15 +114,15 @@ const modes: Record<SourceType, Array<{ id: BrowseMode; title: string; detail: s
   ],
 };
 
-const pages: Array<{ id: Page; label: string }> = [
-  { id: "intake", label: "Intake" },
-  { id: "executive-summary", label: "Portfolio" },
-  { id: "workflows", label: "Workflows" },
-  { id: "migration-plan", label: "Migration Plan" },
-  { id: "capacity-planning", label: "Capacity Planning" },
-  { id: "technical-details", label: "Technical Details" },
-  { id: "fabric-deployment", label: "Fabric Deployment" },
-];
+const PAGE_IDS: ReadonlySet<Page> = new Set([
+  "intake",
+  "executive-summary",
+  "workflows",
+  "migration-plan",
+  "capacity-planning",
+  "technical-details",
+  "fabric-deployment",
+]);
 
 export function App() {
   const [initialRunId] = useState(sessionRunId);
@@ -814,8 +814,8 @@ function pageFromHash(): Page {
     technical: "technical-details",
   };
   const candidate = window.location.hash.slice(1);
-  return aliases[candidate] ?? pages.find(page => page.id === candidate)?.id
-    ?? "executive-summary";
+  if (candidate in aliases) return aliases[candidate];
+  return PAGE_IDS.has(candidate as Page) ? (candidate as Page) : "executive-summary";
 }
 
 async function apiRequest(

@@ -20,6 +20,8 @@ from etl_migration_core.plugins import (
 )
 from etl_migration_core.sources.base import (
     SourceAdapter,
+    SourceArchiveDiscoveryAdapter,
+    SourceDirectoryDiscoveryAdapter,
     SourceFileDiscoveryAdapter,
     SourceMatch,
     SourceStreamProbeAdapter,
@@ -116,6 +118,25 @@ class SourceAdapterRegistry:
             for extension in adapter.supported_extensions
         )
 
+    def archive_extensions(self) -> frozenset[str]:
+        """Return ZIP-based archive extensions claimed by registered adapters."""
+        return frozenset(
+            extension
+            for adapter in self.adapters
+            if isinstance(adapter, SourceArchiveDiscoveryAdapter)
+            for extension in adapter.archive_extensions
+        )
+
+    def match_directory(self, root: Path) -> SourceAdapter | None:
+        """Return the first registered adapter claiming ``root`` as a package directory."""
+        for adapter in self.adapters:
+            if not isinstance(adapter, SourceDirectoryDiscoveryAdapter):
+                continue
+            with _guard(adapter, "probe"):
+                if adapter.matches_directory(root):
+                    return adapter
+        return None
+
     def supports_stream_probe(self, extension: str) -> bool:
         """Return True when every adapter claiming the extension can probe bytes in memory."""
         normalized = extension.casefold()
@@ -151,6 +172,10 @@ class SourceAdapterRegistry:
             for extension in adapter.supported_extensions:
                 if not _EXTENSION_PATTERN.fullmatch(extension):
                     raise ValueError(f"invalid source extension: {extension!r}")
+        if isinstance(adapter, SourceArchiveDiscoveryAdapter):
+            for extension in adapter.archive_extensions:
+                if not _EXTENSION_PATTERN.fullmatch(extension):
+                    raise ValueError(f"invalid source archive extension: {extension!r}")
         self._adapters[identity] = adapter
         self._origins[identity] = origin
 

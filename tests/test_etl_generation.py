@@ -72,7 +72,7 @@ def _literal_package(expression: str) -> tuple[EtlPackage, EtlAsset]:
 
 
 def test_powercenter_text_literals_compile_to_well_formed_m() -> None:
-    from etl_migration_core.m_literals import m_text_is_well_formed
+    from etl_target_fabric.compilers.m_literals import m_text_is_well_formed
 
     for expression, expected in (
         ("'Café'", '"Café"'),

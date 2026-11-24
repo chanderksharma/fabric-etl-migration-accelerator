@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from xml.etree.ElementTree import Element
+
+from defusedxml import ElementTree
+from defusedxml.common import DefusedXmlException
+from pydantic import JsonValue
 
 from etl_migration_core.contracts.ir import (
     AssetType,
@@ -39,6 +44,7 @@ class AlteryxSourceAdapter:
     parser_version = "1.3.0"
     registry_version = "2026.11.3"
     rules_version = "1.3.0"
+    archive_extensions: tuple[str, ...] = (".yxzp",)
 
     def probe(self, path: Path, display_path: str) -> SourceMatch | None:
         """Recognize staged Alteryx XML workflow files."""
@@ -113,6 +119,9 @@ class AlteryxSourceAdapter:
             )
             for index, source in enumerate(graph.data_sources, start=1)
         )
+        asset_metadata: dict[str, JsonValue] = {}
+        if graph.execution_issues:
+            asset_metadata["execution_issues"] = list(graph.execution_issues)
         asset = EtlAsset(
             native_id=path.stem,
             name=path.stem,
@@ -121,6 +130,7 @@ class AlteryxSourceAdapter:
             dependencies=dependencies,
             connections=connections,
             source_location=SourceLocation(path=match.display_path),
+            metadata=asset_metadata,
         )
         return (
             EtlPackage(
@@ -154,6 +164,14 @@ def _node_to_ir(node: GraphNode, display_path: str) -> EtlNode:
         kind = NodeKind.ANNOTATION
     else:
         kind = NodeKind.TRANSFORMATION
+    properties: dict[str, JsonValue] = dict(node.configuration)
+    parsed_config = _structured_alteryx_config(operation, node.configuration)
+    if parsed_config:
+        properties["parsed_config"] = parsed_config
+    if node.macro:
+        properties["macro"] = node.macro
+    if node.engine_entry:
+        properties["engine_entry"] = node.engine_entry
     return EtlNode(
         native_id=node.id,
         name=display_name,
@@ -162,7 +180,7 @@ def _node_to_ir(node: GraphNode, display_path: str) -> EtlNode:
         native_type=node.plugin,
         label=node.label,
         disabled=node.disabled,
-        properties=dict(node.configuration),
+        properties=properties,
         issues=node.issues,
         source_location=SourceLocation(path=display_path, object_path=f"Node[{node.id}]"),
         x=node.x,
@@ -170,6 +188,107 @@ def _node_to_ir(node: GraphNode, display_path: str) -> EtlNode:
         width=node.width,
         height=node.height,
     )
+
+
+def _safe_xml(xml_text: str) -> Element | None:
+    if not xml_text:
+        return None
+    try:
+        return ElementTree.fromstring(
+            xml_text, forbid_dtd=True, forbid_entities=True, forbid_external=True
+        )
+    except (ElementTree.ParseError, DefusedXmlException):
+        return None
+
+
+def _xml_text(configuration: dict[str, str], key: str) -> str:
+    element = _safe_xml(configuration.get(key, ""))
+    return "".join(element.itertext()).strip() if element is not None else ""
+
+
+def _structured_alteryx_config(
+    operation: str, configuration: dict[str, str]
+) -> dict[str, JsonValue]:
+    """Normalize common Alteryx XML configuration fragments once into typed IR JSON."""
+    parsed: dict[str, JsonValue] = {}
+    if "File" in configuration:
+        file_text = _xml_text(configuration, "File")
+        if file_text:
+            parsed["file"] = file_text
+    if operation == "filter":
+        mode = _xml_text(configuration, "Mode")
+        if mode:
+            parsed["mode"] = mode
+        expr = _xml_text(configuration, "Expression")
+        if expr:
+            parsed["expression"] = expr
+        simple = _safe_xml(configuration.get("Simple", ""))
+        if simple is not None:
+            parsed["simple"] = {
+                "field": simple.findtext("Field", default=""),
+                "operator": simple.findtext("Operator", default=""),
+                "operand": simple.findtext("Operands/Operand", default=""),
+            }
+    elif operation in {"select", "alteryxselect"}:
+        select_fields = _safe_xml(configuration.get("SelectFields", ""))
+        if select_fields is not None:
+            parsed["select_fields"] = [
+                {
+                    "field": item.get("field", ""),
+                    "selected": item.get("selected", "True"),
+                    "rename": item.get("rename", ""),
+                    "type": item.get("type", ""),
+                }
+                for item in select_fields.findall("SelectField")
+            ]
+    elif operation == "formula":
+        formula_fields = _safe_xml(configuration.get("FormulaFields", ""))
+        if formula_fields is not None:
+            parsed["formulas"] = [
+                {
+                    "field": item.get("field", ""),
+                    "expression": item.get("expression", ""),
+                    "type": item.get("type", ""),
+                }
+                for item in formula_fields.findall("FormulaField")
+            ]
+    elif operation == "sort":
+        sort_info = _safe_xml(configuration.get("SortInfo", ""))
+        if sort_info is not None:
+            parsed["sort_fields"] = [
+                {"field": item.get("field", ""), "order": item.get("order", "Ascending")}
+                for item in sort_info.findall("Field")
+            ]
+    elif operation == "unique":
+        unique_fields = _safe_xml(configuration.get("UniqueFields", ""))
+        if unique_fields is not None:
+            parsed["unique_fields"] = [
+                item.get("field", "") for item in unique_fields.findall("Field")
+            ]
+    elif operation == "summarize":
+        summarize_fields = _safe_xml(configuration.get("SummarizeFields", ""))
+        if summarize_fields is not None:
+            parsed["summarize_fields"] = [
+                {
+                    "field": item.get("field", ""),
+                    "action": item.get("action", ""),
+                    "rename": item.get("rename", ""),
+                }
+                for item in summarize_fields.findall("SummarizeField")
+            ]
+    elif operation == "join":
+        join_keys: dict[str, JsonValue] = {}
+        for side in ("Left", "Right"):
+            for key_name in (f"JoinInfo[@connection='{side}']", "JoinInfo"):
+                if key_name in configuration:
+                    elem = _safe_xml(configuration[key_name])
+                    if elem is not None and elem.get("connection") == side:
+                        join_keys[side.casefold()] = [
+                            item.get("field", "") for item in elem.findall("Field")
+                        ]
+        if join_keys:
+            parsed["join_keys"] = join_keys
+    return parsed
 
 
 def _containers(nodes: tuple[GraphNode, ...]) -> tuple[EtlContainer, ...]:

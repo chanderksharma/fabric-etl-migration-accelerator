@@ -31,7 +31,7 @@ def remaining_effort_days(*, required_bindings: Iterable[str]) -> float:
         normalized = binding.casefold()
         if "independent semantic parity" in normalized:
             hundredths += 15
-        elif normalized.startswith("source_") or normalized.startswith("source_paths"):
+        elif normalized.startswith("source_"):
             hundredths += 8
         elif normalized.startswith("destination"):
             hundredths += 10

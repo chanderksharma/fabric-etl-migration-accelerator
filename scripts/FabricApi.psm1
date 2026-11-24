@@ -7,6 +7,73 @@
 #Requires -Version 7.0
 
 $script:FabricApiBaseUri = 'https://api.fabric.microsoft.com/v1'
+$script:FabricApiAllowedHost = 'api.fabric.microsoft.com'
+$script:MaxRetryAfterSeconds = 60
+$script:DefaultRequestTimeoutSeconds = 60
+
+function Get-BoundedRetryDelay {
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [object]$RetryAfterHeader
+    )
+
+    $Text = [string]($RetryAfterHeader | Select-Object -First 1)
+    if ($Text -match '^\d+$' -and [int]$Text -gt 0) {
+        return [Math]::Min([int]$Text, $script:MaxRetryAfterSeconds)
+    }
+    return 5
+}
+
+function Resolve-FabricOperationUri {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Location,
+
+        [Parameter(Mandatory = $false)]
+        [string]$OperationId
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Location)) {
+        $BaseUri = [Uri]'https://api.fabric.microsoft.com'
+        $Resolved = [Uri]::new($BaseUri, $Location)
+        if (
+            $Resolved.Scheme -ne 'https' -or
+            -not $Resolved.Host.Equals($script:FabricApiAllowedHost, [StringComparison]::OrdinalIgnoreCase) -or
+            -not $Resolved.IsDefaultPort
+        ) {
+            throw "Refusing to poll Fabric LRO Location outside https://$($script:FabricApiAllowedHost): $($Resolved.AbsoluteUri)"
+        }
+        return $Resolved.AbsoluteUri
+    }
+    if (-not [string]::IsNullOrWhiteSpace($OperationId)) {
+        if ($OperationId -notmatch '^[A-Za-z0-9._-]+$') {
+            throw "Fabric returned an invalid x-ms-operation-id header: $OperationId"
+        }
+        return "$script:FabricApiBaseUri/operations/$OperationId"
+    }
+    throw 'Fabric returned 202 without a Location or x-ms-operation-id header'
+}
+
+function Format-FabricErrorBody {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Content
+    )
+
+    if ([string]::IsNullOrEmpty($Content)) {
+        return ''
+    }
+    if ($Content.Length -le 1000) {
+        return $Content
+    }
+    return $Content.Substring(0, 1000) + '...'
+}
 
 function Get-FabricAccessToken {
     <#
@@ -153,6 +220,7 @@ function Invoke-FabricRequest {
         Headers            = $Headers
         SkipHttpErrorCheck = $true
         MaximumRedirection = 0
+        TimeoutSec         = $script:DefaultRequestTimeoutSeconds
     }
     if ($PSBoundParameters.ContainsKey('Body')) {
         $Arguments.Body = $Body
@@ -166,21 +234,12 @@ function Invoke-FabricRequest {
         if ($RequestAttempt -eq 5) {
             break
         }
-        $ThrottleText = [string](
-            $Response.Headers.'Retry-After' | Select-Object -First 1
-        )
-        $ThrottleDelay = if (
-            $ThrottleText -match '^\d+$' -and [int]$ThrottleText -gt 0
-        ) {
-            [int]$ThrottleText
-        }
-        else {
-            5
-        }
+        $ThrottleDelay = Get-BoundedRetryDelay -RetryAfterHeader $Response.Headers.'Retry-After'
         Start-Sleep -Seconds $ThrottleDelay
     }
     if ($Response.StatusCode -lt 200 -or $Response.StatusCode -ge 300) {
-        throw "Fabric request failed ($($Response.StatusCode)): $($Response.Content)"
+        $Detail = Format-FabricErrorBody -Content ([string]$Response.Content)
+        throw "Fabric request failed ($($Response.StatusCode)): $Detail"
     }
 
     if ($Response.StatusCode -eq 202 -and -not $NoLroPoll) {
@@ -188,28 +247,9 @@ function Invoke-FabricRequest {
         $OperationId = [string](
             $Response.Headers.'x-ms-operation-id' | Select-Object -First 1
         )
-        if (-not [string]::IsNullOrWhiteSpace($Location)) {
-            $OperationUri = [Uri]::new(
-                [Uri]'https://api.fabric.microsoft.com',
-                $Location
-            ).AbsoluteUri
-        }
-        elseif (-not [string]::IsNullOrWhiteSpace($OperationId)) {
-            $OperationUri = "$script:FabricApiBaseUri/operations/$OperationId"
-        }
-        else {
-            throw 'Fabric returned 202 without a Location or x-ms-operation-id header'
-        }
+        $OperationUri = Resolve-FabricOperationUri -Location $Location -OperationId $OperationId
 
-        $RetryText = [string](
-            $Response.Headers.'Retry-After' | Select-Object -First 1
-        )
-        $RetryAfter = if ($RetryText -match '^\d+$' -and [int]$RetryText -gt 0) {
-            [int]$RetryText
-        }
-        else {
-            5
-        }
+        $RetryAfter = Get-BoundedRetryDelay -RetryAfterHeader $Response.Headers.'Retry-After'
         $Operation = $null
         for ($Attempt = 0; $Attempt -lt 120; $Attempt++) {
             Start-Sleep -Seconds $RetryAfter
@@ -290,6 +330,7 @@ function Invoke-FabricFileUpload {
                 Form               = @{ $FormFieldName = (Get-Item -LiteralPath $FilePath) }
                 SkipHttpErrorCheck = $true
                 MaximumRedirection = 0
+                TimeoutSec         = $script:DefaultRequestTimeoutSeconds
             }
         }
         else {
@@ -301,6 +342,7 @@ function Invoke-FabricFileUpload {
                 Body               = $Bytes
                 SkipHttpErrorCheck = $true
                 MaximumRedirection = 0
+                TimeoutSec         = $script:DefaultRequestTimeoutSeconds
             }
         }
 
@@ -311,21 +353,12 @@ function Invoke-FabricFileUpload {
         if ($RequestAttempt -eq 5) {
             break
         }
-        $ThrottleText = [string](
-            $Response.Headers.'Retry-After' | Select-Object -First 1
-        )
-        $ThrottleDelay = if (
-            $ThrottleText -match '^\d+$' -and [int]$ThrottleText -gt 0
-        ) {
-            [int]$ThrottleText
-        }
-        else {
-            5
-        }
+        $ThrottleDelay = Get-BoundedRetryDelay -RetryAfterHeader $Response.Headers.'Retry-After'
         Start-Sleep -Seconds $ThrottleDelay
     }
     if ($Response.StatusCode -lt 200 -or $Response.StatusCode -ge 300) {
-        throw "Fabric file upload failed ($($Response.StatusCode)): $($Response.Content)"
+        $Detail = Format-FabricErrorBody -Content ([string]$Response.Content)
+        throw "Fabric file upload failed ($($Response.StatusCode)): $Detail"
     }
     if ([string]::IsNullOrWhiteSpace($Response.Content)) {
         return $null

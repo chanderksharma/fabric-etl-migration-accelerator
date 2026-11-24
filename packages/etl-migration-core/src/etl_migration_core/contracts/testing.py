@@ -8,7 +8,10 @@ from etl_migration_core.contracts.ir import EtlPackage
 from etl_migration_core.contracts.spi import (
     TargetCapacityProvider,
     TargetCodeGeneratorProvider,
+    TargetDeploymentProvider,
+    TargetDryRunProvider,
     TargetPlatformProvider,
+    TargetValidatorProvider,
 )
 from etl_migration_core.sources.base import (
     SourceAdapter,
@@ -82,6 +85,27 @@ def assert_target_provider_conformance(
         estimator = provider.capacity_estimator()
         if estimator is None:
             raise AssertionError("capacity provider must return a capacity estimator")
+    if (
+        info.implemented
+        and "validate" in info.capabilities
+        and (not isinstance(provider, TargetValidatorProvider) or provider.validator() is None)
+    ):
+        raise AssertionError("validate capability requires TargetValidatorProvider")
+    if (
+        info.implemented
+        and "dry_run" in info.capabilities
+        and (not isinstance(provider, TargetDryRunProvider) or provider.dry_run_planner() is None)
+    ):
+        raise AssertionError("dry_run capability requires TargetDryRunProvider")
+    if (
+        info.implemented
+        and "deploy" in info.capabilities
+        and (
+            not isinstance(provider, TargetDeploymentProvider)
+            or provider.deployment_adapter() is None
+        )
+    ):
+        raise AssertionError("deploy capability requires TargetDeploymentProvider")
     future = package.model_copy(update={"ir_version": "99.0.0"})
     if future.assets and info.implemented and "evaluate" in info.capabilities:
         try:

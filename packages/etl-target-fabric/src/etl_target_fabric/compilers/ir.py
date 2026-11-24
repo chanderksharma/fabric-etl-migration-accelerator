@@ -20,7 +20,7 @@ from etl_migration_core.contracts.ir import (
     NodeKind,
     SourcePlatform,
 )
-from etl_migration_core.m_literals import m_string, m_text_is_well_formed
+from etl_target_fabric.compilers.m_literals import m_string, m_text_is_well_formed
 
 CompilationTarget = Literal["dataflow", "notebook", "pipeline"]
 ETL_COMPILER_VERSION = "1.4.1"
@@ -404,13 +404,11 @@ def _compile_mapping(
             deployable=True,
             runtime_ready=False,
             code="\n".join(lines) + "\n",
-            required_bindings=tuple(
-                [
-                    *result.source_bindings,
-                    *result.transform_bindings,
-                    *result.destination_bindings,
-                    "independent semantic parity",
-                ]
+            required_bindings=(
+                *result.source_bindings,
+                *result.transform_bindings,
+                *result.destination_bindings,
+                "independent semantic parity",
             ),
             definition_queries=tuple(definition_queries),
             loaded_outputs=tuple(result.outputs),
@@ -446,12 +444,10 @@ def _compile_mapping(
         deployable=True,
         runtime_ready=False,
         code="\n".join(statements) + "\n",
-        required_bindings=tuple(
-            [
-                *result.source_bindings,
-                *result.transform_bindings,
-                "independent semantic parity",
-            ]
+        required_bindings=(
+            *result.source_bindings,
+            *result.transform_bindings,
+            "independent semantic parity",
         ),
         loaded_outputs=tuple(result.outputs),
     )
@@ -1730,13 +1726,6 @@ def _query_names(
         used.add(name)
         names[node.native_id] = name
     return names
-
-
-def _node_name(identity: str, graph: EtlGraph) -> str:
-    return next(
-        (node.name for node in graph.nodes if node.native_id == identity),
-        identity,
-    )
 
 
 def _fail_closed_m(candidate: EtlCompiledCandidate) -> EtlCompiledCandidate:

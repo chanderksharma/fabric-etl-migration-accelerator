@@ -1,15 +1,14 @@
 ---
 title: Developer Contribution Guide
 description: Practical workflows for fixing bugs, adding features, and extending source and target support
-ms.date: 2026-11-22
+ms.date: 2026-11-24
 ms.topic: how-to
 ---
 
 ## Start here
 
 Use this guide to find the right code, make a focused change, and verify it.
-Follow the issue-first and pull request process in
-[Contributing](../../CONTRIBUTING.md). Use only synthetic examples in issues,
+Use only synthetic examples in issues,
 fixtures, screenshots, and generated artifacts. Never commit customer exports,
 credentials, tenant or workspace identifiers, or local user paths.
 
@@ -23,11 +22,11 @@ semantic parity validation before promotion.
 
 | What you are changing | Start here | Related tests |
 | --- | --- | --- |
-| File, folder, archive, or XML intake | [Discovery service](../../packages/etl-migration-core/src/etl_migration_core/intake/discovery.py) and [intake domain](../../packages/etl-migration-core/src/etl_migration_core/intake/domain.py) | [Discovery tests](../../tests/test_discovery.py) |
+| File, folder, archive, or XML intake | [Discovery service](../../packages/etl-migration-core/src/etl_migration_core/intake/discovery.py), [archive safety](../../packages/etl-migration-core/src/etl_migration_core/intake/archive.py), [shared intake schemas](../../packages/etl-migration-core/src/etl_migration_core/intake/schemas.py), and [intake domain](../../packages/etl-migration-core/src/etl_migration_core/intake/domain.py) | [Discovery tests](../../tests/test_discovery.py) |
 | Source parsing and canonical ETL graphs | [Source adapters](../../packages/etl-migration-core/src/etl_migration_core/sources/) and [IR contracts](../../packages/etl-migration-core/src/etl_migration_core/contracts/ir.py) | [Source adapter tests](../../tests/test_source_adapters.py) and product-specific adapter tests |
 | Target-neutral complexity, effort, or evidence | [Assessment engine](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/engine.py), [workload profile](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/workload_profile.py), and [evidence extractor](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/evidence/extractor.py) | [Assessment package tests](../../packages/etl-portfolio-assessment/tests/test_assessment_package.py) and [target tests](../../tests/test_targets.py) |
-| Fabric fit, capacity, or generated definitions | [Static Fabric assessment](../../packages/etl-target-fabric/src/etl_target_fabric/assessment/), [compiler-grounded fit](../../packages/etl-target-fabric/src/etl_target_fabric/evaluation/native_route.py), [application facade](../../packages/etl-target-fabric/src/etl_target_fabric/application.py), [capacity model](../../packages/etl-target-fabric/src/etl_target_fabric/capacity/), and [compilers](../../packages/etl-target-fabric/src/etl_target_fabric/compilers/) | [ETL assessment](../../tests/test_etl_assessment.py), [capacity](../../tests/test_capacity.py), [generation tests](../../tests/test_etl_generation.py), and [stage separation](../../tests/test_stage_separation.py) |
-| Local API, durable runs, or CLI | [API](../../src/accelerator/server/api.py) (routes), [upload staging](../../src/accelerator/server/uploads.py), [deployment resolution](../../src/accelerator/server/deployment.py), [run service](../../src/accelerator/runtime/runs.py) (orchestration), [SQLite store and retention](../../src/accelerator/runtime/store.py), [cache keys and snapshot IDs](../../src/accelerator/runtime/identity.py), [publications](../../src/accelerator/runtime/publication.py), [settings and logging](../../src/accelerator/settings.py), and [CLI](../../src/accelerator/cli/app.py) | [API](../../tests/test_api.py), [CLI](../../tests/test_cli.py), [resilience and retention](../../tests/test_runtime_resilience.py), and [multi-source application tests](../../tests/test_multisource_application.py) |
+| Fabric fit, capacity, or generated definitions | [Static Fabric assessment](../../packages/etl-target-fabric/src/etl_target_fabric/assessment/), [compiler-grounded fit](../../packages/etl-target-fabric/src/etl_target_fabric/evaluation/native_route.py), [application facade](../../packages/etl-target-fabric/src/etl_target_fabric/application.py), [capacity model](../../packages/etl-target-fabric/src/etl_target_fabric/capacity/), [compilers and Expression AST](../../packages/etl-target-fabric/src/etl_target_fabric/compilers/), and [artifact writer / notebook encoder](../../packages/etl-target-fabric/src/etl_target_fabric/delivery/) | [ETL assessment](../../tests/test_etl_assessment.py), [capacity](../../tests/test_capacity.py), [generation tests](../../tests/test_etl_generation.py), [phase 2 architecture](../../tests/test_phase2_architecture.py), and [stage separation](../../tests/test_stage_separation.py) |
+| Local API, durable runs, or CLI | [API](../../src/accelerator/server/api.py) (routes), [upload staging](../../src/accelerator/server/uploads.py), [deployment resolution](../../src/accelerator/server/deployment.py), [run service](../../src/accelerator/runtime/runs.py) (facade), [runtime collaborators](../../src/accelerator/runtime/) (`snapshots.py`, `capacity.py`, `publications.py`, `targets.py`), [SQLite store & protocol](../../src/accelerator/runtime/store.py), [cache keys and snapshot IDs](../../src/accelerator/runtime/identity.py), [publications](../../src/accelerator/runtime/publication.py), [settings and JSON logging](../../src/accelerator/settings.py), and [CLI](../../src/accelerator/cli/app.py) | [API](../../tests/test_api.py), [OpenAPI contract](../../tests/test_openapi_contract.py), [CLI](../../tests/test_cli.py), [resilience and retention](../../tests/test_runtime_resilience.py), and [multi-source application tests](../../tests/test_multisource_application.py) |
 | Generation jobs, candidate cache, or the neutral artifact projection | [Run service](../../src/accelerator/runtime/runs.py), [candidate cache keys](../../src/accelerator/runtime/identity.py), [ArtifactSet projection](../../src/accelerator/runtime/artifacts.py), and the [ArtifactSet contract](../../packages/etl-migration-core/src/etl_migration_core/contracts/artifacts.py) | [Generation hardening](../../tests/test_generation_hardening.py) and the [sample-estate digest](../../tests/test_golden_digest.py) |
 | Local analyst experience | [Web app](../../apps/web/src/) | [App tests](../../apps/web/src/App.test.tsx) and [workspace tests](../../apps/web/src/Workspace.test.tsx) |
 | Fabric-native intake and reporting | [Fabric analyst app](../../apps/etl-migration-assessment-app/src/), [app functions](../../apps/etl-migration-assessment-app/rayfin/functions/src/), and [assessment notebook](../../notebooks/fabric-portfolio-assessment.ipynb) | App `*.spec.ts` and `*.spec.tsx` tests; [FEMA deployment tests](../../tests/test_fema_deployment.py) |
@@ -44,8 +43,8 @@ Host registration calls `require_compatible_spi`. Omit `spi_version` to mean
 plugin load failure. Folder uploads accept at most 10,000 named files. The route
 class raises only that multipart file cap. The 100 MiB browser upload budget is
 unchanged. Power Query string literals go
-through `etl_migration_core.m_literals.m_string`. Integer half-even effort goes
-through `etl_migration_core.planning`. Do not keep a second copy of either rule.
+through `etl_target_fabric.compilers.m_literals.m_string`. Integer half-even effort goes
+through `etl_migration_core.planning.effort`. Do not keep a second copy of either rule.
 
 ## Fix a bug
 
@@ -110,23 +109,27 @@ extracts bounded metadata for a local neutral run. It does not interpret SSIS.
    is closed, so a new platform also requires a compatible core contract.
    Omit `spi_version`, or set a version compatible with `IR_SPI_VERSION`
    (`1.0.0`). See [Building Source and Target Plugins](building-plugins.md).
-4. Update [intake domain](../../packages/etl-migration-core/src/etl_migration_core/intake/domain.py)
-   and [discovery](../../packages/etl-migration-core/src/etl_migration_core/intake/discovery.py)
-   for new files and archive members. Preserve size, archive, path, staging,
-   and deduplication safeguards. Today these paths use explicit extension and
-   source-identity logic; plugin registration alone does not admit new formats.
+4. Implement the optional discovery protocols in
+   [source base](../../packages/etl-migration-core/src/etl_migration_core/sources/base.py)
+   as needed: `SourceFileDiscoveryAdapter` (`supported_extensions`),
+   `SourceArchiveDiscoveryAdapter` (`archive_extensions`),
+   `SourceDirectoryDiscoveryAdapter` (`matches_directory`), and
+   `SourceStreamProbeAdapter` (`probe_bytes`). Preserve size, archive, path,
+   staging, and deduplication safeguards in
+   [archive safety](../../packages/etl-migration-core/src/etl_migration_core/intake/archive.py).
 5. Review the [neutral engine](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/engine.py),
    [workload profile](../../packages/etl-portfolio-assessment/src/etl_portfolio_assessment/assessment/workload_profile.py),
    and [profile contract](../../packages/etl-migration-core/src/etl_migration_core/contracts/spi.py).
-   The current profile distinguishes Alteryx from Informatica only. Unknown
-   neutral operations otherwise default to tabular classification, so mark
-   unrecognized or problematic source constructs with appropriate issues and
-   test their classification.
-6. Integrate the required runtime surfaces. The current
-   [run service](../../src/accelerator/runtime/runs.py) uses Fabric assessment
-   and Informatica capacity logic on its non-Alteryx path; do not route a new
-   source through it unchanged. Update local intake and, if in scope, the
-   Fabric-native picker and upload validation.
+   `NeutralWorkloadProfile.profile_kind` accepts any validated lowercase slug
+   (defaulting external sources to `"generic"`), and unknown neutral operations
+   default to `"manual"`. Mark unrecognized or problematic source constructs
+   with explicit `issues` and test their classification.
+6. Integrate the required runtime surfaces. For Alteryx, `AlteryxSourceAdapter`
+   also emits structured `EtlNode.properties["parsed_config"]`, and
+   `FabricTargetCapacityEstimator` models Alteryx IR directly via
+   `build_alteryx_ir_capacity_profile`. External source runs are isolated in
+   the neutral workspace until a target provider explicitly certifies that
+   source platform.
 7. Test loose files, archives, ambiguous detection, malformed input, canonical
    graphs, neutral assessment, evidence redaction, and existing sources.
    Test target support separately; successful intake is not proof of

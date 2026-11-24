@@ -23,7 +23,7 @@ from etl_migration_core.contracts.ir import (
     SourceLocation,
     SourcePlatform,
 )
-from etl_migration_core.intake.discovery import (
+from etl_migration_core.intake.archive import (
     hash_idmc_directory,
     validate_archive_entries,
 )
@@ -46,6 +46,10 @@ class IdmcSourceAdapter:
     parser_version = "1.0.0"
     registry_version = "2026.11.1"
     rules_version = "1.0.0"
+
+    def matches_directory(self, root: Path) -> bool:
+        """Recognize an extracted IDMC export folder."""
+        return (root / "manifest.json").is_file() and (root / "Explore").is_dir()
 
     def probe(self, path: Path, display_path: str) -> SourceMatch | None:
         """Recognize an extracted or zipped IDMC export package."""

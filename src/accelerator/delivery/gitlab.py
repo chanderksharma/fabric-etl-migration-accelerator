@@ -2,55 +2,48 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import uuid
-from typing import Any, Literal, Self
-from urllib.error import HTTPError, URLError
+from typing import Any, Literal
 from urllib.parse import quote, urlparse
-from urllib.request import Request, urlopen
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
+from accelerator.delivery.base import (
+    REF_PATTERN as REF_PATTERN,
+)
+from accelerator.delivery.base import (
+    USER_AGENT,
+    DeploymentConfigurationError,
+    DeploymentDispatchError,
+    DeploymentSelectionBase,
+    format_fabric_target,
+    http_json_request,
+    validate_publication_dispatch,
+)
+from accelerator.delivery.base import (
+    DeploymentTarget as DeploymentTarget,
+)
 from accelerator.delivery.provenance import PublicationDispatch
 
 APPROVED_CI_FILE = ".gitlab-ci.yml"
 PROJECT_PART_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
-REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
-DeploymentTarget = Literal["notebook", "dataflow", "pipeline", "bundle"]
 
 
-class GitLabConfigurationError(RuntimeError):
+class GitLabConfigurationError(DeploymentConfigurationError):
     """Raised when server-side GitLab configuration is incomplete."""
 
 
-class GitLabDeploymentError(RuntimeError):
+class GitLabDeploymentError(DeploymentDispatchError):
     """Raised when GitLab rejects project validation or pipeline dispatch."""
 
 
-class GitLabDeploymentSelection(BaseModel):
+class GitLabDeploymentSelection(DeploymentSelectionBase):
     """Validated request from the deployment UI."""
 
     project_url: str = Field(min_length=1, max_length=500)
-    source_workflow: str = Field(min_length=1, max_length=500)
-    target: DeploymentTarget = "notebook"
     ci_file: str = APPROVED_CI_FILE
-    ref: str | None = Field(default=None, min_length=1, max_length=120)
-    expected_commit: str | None = Field(
-        default=None, min_length=40, max_length=40, pattern=r"^[0-9a-f]{40}$"
-    )
-    isolate_local_artifacts: bool = False
-    publication_digest: str | None = Field(
-        default=None, min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$"
-    )
-    conflict_behavior: Literal["Fail", "Skip", "Update"] = "Fail"
-
-    @model_validator(mode="after")
-    def validate_publication_revision(self) -> Self:
-        if self.publication_digest is not None and self.expected_commit is None:
-            raise ValueError("A publication digest requires an expected commit")
-        return self
 
     @field_validator("project_url")
     @classmethod
@@ -63,15 +56,6 @@ class GitLabDeploymentSelection(BaseModel):
     def validate_ci_file(cls, value: str) -> str:
         if value != APPROVED_CI_FILE:
             raise ValueError(f"Only {APPROVED_CI_FILE} is approved")
-        return value
-
-    @field_validator("ref")
-    @classmethod
-    def validate_ref(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if not REF_PATTERN.fullmatch(value) or ".." in value:
-            raise ValueError("Git ref contains unsupported characters")
         return value
 
 
@@ -114,6 +98,8 @@ def parse_gitlab_project(project_url: str) -> tuple[str, str]:
 
 class GitLabDeploymentService:
     """Validate one GitLab project and dispatch its existing CI pipeline."""
+
+    provider_id = "gitlab"
 
     def __init__(
         self,
@@ -212,11 +198,7 @@ class GitLabDeploymentService:
             },
             {
                 "key": "TARGET",
-                "value": (
-                    "DataPipeline"
-                    if selection.target == "pipeline"
-                    else selection.target.title()
-                ),
+                "value": format_fabric_target(selection.target),
             },
             {"key": "WORKFLOW_FILTER", "value": artifact_path},
             {"key": "CONFLICT_BEHAVIOR", "value": selection.conflict_behavior},
@@ -224,16 +206,16 @@ class GitLabDeploymentService:
         ]
         if selection.expected_commit is not None:
             variables.append({"key": "FABRIC_EXPECTED_COMMIT", "value": selection.expected_commit})
+        validate_publication_dispatch(
+            publication,
+            publication_digest=selection.publication_digest,
+            expected_commit=selection.expected_commit,
+            error_cls=GitLabDeploymentError,
+        )
         if publication is not None:
-            if selection.publication_digest is None or selection.expected_commit is None:
-                raise GitLabDeploymentError("Publication dispatch requires a digest and commit")
-            if not publication.artifact_root.endswith(f"/{selection.publication_digest}"):
-                raise GitLabDeploymentError("Publication path does not match the selected digest")
             variables.append(
                 {"key": "FABRIC_PUBLICATION_MANIFEST_SHA256", "value": publication.manifest_sha256}
             )
-        elif selection.publication_digest is not None:
-            raise GitLabDeploymentError("Publication dispatch is missing verified provenance")
         response = self._request(
             "POST",
             f"/projects/{project_id}/pipeline",
@@ -264,34 +246,20 @@ class GitLabDeploymentService:
         *,
         body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        data = json.dumps(body).encode("utf-8") if body is not None else None
-        request = Request(
-            f"{self.api_base}{path}",
-            data=data,
+        parsed = http_json_request(
+            provider_label="GitLab",
+            api_base=self.api_base,
             method=method,
+            path=path,
             headers={
                 "Accept": "application/json",
                 "Content-Type": "application/json",
                 "PRIVATE-TOKEN": self.token,
-                "User-Agent": "fabric-etl-migration-accelerator",
+                "User-Agent": USER_AGENT,
             },
+            body=body,
+            allow_empty=False,
+            error_cls=GitLabDeploymentError,
         )
-        try:
-            with urlopen(request, timeout=20) as response:
-                payload = response.read()
-        except HTTPError as error:
-            payload = error.read()
-            message = payload.decode("utf-8", errors="replace")
-            raise GitLabDeploymentError(
-                f"GitLab API {method} {path} failed ({error.code}): {message}"
-            ) from error
-        except URLError as error:
-            raise GitLabDeploymentError(
-                f"GitLab API {method} {path} failed: {error.reason}"
-            ) from error
-        if not payload:
-            raise GitLabDeploymentError("GitLab API returned an empty response")
-        parsed = json.loads(payload)
-        if not isinstance(parsed, dict):
-            raise GitLabDeploymentError("GitLab API returned an unexpected response")
+        assert parsed is not None
         return parsed

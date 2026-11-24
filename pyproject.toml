@@ -9,7 +9,6 @@ description = "Deterministic assessment, compiler-grounded code generation, and 
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-  "defusedxml>=0.7.1,<1",
   "etl-migration-core>=1.0.0,<2",
   "etl-portfolio-assessment>=1.0.0,<2",
   "etl-target-fabric>=1.0.0,<2",
@@ -25,13 +24,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "httpx>=0.28,<1",
-  "ipykernel>=7,<8",
-  "ipywidgets>=8.1,<9",
   "mypy>=1.18,<2",
   "pytest>=9.0.3,<10",
   "pytest-cov>=7,<8",
   "ruff>=0.14,<1",
-  "tqdm>=4.67,<5",
   "types-defusedxml>=0.7,<1",
 ]
 desktop = [

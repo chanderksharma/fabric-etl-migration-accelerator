@@ -1,6 +1,6 @@
 # etl-target-fabric
 
-Microsoft Fabric target-platform provider plugin for `etl-migration-core`. Provides compiler-grounded Fabric target-fit evaluation, F-SKU capacity sizing, Dataflow Gen2 (Power Query M), PySpark Notebook, and Data Pipeline code generation, artifact bundle emission, and dry-run planning.
+Microsoft Fabric target-platform provider plugin for `etl-migration-core`. Provides compiler-grounded Fabric target-fit evaluation, F-SKU capacity sizing (including Alteryx IR capacity profiling via `build_alteryx_ir_capacity_profile`), Dataflow Gen2 (Power Query M), PySpark Notebook, and Data Pipeline code generation, deterministic Expression AST (`expr_ast.py`), modular artifact bundle emission, and Target SPI dry-run planning (`FabricTargetProvider.dry_run_planner()`).
 
 ## Installation
 

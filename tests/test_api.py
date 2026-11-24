@@ -195,3 +195,88 @@ def test_resolve_web_root_supports_wheel_installs(
     (packaged / "index.html").write_text("<div id='root'></div>", encoding="utf-8")
     assert api_module.resolve_web_root() == packaged
 
+
+def test_server_mode_requires_bearer_auth_and_blocks_local_filesystem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ACCELERATOR_MODE", "server")
+    monkeypatch.delenv("ACCELERATOR_API_TOKEN", raising=False)
+    monkeypatch.delenv("ACCELERATOR_ALLOW_LOCAL_FILESYSTEM", raising=False)
+    client = TestClient(app, base_url="http://localhost")
+
+    assert client.get("/health").status_code == 200
+    assert client.get("/api/targets").status_code == 503
+
+    monkeypatch.setenv("ACCELERATOR_API_TOKEN", "server-secret-token")
+    assert client.get("/api/targets").status_code == 401
+    assert (
+        client.get(
+            "/api/targets",
+            headers={"Authorization": "Bearer wrong-token"},
+        ).status_code
+        == 401
+    )
+    auth = {"Authorization": "Bearer server-secret-token"}
+    assert client.get("/api/targets", headers=auth).status_code == 200
+    assert (
+        client.get("/api/intake/preview", params={"path": str(tmp_path)}, headers=auth).status_code
+        == 403
+    )
+    assert (
+        client.post("/api/snapshots/local", json={"path": str(tmp_path)}, headers=auth).status_code
+        == 403
+    )
+    assert client.post("/api/snapshots/browse-folder", headers=auth).status_code == 403
+
+
+def test_allowed_hosts_setting_controls_host_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert TestClient(app, base_url="http://app.internal.example").get("/health").status_code == 400
+
+    monkeypatch.setenv("ACCELERATOR_ALLOWED_HOSTS", "localhost,*.internal.example")
+    assert TestClient(app, base_url="http://app.internal.example").get("/health").status_code == 200
+    assert TestClient(app, base_url="http://evil.other.example").get("/health").status_code == 400
+
+
+def test_request_id_propagation_and_readiness_probes() -> None:
+    client = TestClient(app, base_url="http://localhost")
+
+    live = client.get("/livez", headers={"X-Request-ID": "req-abc.123"})
+    assert live.status_code == 200
+    assert live.headers["x-request-id"] == "req-abc.123"
+
+    generated = client.get("/livez", headers={"X-Request-ID": "bad id with spaces!"})
+    assert generated.status_code == 200
+    assert generated.headers["x-request-id"] != "bad id with spaces!"
+    assert len(generated.headers["x-request-id"]) == 32
+
+    ready = client.get("/readyz")
+    assert ready.status_code == 200
+    assert ready.json()["status"] == "ready"
+    assert ready.json()["failed_plugins"] == 0
+
+
+def test_json_logging_includes_bound_correlation_context(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import json
+    import logging
+
+    from accelerator.settings import Settings, bind_log_context, configure_logging
+
+    configure_logging(Settings(log_level="INFO", log_format="json"))
+    try:
+        with bind_log_context(request_id="req-789", run_id="run-012"):
+            logging.getLogger("accelerator.test").info("structured check")
+    finally:
+        configure_logging(Settings(log_level="INFO", log_format="text"))
+
+    lines = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+    record = json.loads(lines[-1])
+    assert record["message"] == "structured check"
+    assert record["request_id"] == "req-789"
+    assert record["run_id"] == "run-012"
+
+
+

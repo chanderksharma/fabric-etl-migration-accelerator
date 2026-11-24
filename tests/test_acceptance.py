@@ -491,3 +491,90 @@ def test_deployment_script_uses_saved_queries_and_respects_binding_readiness() -
     assert "{{NOTEBOOK_ITEM_ID}}" in script
     assert "'dataPipelines'" in script
     assert "Pipeline dependencies were not deployed" in script
+
+
+def test_fabric_api_blocks_foreign_lro_origin_and_caps_retry_after() -> None:
+    executable = shutil.which("pwsh")
+    if executable is None:
+        pytest.skip("PowerShell 7 is required to test FabricApi.psm1")
+    script = textwrap.dedent(
+        """
+        $ErrorActionPreference = 'Stop'
+        Import-Module (Join-Path $PWD 'scripts\\FabricApi.psm1') -Force
+        $script:SeenUris = @()
+        $script:SleepCalls = @()
+        function global:Start-Sleep { param([int]$Seconds) $script:SleepCalls += $Seconds }
+        function global:Invoke-WebRequest {
+            param(
+                $Method, $Uri, $Headers, $Body,
+                $SkipHttpErrorCheck, $MaximumRedirection, $TimeoutSec
+            )
+            if ($TimeoutSec -ne 60) { throw "Expected TimeoutSec=60, got $TimeoutSec" }
+            $script:SeenUris += $Uri
+            if ($Uri -like '*/evil-lro') {
+                return [pscustomobject]@{
+                    StatusCode = 202
+                    Headers = @{
+                        Location = 'https://evil.example/steal-token'
+                        'Retry-After' = '99999'
+                    }
+                    Content = ''
+                }
+            }
+            if ($Uri -like '*/ok-lro') {
+                return [pscustomobject]@{
+                    StatusCode = 202
+                    Headers = @{
+                        Location = '/v1/operations/op-123'
+                        'Retry-After' = '99999'
+                    }
+                    Content = ''
+                }
+            }
+            if ($Uri -eq 'https://api.fabric.microsoft.com/v1/operations/op-123') {
+                return [pscustomobject]@{
+                    StatusCode = 200
+                    Headers = @{}
+                    Content = '{"status":"Succeeded"}'
+                }
+            }
+            throw "Unexpected URI: $Uri"
+        }
+
+        $rejected = $false
+        try {
+            Invoke-FabricRequest -Method Post `
+                -Uri 'https://api.fabric.microsoft.com/v1/evil-lro' `
+                -Token 'secret-tok' -SkillName 'test-skill'
+        } catch {
+            if ($_.Exception.Message -match 'Refusing to poll Fabric LRO Location outside') {
+                $rejected = $true
+            } else {
+                throw
+            }
+        }
+        if (-not $rejected) { throw 'Foreign LRO Location was not rejected' }
+        if ($script:SeenUris -contains 'https://evil.example/steal-token') {
+            throw 'Token was forwarded to foreign LRO origin'
+        }
+
+        $ok = Invoke-FabricRequest -Method Post `
+            -Uri 'https://api.fabric.microsoft.com/v1/ok-lro' `
+            -Token 'secret-tok' -SkillName 'test-skill'
+        if ($ok.status -ne 'Succeeded') { throw 'Valid same-origin LRO did not succeed' }
+        $lastSleep = $script:SleepCalls[-1]
+        if ($lastSleep -ne 60) { throw "Expected capped Retry-After=60, got $lastSleep" }
+        Write-Output 'FABRIC_API_SECURITY_OK'
+        """
+    )
+    proc = subprocess.run(
+        [executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "FABRIC_API_SECURITY_OK" in proc.stdout
+

@@ -1,7 +1,7 @@
 ---
 title: PyPI Packages and Publishing Guide
 description: Install, consume, build, validate, and publish etl-migration-core, etl-portfolio-assessment, etl-target-fabric, and fabric-etl-migration-accelerator packages
-ms.date: 2026-11-21
+ms.date: 2026-11-24
 ms.topic: how-to
 ---
 
@@ -12,9 +12,9 @@ The repository is organized as a `uv` workspace producing four independent Pytho
 | PyPI package | Import module | Runtime dependencies | Primary use case |
 | :--- | :--- | :--- | :--- |
 | `etl-migration-core` | `etl_migration_core` | `pydantic`, `defusedxml` | Canonical `EtlPackage` IR, secure staging, source adapters, and target SPI |
-| `etl-portfolio-assessment` | `etl_portfolio_assessment` | `etl-migration-core` | Target-neutral complexity, base effort, workload profiles, redacted evidence, `etl-assess` CLI |
-| `etl-target-fabric` | `etl_target_fabric` | `etl-migration-core` | Microsoft Fabric evaluator, F-SKU capacity model, M/PySpark/Pipeline compilers, artifact writer, `etl-fabric` CLI |
-| `fabric-etl-migration-accelerator` | `accelerator` | Core + assessment + Fabric + `fastapi`, `uvicorn`, `typer`, `pyjwt` | Local React/FastAPI server, SQLite WAL `RunService`, Typer `tool` CLI, CI dispatchers, Desktop utility |
+| `etl-portfolio-assessment` | `etl_portfolio_assessment` | `etl-migration-core`, `defusedxml` | Target-neutral complexity, base effort, workload profiles, redacted evidence, `etl-assess` CLI |
+| `etl-target-fabric` | `etl_target_fabric` | `etl-migration-core`, `defusedxml` | Microsoft Fabric evaluator, F-SKU capacity model, M/PySpark/Pipeline compilers, artifact writer, dry-run planner, `etl-fabric` CLI |
+| `fabric-etl-migration-accelerator` | `accelerator` | Core + assessment + Fabric + `fastapi`, `uvicorn`, `typer`, `pyjwt` | Local/server React+FastAPI app, SQLite WAL `RunService`, Typer `tool` CLI, CI dispatchers, Desktop utility |
 
 All packages require Python 3.13 or later (`requires-python = ">=3.13"`).
 
@@ -143,7 +143,7 @@ uv run --isolated --no-project `
 ### Governance and license prerequisite
 
 > [!CAUTION]
-> The repository [LICENSE](../../LICENSE) currently restricts distribution to Microsoft internal use and InnerSource reuse. Publish to an internal Azure Artifacts PyPI feed while internal, or obtain Microsoft Legal and Open Source Programs Office (OSPO) approval and apply an OSI-approved license before publishing to public PyPI.
+> Internal InnerSource licensing restricts distribution to Microsoft internal use and InnerSource reuse. Publish to an internal Azure Artifacts PyPI feed while internal, or obtain Microsoft Legal and Open Source Programs Office (OSPO) approval and apply an OSI-approved license before publishing to public PyPI.
 
 ### Option A: Publish to an internal Azure Artifacts PyPI feed
 

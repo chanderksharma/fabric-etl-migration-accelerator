@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Pluggable & Extensible ETL Migration Solution Architecture",
-    "subtitle": "Target-neutral portfolio assessment, pure canonical IR core, independent target-platform provider PyPI bundles, IDE/BI consumers, and CI/CD governance plane",
+    "subtitle": "Target-neutral portfolio assessment, pure canonical IR core, complete Target SPI providers, decomposed local/server runtime, and secretless CI/CD plane",
     "audience": "tech",
     "layout": "box",
     "canvas": [1940, 1040],
@@ -34,7 +34,7 @@
               {
                 "id": "c_web_ui",
                 "label": "React Portfolio & Desktop UI",
-                "sub": "Intake, comparison & evidence"
+                "sub": "Intake, neutral codegen & evidence"
               },
               {
                 "id": "c_fabric_app",
@@ -50,14 +50,14 @@
               {
                 "id": "c_cli_sdk",
                 "label": "Typer CLI & Artifact Downloads",
-                "sub": "Batch automation & parity sign-off"
+                "sub": "tool CLI, OpenAPI & ZIP publications"
               }
             ]
           },
           {
             "id": "z_hosts",
             "label": "Orchestration & Runtimes",
-            "sub": "accelerator, Spark & IDE stdio",
+            "sub": "accelerator, Spark & CLIs",
             "style": "side",
             "side_w": 205,
             "color": "blue",
@@ -66,8 +66,8 @@
             "children": [
               {
                 "id": "c_runservice",
-                "label": "FastAPI & SQLite WAL RunService",
-                "sub": "Snapshots, lease fencing & caching",
+                "label": "FastAPI & RunStoreProtocol",
+                "sub": "Server/local auth, /readyz & JSON logs",
                 "emphasis": true
               },
               {
@@ -77,15 +77,13 @@
               },
               {
                 "id": "c_pkg_orchestrator",
-                "label": "Pluggable Stage Orchestrator",
-                "sub": "Assess -> Compare -> Generate -> Deploy",
-                "status": "proposed"
+                "label": "Decomposed Runtime Services",
+                "sub": "Snapshots, Capacity, Targets & Publish"
               },
               {
                 "id": "c_stdio_worker",
-                "label": "Stateless Stdio JSON-RPC Worker",
-                "sub": "Single-asset CLI/LSP bridge for IDEs",
-                "status": "proposed"
+                "label": "Stateless JSON CLIs",
+                "sub": "etl-assess & etl-fabric for IDEs & CI"
               }
             ]
           },
@@ -102,7 +100,7 @@
               {
                 "id": "c_fabric_provider",
                 "label": "Microsoft Fabric Provider",
-                "sub": "etl-target-fabric: Fit, F-SKUs, M & PySpark",
+                "sub": "Fit, F-SKUs, Expr AST, M, PySpark & DryRun",
                 "emphasis": true
               },
               {
@@ -144,13 +142,12 @@
               {
                 "id": "c_effort_evidence",
                 "label": "Effort & Redacted Evidence",
-                "sub": "Intrinsic effort & bounded graph DAG"
+                "sub": "Half-even effort & fault-isolated DAG"
               },
               {
                 "id": "c_workload_profile",
                 "label": "Target-Neutral Workload Profile",
-                "sub": "Operator counts & schedule metadata",
-                "status": "proposed"
+                "sub": "Extensible slug counts & schedules"
               }
             ]
           },
@@ -167,22 +164,22 @@
               {
                 "id": "c_intake",
                 "label": "Secure Discovery & Staging",
-                "sub": "ZIP-bomb, path & defusedxml guards"
+                "sub": "Archive/dir SPI, zip-bomb & defusedxml"
               },
               {
                 "id": "c_ir_model",
                 "label": "Pure Canonical ETL IR & SPI",
-                "sub": "EtlPackage, DAG & zero target leakage",
+                "sub": "EtlPackage, parsed_config & zero M leak",
                 "emphasis": true
               },
               {
                 "id": "c_built_in_src",
                 "label": "Built-In Source Adapters",
-                "sub": "Unified Alteryx, PowerCenter & IDMC"
+                "sub": "Alteryx, PowerCenter & streaming IDMC"
               },
               {
                 "id": "c_ext_src",
-                "label": "Future Source Plugins",
+                "label": "External Source Plugins",
                 "sub": "SSIS, Talend & DataStage wheels",
                 "status": "proposed"
               }
@@ -213,7 +210,7 @@
               {
                 "id": "c_src_idmc",
                 "label": "Informatica IDMC",
-                "sub": "Export ZIPs & REST API",
+                "sub": "Streaming export API & ZIP packages",
                 "status": "existing"
               },
               {
@@ -246,7 +243,7 @@
             "justify": "top",
             "gap": 10,
             "label": "Delivery & Secretless CI/CD",
-            "sub": "Dispatch-only target deployers",
+            "sub": "Unified CiDeploymentDispatcher",
             "children": [
               {
                 "type": "zone",
@@ -268,8 +265,8 @@
               },
               {
                 "id": "cp_oidc",
-                "label": "Microsoft Entra OIDC Federation",
-                "sub": "Secretless JWT exchange & ALM promotion",
+                "label": "Entra OIDC & FabricApi Security",
+                "sub": "LRO origin check, timeouts & ALM",
                 "emphasis": true
               }
             ]
@@ -288,13 +285,12 @@
               {
                 "id": "cp_entrypoints",
                 "label": "Target & Source Registry SPI",
-                "sub": "Evaluator, Codegen & importlib.metadata",
-                "status": "proposed"
+                "sub": "6 Target SPI caps & importlib.metadata"
               },
               {
                 "id": "cp_abi",
                 "label": "Versioned IR & Provider ABI",
-                "sub": "SemVer, capability & provenance tags"
+                "sub": "SemVer, conformance & OpenAPI gates"
               },
               {
                 "id": "cp_failclosed",
@@ -311,19 +307,18 @@
             "dir": "col",
             "justify": "top",
             "gap": 10,
-            "label": "PyPI Packaging & Chrysalis SDL",
-            "sub": "3 core libs + provider bundles",
+            "label": "PyPI Packaging & Security SDL",
+            "sub": "4 workspace wheels & container",
             "children": [
               {
                 "id": "cp_pypi",
                 "label": "uv Workspace PyPI Packages",
-                "sub": "core, assessment, target-* & app",
-                "status": "proposed"
+                "sub": "core, assessment, target-fabric & app"
               },
               {
                 "id": "cp_sdl",
-                "label": "Chrysalis SDL & Zero-Exec Guard",
-                "sub": "CodeQL, pip-audit & synthetic tests"
+                "label": "SDL, Non-Root Docker & CI",
+                "sub": "CodeQL, pip-audit, Linux & script gates"
               }
             ]
           }
@@ -336,7 +331,7 @@
     { "from": "z_ir_sources", "to": "z_assessment", "step": 2, "label": "Canonical IR", "kind": "data" },
     { "from": "z_assessment", "to": "z_targets", "step": 3, "label": "Evaluate & compile", "kind": "data" },
     { "from": "z_targets", "to": "z_hosts", "step": 4, "label": "Envelopes & receipts", "kind": "data" },
-    { "from": "z_hosts", "to": "z_consumers", "step": 5, "label": "Results & IDE UX", "kind": "data" },
+    { "from": "z_hosts", "to": "z_consumers", "step": 5, "label": "Results & UI/CLI", "kind": "data" },
     { "from": "z_hosts", "to": "z_delivery_cicd", "label": "Deploy dispatch", "kind": "control" },
     { "from": "z_spi_gov", "to": "z_targets", "label": "Plugin SPI", "kind": "control" },
     { "from": "z_pkg_sdl", "to": "z_ir_sources", "label": "PyPI & SDL", "kind": "control" }
